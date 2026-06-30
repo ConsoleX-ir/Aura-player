@@ -1,7 +1,9 @@
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Play, Shuffle, Music2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Play, Shuffle, Music2, Trash2, Pencil } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { SongRow } from '@/components/Library/SongRow'
+import { useState } from 'react'
+import { PlaylistModal } from '@/components/Modals/PlaylistModal'
 
 export function PlaylistPage() {
   const { playlists, selectedPlaylistId, library, setActiveView, setSelectedPlaylistId,
@@ -9,6 +11,8 @@ export function PlaylistPage() {
 
   const playlist = playlists.find((p) => p.id === selectedPlaylistId)
   const songs = (playlist?.songIds ?? []).map((id) => library.find((s) => s.id === id)).filter(Boolean) as typeof library
+
+  const [showRenameModal, setShowRenameModal] = useState(false)
 
   if (!playlist) return null
 
@@ -79,13 +83,19 @@ export function PlaylistPage() {
                 className="p-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-white/25 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-all">
                 <Trash2 size={14} />
               </button>
+              <button
+                onClick={() => setShowRenameModal(true)}
+                className="p-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-white/25 hover:text-white/80 transition-all"
+              >
+                <Pencil size={14} />
+              </button>
             </div>
           </div>
         </div>
       </div>
 
       {/* Song list */}
-      <div className="flex-1 overflow-y-auto px-7 pb-4">
+      <div className="flex-1 overflow-y-auto px-7 pb-4 m-5px">
         {songs.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <Music2 size={24} className="text-white/10" />
@@ -99,6 +109,13 @@ export function PlaylistPage() {
             <SongRow key={song.id} song={song} index={i} queue={songs} />
           ))}
         </AnimatePresence>
+
+        <PlaylistModal
+          open={showRenameModal}
+          mode="rename"
+          playlist={playlist}
+          onClose={() => setShowRenameModal(false)}
+        />
       </div>
     </div>
   )

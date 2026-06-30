@@ -141,3 +141,37 @@ body {
 /* ── Electron drag ───────────────────────────────────────────────────────── */
 .titlebar-drag    { -webkit-app-region: drag; }
 .titlebar-no-drag { -webkit-app-region: no-drag; }
+
+:root[data-theme="dark"] {
+  --color-base: #0A0A0F;
+  --color-base-2: #111118;
+  --color-base-3: #18181F;
+
+  --color-text: rgba(255,255,255,.92);
+  --color-text-sub: rgba(255,255,255,.5);
+  --color-text-ghost: rgba(255,255,255,.25);
+
+  --color-border: rgba(255,255,255,.08);
+  --color-border-mid: rgba(255,255,255,.12);
+
+  --color-glass: rgba(255,255,255,.05);
+  --color-glass-mid: rgba(255,255,255,.08);
+  --color-glass-strong: rgba(255,255,255,.12);
+}
+
+:root[data-theme="light"] {
+  --color-base: #F6F7FB;
+  --color-base-2: #FFFFFF;
+  --color-base-3: #ECEEF3;
+
+  --color-text: #111827;
+  --color-text-sub: rgba(17,24,39,.65);
+  --color-text-ghost: rgba(17,24,39,.35);
+
+  --color-border: rgba(0,0,0,.08);
+  --color-border-mid: rgba(0,0,0,.12);
+
+  --color-glass: rgba(255,255,255,.55);
+  --color-glass-mid: rgba(255,255,255,.72);
+  --color-glass-strong: rgba(255,255,255,.88);
+}

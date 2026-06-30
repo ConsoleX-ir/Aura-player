@@ -2,7 +2,7 @@
   "name": "aura-player",
   "private": true,
   "version": "1.0.0",
-  "description": "Premium offline music player",
+  "description": "Aura",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {

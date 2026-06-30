@@ -14,6 +14,7 @@ export function Library() {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
 
+
   const songs = useMemo(() => {
     let src = activeView === 'favorites' ? library.filter((s) => favorites.includes(s.id)) : library
     if (search.trim()) {
@@ -59,6 +60,8 @@ export function Library() {
             </button>
           </div>
         </div>
+
+        
 
         {/* Search */}
         <div className="relative">

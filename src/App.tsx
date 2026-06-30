@@ -8,6 +8,7 @@ import { TitleBar } from '@/components/TitleBar'
 import { useDynamicTheme } from '@/hooks/useDynamicTheme'
 import { useAudio } from '@/hooks/useAudio'
 import { usePlayerStore } from '@/store/playerStore'
+import { useMediaShortcuts } from '@/hooks/useMediaShortcuts'
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)
@@ -22,6 +23,9 @@ export default function App() {
   useDynamicTheme(currentSong?.coverArt ?? null)
 
   const isNowPlaying = activeView === 'nowplaying'
+
+  useMediaShortcuts()
+
 
   return (
     <div className="dynamic-bg flex flex-col h-screen overflow-hidden select-none">

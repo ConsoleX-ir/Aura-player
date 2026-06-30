@@ -1,32 +1,216 @@
-# React + TypeScript + Vite
+# 🎵 Aura Player
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-Currently, two official plugins are available:
+![Version](https://img.shields.io/badge/version-v1.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![Electron](https://img.shields.io/badge/Electron-Latest-47848F?logo=electron)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## ✨ Overview
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Aura Player is a modern desktop music player focused on performance, simplicity, and beautiful UI.
 
-## Expanding the Oxlint configuration
+Instead of copying the look of existing players, Aura combines a premium glassmorphism interface with dynamic colors extracted from album artwork to create a unique listening experience.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+---
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## 🚀 Features
+
+### 🎵 Music Library
+
+- Import an entire music folder
+- Automatic metadata detection
+- Album artwork support
+- Fast local library
+
+### ❤️ Favorites
+
+- Mark songs as favorites
+- Dedicated favorites page
+
+### 📂 Playlists
+
+- Create playlists
+- Rename playlists
+- Delete playlists
+- Add songs
+- Remove songs
+
+### 🎼 Lyrics
+
+- Automatic synchronized lyrics
+- Powered by LRCLIB
+- Fallback when lyrics aren't available
+
+### 🎧 Playback
+
+- Play / Pause
+- Previous / Next
+- Shuffle
+- Repeat
+- Volume Control
+- Seek Bar
+
+### ⌨ Keyboard Shortcuts
+
+| Key | Action |
+|------|--------|
+| Space | Play / Pause |
+| ← | Previous Song |
+| → | Next Song |
+| ↑ | Volume Up |
+| ↓ | Volume Down |
+
+### 🎨 UI
+
+- Premium Dark Design
+- Dynamic Accent Colors
+- Glassmorphism
+- Album Grid View
+- List View
+- Search
+- Smooth Animations
+- Multiple Color Themes
+
+### ⚡ Desktop
+
+- Native Electron application
+- Fast startup
+- Local music playback
+- Persistent settings
+
+---
+
+# 🛠 Tech Stack
+
+- Electron
+- React
+- TypeScript
+- Vite
+- Tailwind CSS v4
+- Zustand
+- Framer Motion
+- Lucide Icons
+
+---
+
+# 📦 Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/ConsoleX-ir/aura-player.git
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Go into the project
+
+```bash
+cd aura-player
+```
+
+Install dependencies
+
+```bash
+npm install
+```
+
+Start development
+
+```bash
+npm run dev
+```
+
+---
+
+# 🔨 Build
+
+Create a production build
+
+```bash
+npm run build
+```
+
+Package Electron
+
+```bash
+npm run dist
+```
+
+---
+
+# 📁 Project Structure
+
+```
+src/
+ ├── components/
+ ├── hooks/
+ ├── pages/
+ ├── store/
+ ├── styles/
+ ├── types/
+ ├── lib/
+ └── utils/
+
+electron/
+ ├── main.cjs
+ ├── preload.cjs
+ └── ipc/
+```
+
+---
+
+# 📸 Screenshots
+
+Coming Soon...
+
+---
+
+# 🗺 Roadmap
+
+## Version 1.1
+
+- [ ] Queue Panel
+- [ ] Better Playlist Management
+- [ ] Improved Lyrics Animation
+- [ ] Performance Optimizations
+
+## Version 1.2
+
+- [ ] System Tray
+- [ ] Media Key Support
+- [ ] Notifications
+- [ ] Recently Played
+
+## Version 2.0
+
+- [ ] Mobile App
+- [ ] Cloud Sync
+- [ ] Cross-device Library
+- [ ] Plugin System
+
+---
+
+# 🤝 Contributing
+
+Contributions, ideas, and bug reports are always welcome.
+
+Feel free to open an Issue or submit a Pull Request.
+
+---
+
+# 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+# 👨‍💻 Author
+
+**ConsoleX**
+
+Made with ❤️ and lots of music.

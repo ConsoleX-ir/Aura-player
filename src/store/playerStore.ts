@@ -8,7 +8,7 @@ interface PlayerState {
   addToLibrary: (songs: Song[]) => void
 
   playlists: Playlist[]
-  createPlaylist: (name: string) => void
+  createPlaylist: (name: string) => string
   deletePlaylist: (id: string) => void
   renamePlaylist: (id: string, name: string) => void
   addToPlaylist: (playlistId: string, songId: string) => void
@@ -62,9 +62,23 @@ export const usePlayerStore = create<PlayerState>()(
       })),
 
       playlists: [],
-      createPlaylist: (name) => set((s) => ({
-        playlists: [...s.playlists, { id: crypto.randomUUID(), name, songIds: [], createdAt: Date.now() }]
-      })),
+      createPlaylist: (name) => {
+        const id = crypto.randomUUID()
+
+          set((s) => ({
+          playlists: [
+          ...s.playlists,
+          {
+            id,
+            name,
+            songIds: [],
+            createdAt: Date.now(),
+          },
+        ],
+      }))
+
+    return id
+    },
       deletePlaylist: (id) => set((s) => ({ playlists: s.playlists.filter((p) => p.id !== id) })),
       renamePlaylist: (id, name) => set((s) => ({
         playlists: s.playlists.map((p) => p.id === id ? { ...p, name } : p)

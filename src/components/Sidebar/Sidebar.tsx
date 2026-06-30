@@ -3,6 +3,8 @@ import { Music2, Heart, ListMusic, Plus, FolderOpen, Loader2, ChevronRight } fro
 import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 import { cn } from '@/lib/utils'
+import { useState } from 'react'
+import { PlaylistModal } from '../Modals/PlaylistModal'
 
 export function Sidebar() {
   const { playlists, activeView, setActiveView, setSelectedPlaylistId,
@@ -14,10 +16,7 @@ export function Sidebar() {
     { id: 'favorites' as const, label: 'Favorites',  icon: Heart,  count: favorites.length },
   ]
 
-  const handleNewPlaylist = () => {
-    const name = prompt('Playlist name:')
-    if (name?.trim()) createPlaylist(name.trim())
-  }
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false)
 
   return (
     <aside
@@ -64,7 +63,7 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto px-3 py-3 mt-3">
         <div className="flex items-center justify-between px-2 mb-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20">Playlists</span>
-          <button onClick={handleNewPlaylist}
+          <button onClick={() => setShowPlaylistModal(true)}
             className="w-5 h-5 rounded flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/5 transition-all">
             <Plus size={12} />
           </button>
@@ -98,6 +97,12 @@ export function Sidebar() {
 
       {/* Now playing mini */}
       <SidebarNowPlaying />
+
+      <PlaylistModal
+        open={showPlaylistModal}
+        mode="create"
+        onClose={() => setShowPlaylistModal(false)}
+      />
     </aside>
   )
 }
