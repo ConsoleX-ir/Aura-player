@@ -170,31 +170,6 @@ Coming Soon...
 
 ---
 
-# 🗺 Roadmap
-
-## Version 1.1
-
-- [ ] Queue Panel
-- [ ] Better Playlist Management
-- [ ] Improved Lyrics Animation
-- [ ] Performance Optimizations
-
-## Version 1.2
-
-- [ ] System Tray
-- [ ] Media Key Support
-- [ ] Notifications
-- [ ] Recently Played
-
-## Version 2.0
-
-- [ ] Mobile App
-- [ ] Cloud Sync
-- [ ] Cross-device Library
-- [ ] Plugin System
-
----
-
 # 🤝 Contributing
 
 Contributions, ideas, and bug reports are always welcome.
