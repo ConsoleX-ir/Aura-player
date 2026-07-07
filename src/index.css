@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+/* ── ConsoleX × Aura Player — Dark Premium Design System ──────────────────
+   Tailwind v4: all tokens live in @theme, zero config file needed
+────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Core palette ── */
+  --color-base:          #0A0A0F;   /* Near-black app background */
+  --color-base-2:        #111118;   /* Slightly lifted surface */
+  --color-base-3:        #18181F;   /* Cards, sidebar */
+
+  /* White glass — layered on dark */
+  --color-glass:         rgba(255, 255, 255, 0.05);
+  --color-glass-mid:     rgba(255, 255, 255, 0.08);
+  --color-glass-strong:  rgba(255, 255, 255, 0.12);
+
+  /* Cloud gray — the default ambient color before any song plays */
+  --color-cloud:         #B0B8C8;
+  --color-cloud-soft:    rgba(176, 184, 200, 0.15);
+  --color-cloud-glow:    rgba(176, 184, 200, 0.08);
+
+  /* Dynamic — JS overwrites these from album art */
+  --color-dynamic-1:     #B0B8C8;
+  --color-dynamic-2:     #C8D0DC;
+  --color-dynamic-3:     rgba(176, 184, 200, 0.12);
+  --color-dynamic-glow:  rgba(176, 184, 200, 0.06);
+
+  /* Text */
+  --color-text:          rgba(255, 255, 255, 0.92);
+  --color-text-sub:      rgba(255, 255, 255, 0.50);
+  --color-text-ghost:    rgba(255, 255, 255, 0.25);
+
+  /* Borders */
+  --color-border:        rgba(255, 255, 255, 0.08);
+  --color-border-mid:    rgba(255, 255, 255, 0.12);
+
+  /* Typography */
+  --font-display:        'Geist', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --font-body:           'Inter', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+
+  /* Layout */
+  --spacing-sidebar:     256px;
+  --spacing-player:      90px;
+
+  /* Effects */
+  --blur-glass:          20px;
+  --blur-glow:           80px;
+
+  /* Radii */
+  --radius-card:         16px;
+  --radius-pill:         999px;
+
+  /* Easing */
+  --ease-spring:         cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth:         cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-base);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-app-region: no-drag;
+}
+
+/* ── Dynamic ambient background ─────────────────────────────────────────── */
+/* Default: cloud gray glow. When a song plays, JS shifts --color-dynamic-* */
+.dynamic-bg {
+  background:
+    radial-gradient(ellipse 60% 45% at 25% 15%, var(--color-dynamic-3), transparent 70%),
+    radial-gradient(ellipse 45% 55% at 75% 85%, color-mix(in srgb, var(--color-dynamic-1) 8%, transparent), transparent 70%),
+    var(--color-base);
+  transition: background 1.4s var(--ease-smooth);
+}
+
+/* ── Glass utilities ─────────────────────────────────────────────────────── */
+.glass {
+  background: var(--color-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--color-border);
+}
+
+.glass-mid {
+  background: var(--color-glass-mid);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--color-border-mid);
+}
+
+.glass-strong {
+  background: var(--color-glass-strong);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid rgba(255,255,255,0.16);
+}
+
+/* ── 3D card hover ───────────────────────────────────────────────────────── */
+.card-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease-smooth);
+  will-change: transform;
+}
+.card-3d:hover {
+  transform: perspective(900px) rotateX(-2deg) rotateY(3deg) translateY(-5px);
+  box-shadow:
+    0 24px 64px -8px var(--color-dynamic-3),
+    0 8px 24px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+}
+
+/* ── Glow pulse (album art sync) ─────────────────────────────────────────── */
+.glow-dynamic {
+  box-shadow: 0 0 40px var(--color-dynamic-3), 0 0 80px var(--color-dynamic-glow);
+  transition: box-shadow 1.4s var(--ease-smooth);
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-mid);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-dynamic-1); opacity: 0.5; }
+
+/* ── Selection ───────────────────────────────────────────────────────────── */
+::selection { background: var(--color-dynamic-3); color: var(--color-text); }
+
+/* ── Electron drag ───────────────────────────────────────────────────────── */
+.titlebar-drag    { -webkit-app-region: drag; }
+.titlebar-no-drag { -webkit-app-region: no-drag; }
+
+/* ── Playing bars — lightweight CSS animation, no JS/framer-motion cost ─── */
+@keyframes playing-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+.animate-playing-bar {
+  transform-origin: bottom;
+  animation: playing-bar 0.8s ease-in-out infinite;
+}
+
+/* ── Performance Mode ──────────────────────────────────────────────────────
+   Toggled from Settings. Strips backdrop-filter blur (one of the most
+   expensive CSS properties, especially on integrated/older GPUs) and
+   disables decorative continuous animations, replacing blur with a plain
+   solid dark background so the glass panels stay visually distinct. */
+:root[data-performance="on"] .perf-blur {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(8, 8, 12, 0.97) !important;
+}
+:root[data-performance="on"] .perf-spin {
+  animation: none !important;
+}
