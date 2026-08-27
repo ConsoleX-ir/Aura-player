@@ -50,18 +50,22 @@ export function useAudio() {
     // to the plain volume, identical to the previous behavior.
     const applyFadeEnvelope = () => {
       if (!gainRef.current) return
-      const { volume, crossfade } = usePlayerStore.getState()
+      // Mute is applied here (gain = 0) rather than by swapping volume, so
+      // the user's actual level stays visible on the slider and is restored
+      // bit-perfectly on unmute — same pattern Windows/macOS volume mixers use.
+      const { volume, crossfade, muted } = usePlayerStore.getState()
       const d = audio.duration
+      const base = muted ? 0 : volume
 
       if (!crossfade || !d || !isFinite(d)) {
-        gainRef.current.gain.value = volume
+        gainRef.current.gain.value = base
         return
       }
 
       const t = audio.currentTime
       const fadeInFactor  = t < crossfade ? t / crossfade : 1
       const fadeOutFactor = (d - t) < crossfade ? Math.max(0, (d - t) / crossfade) : 1
-      gainRef.current.gain.value = volume * Math.min(fadeInFactor, fadeOutFactor)
+      gainRef.current.gain.value = base * Math.min(fadeInFactor, fadeOutFactor)
     }
 
     const onTimeUpdate = () => {
@@ -138,7 +142,9 @@ export function useAudio() {
       }
 
       // ── Volume ──────────────────────────────────────────────────────
-      if (state.volume !== prev.volume && gainRef.current) {
+      // Both branches re-run the shared envelope so muting (and unmuting,
+      // which also writes volume via toggleMute's restore) lands instantly.
+      if ((state.volume !== prev.volume || state.muted !== prev.muted) && gainRef.current) {
         applyFadeEnvelope()
       }
 

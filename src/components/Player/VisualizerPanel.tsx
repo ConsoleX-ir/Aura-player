@@ -5,7 +5,10 @@ import { audioAnalyserRef } from '@/hooks/useAudio'
 
 type Mode = 'bars' | 'circle' | 'wave'
 
-export function VisualizerPanel({ onClose }: { onClose: () => void }) {
+// Matches PlayerBar's panel width constant — w-72.
+const PANEL_WIDTH = 288
+
+export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
   const [mode, setMode] = useState<Mode>('bars')
@@ -47,24 +50,44 @@ export function VisualizerPanel({ onClose }: { onClose: () => void }) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [mode])
 
+  // Anchor to the trigger icon (same clamping scheme as LyricsPanel).
+  const left = Math.min(
+    Math.max(anchorX - PANEL_WIDTH / 2, 16),
+    (typeof window !== 'undefined' ? window.innerWidth : 1280) - PANEL_WIDTH - 16
+  )
+  const caretLeft = Math.min(Math.max(anchorX - left - 6, 14), PANEL_WIDTH - 26)
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 16, scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      className="fixed z-50 w-72 flex flex-col overflow-hidden"
+      className="fixed z-50 w-72 flex flex-col overflow-visible"
       style={{
         bottom: 'calc(var(--spacing-player) + 12px)',
-        right: '80px',
+        left: `${left}px`,
         background: 'var(--color-chrome)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
         border: '1px solid var(--color-border-mid)',
         borderRadius: 16,
         boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+        transformOrigin: 'bottom center',
       }}
     >
+      {/* Caret pointing at the triggering icon in the play bar */}
+      <div
+        aria-hidden
+        className="absolute w-3 h-3 rotate-45"
+        style={{
+          top: -7,
+          left: caretLeft,
+          background: '#17171e', // opaque core of --color-chrome so no seam shows where it overlaps the panel
+          borderTop: '1px solid var(--color-border-mid)',
+          borderLeft: '1px solid var(--color-border-mid)',
+        }}
+      />
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] shrink-0">
         <div className="flex items-center gap-2">
           <BarChart2 size={13} style={{ color: 'var(--color-dynamic-1)' }} />

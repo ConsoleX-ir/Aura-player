@@ -1,12 +1,19 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useDeferredValue } from 'react'
 import { motion } from 'framer-motion'
-import { Search, LayoutGrid, List, FolderOpen, Loader2 } from 'lucide-react'
+import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { AlbumCard } from '@/components/Library/AlbumCard'
 
 type ViewMode = 'list' | 'grid'
+
+// Above this many albums, skip the framer-motion entrance animation on grid
+// cards entirely (see AlbumCard's animateIn prop) — same threshold VirtualSongList
+// uses for switching into windowed rendering, kept consistent here since
+// they're addressing the same class of problem (many concurrent expensive
+// operations at mount).
+const ANIMATE_GRID_THRESHOLD = 60
 
 export function Library() {
   // Narrow selectors — avoids re-rendering the whole library view (and its
@@ -19,17 +26,22 @@ export function Library() {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
 
+  // The input itself stays bound to `search` so typing is always instant —
+  // only the expensive part (filtering the whole library + regrouping into
+  // albums, non-trivial at a few thousand songs) uses the deferred value,
+  // which React computes without blocking the next keystroke.
+  const deferredSearch = useDeferredValue(search)
 
   const songs = useMemo(() => {
     let src = activeView === 'favorites' ? library.filter((s) => favorites.includes(s.id)) : library
-    if (search.trim()) {
-      const q = search.toLowerCase()
+    if (deferredSearch.trim()) {
+      const q = deferredSearch.toLowerCase()
       src = src.filter((s) =>
         s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) || s.album.toLowerCase().includes(q)
       )
     }
     return src
-  }, [library, activeView, favorites, search])
+  }, [library, activeView, favorites, deferredSearch])
 
   const albums = useMemo(() => {
     if (viewMode !== 'grid') return []
@@ -66,15 +78,19 @@ export function Library() {
           </div>
         </div>
 
-        
-
         {/* Search */}
         <div className="relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
           <input type="text" placeholder="Search songs, artists, albums..."
             value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-sm text-white/80 placeholder:text-white/20 outline-none focus:border-[var(--color-border-mid)] transition-all"
+            className="w-full pl-9 pr-9 py-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-sm text-white/80 placeholder:text-white/20 outline-none focus:border-[var(--color-border-mid)] transition-all"
           />
+          {search && (
+            <button onClick={() => setSearch('')} title="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-white/25 hover:text-white/60 hover:bg-white/5 transition-colors">
+              <X size={12} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -103,7 +119,7 @@ export function Library() {
 
             <div className="text-center">
               <p className="text-sm font-medium text-white/60">Your library is empty</p>
-              <p className="text-xs text-white/25 mt-1">Import a folder with your music files</p>
+              <p className="text-xs text-white/25 mt-1">Import a folder, or drag and drop files here</p>
             </div>
 
             <button onClick={importFolder} disabled={importing}
@@ -114,10 +130,25 @@ export function Library() {
           </motion.div>
         )}
 
+        {/* Favorites empty state — distinct from "no search results" below,
+            since showing 'No results for ""' when you just have zero
+            favorites (not a failed search) would be a confusing message. */}
+        {library.length > 0 && activeView === 'favorites' && songs.length === 0 && !search && (
+          <div className="flex flex-col items-center justify-center h-40 gap-2 px-7 pb-4 overflow-y-auto">
+            <Heart size={22} className="text-white/10" />
+            <p className="text-sm text-white/30">No favorites yet</p>
+            <p className="text-xs text-white/20">Tap the heart on any song to add it here</p>
+          </div>
+        )}
+
         {/* No search results */}
-        {library.length > 0 && songs.length === 0 && (
-          <div className="flex items-center justify-center h-32 px-7 pb-4 overflow-y-auto">
+        {library.length > 0 && songs.length === 0 && !!search && (
+          <div className="flex flex-col items-center justify-center h-32 gap-2 px-7 pb-4 overflow-y-auto">
             <p className="text-sm text-white/25">No results for "{search}"</p>
+            <button onClick={() => setSearch('')}
+              className="text-xs text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
+              Clear search
+            </button>
           </div>
         )}
 
@@ -147,7 +178,8 @@ export function Library() {
               {albums.map((album, i) => (
                 <AlbumCard key={`${album.album}-${album.artist}`}
                   album={album.album} artist={album.artist}
-                  songs={album.songs} coverArt={album.coverArt} index={i} />
+                  songs={album.songs} coverArt={album.coverArt} index={i}
+                  animateIn={albums.length <= ANIMATE_GRID_THRESHOLD} />
               ))}
             </div>
           </div>

@@ -4,7 +4,10 @@ import { X, Mic2 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLyrics } from '@/hooks/useLyrics'
 
-export function LyricsPanel({ onClose }: { onClose: () => void }) {
+// Matches PlayerBar's panel width constant — w-72.
+const PANEL_WIDTH = 288
+
+export function LyricsPanel({ anchorX, onClose }: { anchorX: number; onClose: () => void }) {
   // Narrow selectors — this panel genuinely needs progress/duration for the
   // active-line highlight, but the previous full-store subscribe also
   // re-rendered it on totally unrelated changes (e.g. toggling a favorite
@@ -22,24 +25,47 @@ export function LyricsPanel({ onClose }: { onClose: () => void }) {
     activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [activeIdx])
 
+  // Anchor to the trigger icon: center the panel on the icon's x position,
+  // clamped so it never spills off either edge of the window. Computed once
+  // per mount (panels remount each time they open), and the caret sits
+  // wherever the icon ended up inside the clamped panel.
+  const left = Math.min(
+    Math.max(anchorX - PANEL_WIDTH / 2, 16),
+    (typeof window !== 'undefined' ? window.innerWidth : 1280) - PANEL_WIDTH - 16
+  )
+  const caretLeft = Math.min(Math.max(anchorX - left - 6, 14), PANEL_WIDTH - 26)
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 16, scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      className="fixed z-50 w-72 max-h-80 flex flex-col overflow-hidden"
+      className="fixed z-50 w-72 max-h-80 flex flex-col overflow-visible"
       style={{
         bottom: 'calc(var(--spacing-player) + 12px)',
-        right: '360px',
+        left: `${left}px`,
         background: 'var(--color-chrome)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
         border: '1px solid var(--color-border-mid)',
         borderRadius: 16,
         boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+        transformOrigin: 'bottom center',
       }}
     >
+      {/* Caret pointing at the triggering icon in the play bar */}
+      <div
+        aria-hidden
+        className="absolute w-3 h-3 rotate-45"
+        style={{
+          top: -7,
+          left: caretLeft,
+          background: '#17171e', // opaque core of --color-chrome so no seam shows where it overlaps the panel
+          borderTop: '1px solid var(--color-border-mid)',
+          borderLeft: '1px solid var(--color-border-mid)',
+        }}
+      />
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] shrink-0">
         <div className="flex items-center gap-2">
           <Mic2 size={13} style={{ color: 'var(--color-dynamic-1)' }} />

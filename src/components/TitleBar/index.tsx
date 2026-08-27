@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Minus, Square, Copy, X } from 'lucide-react'
+import { Minus, Square, Copy, X, Keyboard } from 'lucide-react'
+import { useUiStore } from '@/store/uiStore'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
+  const setHelpOpen = useUiStore((s) => s.setHelpOpen)
 
   useEffect(() => {
     window.electronAPI?.isMaximized().then(setIsMaximized)
@@ -30,6 +32,17 @@ export function TitleBar() {
           to pick out at a glance — amber/green/red mirrors the universal
           minimize/maximize/close convention. */}
       <div className="titlebar-no-drag flex items-center gap-1.5">
+        {/* Shortcuts guide — discoverable entry point for everything the
+            keyboard can do ("?" opens it too). Kept here, top-right where
+            first-time eyes land, rather than buried in Settings. */}
+        <button onClick={() => setHelpOpen(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
+          className="w-6 h-6 mr-1 rounded-full flex items-center justify-center transition-all"
+          style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.16)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
+        >
+          <Keyboard size={11} strokeWidth={2.2} />
+        </button>
         <button onClick={() => window.electronAPI?.minimize()} title="Minimize"
           className="w-6 h-6 rounded-full flex items-center justify-center transition-all"
           style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}

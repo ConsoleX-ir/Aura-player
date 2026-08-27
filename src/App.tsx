@@ -1,17 +1,30 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar } from '@/components/Sidebar/Sidebar'
 import { PlayerBar } from '@/components/Player/PlayerBar'
 import { Library } from '@/pages/Library'
-import { PlaylistPage } from '@/pages/Playlist'
-import { NowPlaying } from '@/pages/NowPlaying'
-import { Settings } from '@/pages/Settings'
 import { TitleBar } from '@/components/TitleBar'
 import { useDynamicTheme } from '@/hooks/useDynamicTheme'
 import { useAudio } from '@/hooks/useAudio'
 import { usePlayerStore } from '@/store/playerStore'
 import { useMediaShortcuts } from '@/hooks/useMediaShortcuts'
 import { useFileAssociationLaunch } from '@/hooks/useFileAssociationLaunch'
+import { useSleepTimer } from '@/hooks/useSleepTimer'
+import { useMediaKeys } from '@/hooks/useMediaKeys'
+import { useDragDropImport } from '@/hooks/useDragDropImport'
+import { Toaster } from '@/components/Toast/Toaster'
+import { HelpModal } from '@/components/Modals/HelpModal'
+import { UploadCloud, Loader2 } from 'lucide-react'
+
+// Library is what's shown on launch almost every time, so it stays a normal
+// eager import. The other three pages — and everything they pull in (Radix
+// dropdown menus, the color picker, etc.) — are only ever needed once the
+// user actually navigates there, so splitting them into separate chunks
+// means the startup bundle has meaningfully less JS to parse and execute
+// before the app can render anything at all.
+const PlaylistPage = lazy(() => import('@/pages/Playlist').then((m) => ({ default: m.PlaylistPage })))
+const NowPlaying = lazy(() => import('@/pages/NowPlaying').then((m) => ({ default: m.NowPlaying })))
+const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })))
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)
@@ -23,16 +36,20 @@ export default function App() {
   // Mount audio engine once — never unmounts
   useAudio()
 
-  // Shift CSS color vars when song changes:
-  // → has cover art: use its dominant color
-  // → no cover art: idle ambient color for the current theme preset
-  //   (ConsoleX cloud gray, Forest green) — unless a custom accent is set
-  useDynamicTheme(currentSong?.coverArt ?? null, theme, customAccentColor)
-
   const isNowPlaying = activeView === 'nowplaying'
+
+  // Shift CSS color vars:
+  // → Now Playing view, with a song loaded: pull the ambient color from that
+  //   song's actual album art — an immersive, per-song effect.
+  // → everywhere else: stick to the chosen theme's color (ConsoleX cloud
+  //   gray, Forest green, Custom, ...), even while music is playing.
+  useDynamicTheme(currentSong?.coverArt ?? null, theme, customAccentColor, isNowPlaying)
 
   useMediaShortcuts()
   useFileAssociationLaunch()
+  useSleepTimer()
+  useMediaKeys()
+  const { isDraggingFiles, dragHandlers } = useDragDropImport()
 
   useEffect(() => {
     document.documentElement.setAttribute('data-performance', performanceMode ? 'on' : 'off')
@@ -40,7 +57,33 @@ export default function App() {
 
 
   return (
-    <div className="dynamic-bg flex flex-col h-screen overflow-hidden select-none">
+    <div
+      className="dynamic-bg flex flex-col h-screen overflow-hidden select-none relative"
+      {...dragHandlers}
+    >
+      <AnimatePresence>
+        {isDraggingFiles && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[300] flex items-center justify-center pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex flex-col items-center gap-3 px-12 py-10 rounded-3xl border-2 border-dashed"
+              style={{ borderColor: 'var(--color-dynamic-1)', background: 'var(--color-chrome)' }}
+            >
+              <UploadCloud size={32} style={{ color: 'var(--color-dynamic-1)' }} />
+              <p className="text-sm font-medium text-white/90">Drop to import</p>
+              <p className="text-xs text-white/40">Audio files or folders</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <TitleBar />
 
       <div
@@ -64,6 +107,7 @@ export default function App() {
         </AnimatePresence>
 
         <main className="flex-1 overflow-hidden">
+          <Suspense fallback={<PageLoadingFallback />}>
           <AnimatePresence mode="wait">
             {isNowPlaying ? (
               <motion.div
@@ -111,10 +155,28 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          </Suspense>
         </main>
       </div>
 
       <PlayerBar />
+
+      {/* Global overlays — feedback toasts + the keyboard shortcuts guide.
+          Rendered last so they layer above every view and the player bar. */}
+      <Toaster />
+      <HelpModal />
+    </div>
+  )
+}
+
+// Chunk loads happen from local disk in Electron, so this is only ever
+// visible for a frame or two on someone's very first visit to a given
+// page in a session — subsequent visits hit the module cache and this
+// never shows at all. Deliberately minimal rather than a full loading screen.
+function PageLoadingFallback() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <Loader2 size={20} className="animate-spin text-white/20" />
     </div>
   )
 }

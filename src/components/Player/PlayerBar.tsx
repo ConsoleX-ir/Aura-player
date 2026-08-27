@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
@@ -20,6 +20,7 @@ export function PlayerBar() {
   const currentSong = usePlayerStore((s) => s.currentSong)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const volume = usePlayerStore((s) => s.volume)
+  const muted = usePlayerStore((s) => s.muted)
   const progress = usePlayerStore((s) => s.progress)
   const duration = usePlayerStore((s) => s.duration)
   const shuffle = usePlayerStore((s) => s.shuffle)
@@ -28,6 +29,7 @@ export function PlayerBar() {
   const nextSong = usePlayerStore((s) => s.nextSong)
   const prevSong = usePlayerStore((s) => s.prevSong)
   const setVolume = usePlayerStore((s) => s.setVolume)
+  const toggleMute = usePlayerStore((s) => s.toggleMute)
   const seekTo = usePlayerStore((s) => s.seekTo)
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle)
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat)
@@ -36,16 +38,69 @@ export function PlayerBar() {
   const performanceMode = usePlayerStore((s) => s.performanceMode)
 
   const [openPanel, setOpenPanel] = useState<PanelType>(null)
-  const [muted, setMuted] = useState(false)
-  const prevVolRef = useRef(volume)
+  // Horizontal anchor (px) the open panel should be centered on — measured
+  // from the actual trigger icon at click time instead of hardcoded offsets,
+  // so panels always open exactly on their icon regardless of layout shifts.
+  const [panelAnchorX, setPanelAnchorX] = useState(0)
+  const lyricsAnchorRef = useRef<HTMLSpanElement>(null)
+  const visualizerAnchorRef = useRef<HTMLSpanElement>(null)
+
+  // Volume OSD — a small percentage pill that appears whenever volume (or
+  // mute) changes and fades out after a beat. Works for every source: the
+  // slider, scroll-wheel, ↑/↓ keys, M mute… all funnel into store volume.
+  const [showVolOsd, setShowVolOsd] = useState(false)
+  const osdTimerRef = useRef<number | undefined>(undefined)
+  const firstVolumeRender = useRef(true)
+
+  useEffect(() => {
+    // Skip the very first mount so the pill doesn't flash on app launch.
+    if (firstVolumeRender.current) { firstVolumeRender.current = false; return }
+    setShowVolOsd(true)
+    window.clearTimeout(osdTimerRef.current)
+    osdTimerRef.current = window.setTimeout(() => setShowVolOsd(false), 1200)
+    return () => window.clearTimeout(osdTimerRef.current)
+  }, [volume, muted])
+
+  // Scroll wheel over the volume cluster adjusts volume — same fine-grained
+  // ±5% steps as the keyboard shortcut. A native listener is used because
+  // React's synthetic onWheel is passive and can't preventDefault().
+  const volClusterRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = volClusterRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const step = e.deltaY < 0 ? 0.05 : -0.05
+      setVolume(Math.min(1, Math.max(0, Number(usePlayerStore.getState().volume.toFixed(2)) + step)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [setVolume])
+
+  // Escape closes any open panel — Esc means "back out of what I opened",
+  // everywhere in the app (modals, dropdowns, these popups).
+  useEffect(() => {
+    if (!openPanel) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenPanel(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openPanel])
+
+  const effectiveVolume = muted ? 0 : volume
 
   const isNowPlaying = activeView === 'nowplaying'
 
-  const toggleMute = () => {
-    if (muted) { setVolume(prevVolRef.current); setMuted(false) }
-    else { prevVolRef.current = volume; setVolume(0); setMuted(true) }
+  // Measure the clicked icon's center so its panel opens anchored to it.
+  const togglePanel = (p: Exclude<PanelType, null>, el: HTMLElement | null) => {
+    if (openPanel === p) { setOpenPanel(null); return }
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      setPanelAnchorX(rect.left + rect.width / 2)
+    }
+    setOpenPanel(p)
   }
-  const togglePanel = (p: PanelType) => setOpenPanel((x) => x === p ? null : p)
   const openNowPlaying = () => {
     if (!currentSong) return
     setActiveView(isNowPlaying ? 'library' : 'nowplaying')
@@ -54,8 +109,8 @@ export function PlayerBar() {
   return (
     <>
       <AnimatePresence>
-        {openPanel === 'lyrics' && <LyricsPanel key="lyrics" onClose={() => setOpenPanel(null)} />}
-        {openPanel === 'visualizer' && <VisualizerPanel key="vis" onClose={() => setOpenPanel(null)} />}
+        {openPanel === 'lyrics' && <LyricsPanel key="lyrics" anchorX={panelAnchorX} onClose={() => setOpenPanel(null)} />}
+        {openPanel === 'visualizer' && <VisualizerPanel key="vis" anchorX={panelAnchorX} onClose={() => setOpenPanel(null)} />}
       </AnimatePresence>
 
       <motion.div
@@ -87,6 +142,7 @@ export function PlayerBar() {
             const rect = e.currentTarget.getBoundingClientRect()
             seekTo((e.clientX - rect.left) / rect.width)
           }}
+          title="Seek"
         >
           <div className="h-full w-full bg-white/5" />
           <div
@@ -178,12 +234,18 @@ export function PlayerBar() {
           {/* ── Center: controls ── */}
           <div className="flex-1 flex flex-col items-center gap-1.5">
             <div className="flex items-center gap-1.5">
-              <IconBtn active={shuffle} onClick={toggleShuffle}><Shuffle size={14} /></IconBtn>
-              <IconBtn onClick={prevSong}><SkipBack size={17} /></IconBtn>
+              <IconBtn active={shuffle} onClick={toggleShuffle} title="Shuffle (S)" ariaLabel="Shuffle">
+                <Shuffle size={14} />
+              </IconBtn>
+              <IconBtn onClick={prevSong} title="Previous (←)" ariaLabel="Previous song">
+                <SkipBack size={17} />
+              </IconBtn>
 
               <motion.button
                 onClick={togglePlay}
                 whileTap={{ scale: 0.92 }}
+                title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
                 className="w-11 h-11 rounded-2xl flex items-center justify-center text-white/90 bg-[var(--color-glass-strong)] border border-[var(--color-border-mid)] hover:bg-white/15 transition-all"
                 style={{ boxShadow: isPlaying ? '0 0 24px var(--color-dynamic-3)' : undefined }}
               >
@@ -195,8 +257,10 @@ export function PlayerBar() {
                 </AnimatePresence>
               </motion.button>
 
-              <IconBtn onClick={nextSong}><SkipForward size={17} /></IconBtn>
-              <IconBtn active={repeat !== 'none'} onClick={cycleRepeat}>
+              <IconBtn onClick={nextSong} title="Next (→)" ariaLabel="Next song">
+                <SkipForward size={17} />
+              </IconBtn>
+              <IconBtn active={repeat !== 'none'} onClick={cycleRepeat} title={`Repeat: ${repeat} (R)`} ariaLabel="Repeat mode">
                 {repeat === 'one' ? <Repeat1 size={14} /> : <Repeat size={14} />}
               </IconBtn>
             </div>
@@ -209,31 +273,62 @@ export function PlayerBar() {
           </div>
 
           {/* ── Right: panels + volume ── */}
-          <div className="flex items-center gap-2 w-64 shrink-0 justify-end">
-            <IconBtn active={openPanel === 'lyrics'} onClick={() => togglePanel('lyrics')} title="Lyrics">
-              <Mic2 size={14} />
-            </IconBtn>
-            <IconBtn active={openPanel === 'visualizer'} onClick={() => togglePanel('visualizer')} title="Visualizer">
-              <BarChart2 size={14} />
-            </IconBtn>
+          <div className="flex items-center gap-2 w-64 shrink-0 justify-end relative">
 
-            <button onClick={toggleMute} className="p-1.5 text-white/30 hover:text-white/60 transition-colors">
-              {volume === 0 || muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-            </button>
+            {/* Volume OSD — floats above the right cluster, out of the way
+                of the transport controls but visible where the eye already
+                is when adjusting loudness. */}
+            <AnimatePresence>
+              {showVolOsd && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.9 }}
+                  animate={{ opacity: 1, y: -34, scale: 1 }}
+                  exit={{ opacity: 0, y: -44, scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                  className="absolute bottom-7 right-16 px-2.5 py-1 rounded-lg text-[11px] font-semibold tabular-nums pointer-events-none"
+                  style={{
+                    background: 'var(--color-chrome)',
+                    border: '1px solid var(--color-border-mid)',
+                    color: 'var(--color-dynamic-1)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+                  }}
+                >
+                  {muted ? 'Muted' : `${Math.round(volume * 100)}%`}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            <Slider.Root
-              value={[volume]} min={0} max={1} step={0.01}
-              onValueChange={([v]) => { setVolume(v); setMuted(false) }}
-              className="relative flex items-center w-24 h-5 cursor-pointer"
-            >
-              <Slider.Track className="relative h-[3px] flex-1 rounded-full bg-white/10">
-                <Slider.Range
-                  className="absolute h-full rounded-full"
-                  style={{ background: 'linear-gradient(90deg, var(--color-dynamic-1), var(--color-dynamic-2))' }}
-                />
-              </Slider.Track>
-              <Slider.Thumb className="block w-3 h-3 rounded-full bg-white shadow outline-none hover:scale-110 transition-transform" />
-            </Slider.Root>
+            <span ref={lyricsAnchorRef} className="inline-flex">
+              <IconBtn active={openPanel === 'lyrics'} onClick={() => togglePanel('lyrics', lyricsAnchorRef.current)} title="Lyrics" ariaLabel="Lyrics panel">
+                <Mic2 size={14} />
+              </IconBtn>
+            </span>
+            <span ref={visualizerAnchorRef} className="inline-flex">
+              <IconBtn active={openPanel === 'visualizer'} onClick={() => togglePanel('visualizer', visualizerAnchorRef.current)} title="Visualizer" ariaLabel="Visualizer panel">
+                <BarChart2 size={14} />
+              </IconBtn>
+            </span>
+
+            <div ref={volClusterRef} className="flex items-center gap-2 cursor-ns-resize" title="Scroll to adjust volume">
+              <button onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'} title={muted ? 'Unmute (M)' : 'Mute (M)'} className="p-1.5 text-white/30 hover:text-white/60 transition-colors">
+                {effectiveVolume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              </button>
+
+              <Slider.Root
+                value={[effectiveVolume]} min={0} max={1} step={0.01}
+                onValueChange={([v]) => setVolume(v)}
+                className="relative flex items-center w-24 h-5 cursor-pointer"
+                aria-label="Volume"
+              >
+                <Slider.Track className="relative h-[3px] flex-1 rounded-full bg-white/10">
+                  <Slider.Range
+                    className="absolute h-full rounded-full"
+                    style={{ background: 'linear-gradient(90deg, var(--color-dynamic-1), var(--color-dynamic-2))' }}
+                  />
+                </Slider.Track>
+                <Slider.Thumb className="block w-3 h-3 rounded-full bg-white shadow outline-none hover:scale-110 transition-transform" />
+              </Slider.Root>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -241,13 +336,14 @@ export function PlayerBar() {
   )
 }
 
-function IconBtn({ children, onClick, active, title }: {
-  children: React.ReactNode; onClick?: () => void; active?: boolean; title?: string
+function IconBtn({ children, onClick, active, title, ariaLabel }: {
+  children: React.ReactNode; onClick?: () => void; active?: boolean; title?: string; ariaLabel?: string
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={() => onClick?.()}
       title={title}
+      aria-label={ariaLabel ?? title}
       className={`p-2 rounded-lg transition-all duration-150 ${active ? 'bg-[var(--color-glass-mid)]' : 'text-white/30 hover:text-white/70 hover:bg-white/5'}`}
       style={active ? { color: 'var(--color-dynamic-1)' } : undefined}
     >

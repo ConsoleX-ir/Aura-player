@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward,
-  Shuffle, Repeat, Repeat1, Heart, ListMusic, Music2, Mic2
+  Shuffle, Repeat, Repeat1, Heart, ListMusic, Music2, Mic2, Moon, X
 } from 'lucide-react'
 import * as Slider from '@radix-ui/react-slider'
 import { usePlayerStore } from '@/store/playerStore'
@@ -29,9 +30,12 @@ export function NowPlaying() {
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle)
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat)
   const toggleFavorite = usePlayerStore((s) => s.toggleFavorite)
+  const sleepTimerEndsAt = usePlayerStore((s) => s.sleepTimerEndsAt)
+  const setSleepTimer = usePlayerStore((s) => s.setSleepTimer)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
   const queue = usePlayerStore((s) => s.queue)
   const queueIndex = usePlayerStore((s) => s.queueIndex)
+  const removeFromQueue = usePlayerStore((s) => s.removeFromQueue)
 
   const { lines, plain, loading } = useLyrics(currentSong)
   const currentTime = progress * duration
@@ -89,12 +93,49 @@ export function NowPlaying() {
         <div className="text-center">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">Now Playing</p>
         </div>
-        <button
-          onClick={() => toggleFavorite(currentSong.id)}
-          className={`p-1.5 rounded-lg transition-all ${isFav ? 'text-red-400' : 'text-white/30 hover:text-white/70'}`}
-        >
-          <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
-        </button>
+        <div className="flex items-center gap-1">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                title={sleepTimerEndsAt ? `Sleeps at ${new Date(sleepTimerEndsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Sleep Timer'}
+                className={`p-1.5 rounded-lg transition-all ${sleepTimerEndsAt ? 'text-white/80' : 'text-white/30 hover:text-white/70'}`}
+                style={sleepTimerEndsAt ? { color: 'var(--color-dynamic-1)' } : undefined}
+              >
+                <Moon size={15} fill={sleepTimerEndsAt ? 'currentColor' : 'none'} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="z-[200] min-w-44 p-1 rounded-xl border border-[var(--color-border-mid)] text-sm"
+                style={{ background: 'var(--color-chrome)', backdropFilter: 'blur(20px)' }}
+                sideOffset={6} align="end">
+                {[15, 30, 45, 60].map((min) => (
+                  <DropdownMenu.Item key={min} onClick={() => setSleepTimer(min)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-white/60 hover:text-white/90 hover:bg-white/5 outline-none transition-colors">
+                    <Moon size={13} />
+                    {min} minutes
+                  </DropdownMenu.Item>
+                ))}
+                {sleepTimerEndsAt && (
+                  <>
+                    <DropdownMenu.Separator className="h-px bg-[var(--color-border)] my-1" />
+                    <DropdownMenu.Item onClick={() => setSleepTimer(null)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-white/60 hover:text-white/90 hover:bg-white/5 outline-none transition-colors">
+                      Turn Off
+                    </DropdownMenu.Item>
+                  </>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+
+          <button
+            onClick={() => toggleFavorite(currentSong.id)}
+            className={`p-1.5 rounded-lg transition-all ${isFav ? 'text-red-400' : 'text-white/30 hover:text-white/70'}`}
+          >
+            <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
+          </button>
+        </div>
       </div>
 
       {/* Main content */}
@@ -300,7 +341,7 @@ export function NowPlaying() {
                 return (
                   <div
                     key={`${song.id}-${i}`}
-                    className={`flex items-center gap-3 px-4 py-1.5 cursor-pointer transition-all ${isActive ? 'bg-white/5' : 'hover:bg-white/[0.03]'}`}
+                    className={`group flex items-center gap-3 px-4 py-1.5 cursor-pointer transition-all ${isActive ? 'bg-white/5' : 'hover:bg-white/[0.03]'}`}
                     onDoubleClick={() => usePlayerStore.getState().playSong(song, queue)}
                   >
                     {song.coverArt
@@ -313,6 +354,15 @@ export function NowPlaying() {
                       </p>
                       <p className="text-[10px] text-white/25 truncate">{song.artist}</p>
                     </div>
+                    {!isActive && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeFromQueue(i) }}
+                        title="Remove from queue"
+                        className="p-1 rounded-md text-white/0 group-hover:text-white/40 hover:text-white/80 hover:bg-white/5 transition-colors shrink-0"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
                     {isActive && (
                       <div className="flex items-end gap-0.5 h-3 shrink-0">
                         {[0, 1, 2].map((j) => (

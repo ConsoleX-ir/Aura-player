@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, globalShortcut, nativeImage, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -45,6 +45,41 @@ const COVER_EXT_BY_MIME = {
   'image/png':  '.png',
   'image/webp': '.webp',
   'image/gif':  '.gif',
+}
+
+// Windows taskbar thumbnail controls — the small Previous/Play-Pause/Next
+// buttons that appear when hovering Aura's icon in the taskbar, same as
+// most native Windows media apps. Windows-only; setThumbarButtons() is a
+// no-op on other platforms, but the explicit guard makes that intentional
+// rather than accidental.
+const THUMBAR_ICONS_DIR = path.join(__dirname, 'assets', 'thumbar')
+const thumbarIconCache = new Map()
+function loadThumbarIcon(name) {
+  if (!thumbarIconCache.has(name)) {
+    thumbarIconCache.set(name, nativeImage.createFromPath(path.join(THUMBAR_ICONS_DIR, `${name}.png`)))
+  }
+  return thumbarIconCache.get(name)
+}
+
+function updateThumbarButtons(isPlaying) {
+  if (process.platform !== 'win32' || !mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.setThumbarButtons([
+    {
+      tooltip: 'Previous',
+      icon: loadThumbarIcon('previous'),
+      click: () => mainWindow.webContents.send('media:command', 'previous'),
+    },
+    {
+      tooltip: isPlaying ? 'Pause' : 'Play',
+      icon: loadThumbarIcon(isPlaying ? 'pause' : 'play'),
+      click: () => mainWindow.webContents.send('media:command', 'toggle'),
+    },
+    {
+      tooltip: 'Next',
+      icon: loadThumbarIcon('next'),
+      click: () => mainWindow.webContents.send('media:command', 'next'),
+    },
+  ])
 }
 
 // When Windows launches Aura because the user double-clicked an associated
@@ -228,10 +263,35 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // Global media keys — Play/Pause/Next/Previous work even when Aura isn't
+  // the focused window, same as any hardware media key already does for
+  // other native media apps. register() returns false (not a thrown error)
+  // if something else already grabbed a key first, so each is checked and
+  // logged rather than assumed to have succeeded.
+  for (const [key, command] of [
+    ['MediaPlayPause', 'toggle'],
+    ['MediaNextTrack', 'next'],
+    ['MediaPreviousTrack', 'previous'],
+  ]) {
+    const ok = globalShortcut.register(key, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('media:command', command)
+      }
+    })
+    if (!ok) console.warn(`Failed to register global media key: ${key} (likely already claimed by another app)`)
+  }
+
+  updateThumbarButtons(false)
 })
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
+// Global shortcuts are a system-wide hook — leaving them registered after
+// Aura quits would mean physical media keys silently do nothing (since
+// they'd still be "claimed" by a process that's no longer listening) until
+// the OS eventually notices the process died.
+app.on('will-quit', () => { globalShortcut.unregisterAll() })
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
 
@@ -256,7 +316,39 @@ ipcMain.handle('dialog:openFiles', async () => {
   return result.canceled ? [] : result.filePaths
 })
 
-ipcMain.handle('fs:scanFolder', async (_e, folderPath) => {
+// Playlist export (M3U) — a real file save dialog, then a plain text write.
+// M3U just references each song by its existing on-disk path, so there's
+// nothing to generate here beyond the dialog + write; the actual M3U text
+// is built in the renderer (useLibraryImport's sibling, useLibraryExport).
+ipcMain.handle('dialog:savePlaylistFile', async (_e, defaultName) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Playlist',
+    defaultPath: defaultName,
+    filters: [{ name: 'M3U Playlist', extensions: ['m3u'] }],
+  })
+  return result.canceled ? null : result.filePath
+})
+
+ipcMain.handle('fs:writeTextFile', async (_e, filePath, content) => {
+  try {
+    fs.writeFileSync(filePath, content, 'utf-8')
+    return true
+  } catch (e) {
+    console.error('Failed to write file:', filePath, e.message)
+    return false
+  }
+})
+
+// Opens Explorer (or Finder/the file manager on other platforms) with the
+// given file already selected — standard "Show in Folder" behavior.
+ipcMain.on('shell:showItemInFolder', (_e, filePath) => {
+  shell.showItemInFolder(filePath)
+})
+
+// Shared by fs:scanFolder and fs:resolveDroppedPaths — recursively walks a
+// directory for audio files, stat'ing each for mtimeMs (used by Folder Sync
+// to detect changes cheaply, without re-parsing every file's tags).
+function scanFolderForAudio(folderPath) {
   const results = []
   function scan(dir) {
     try {
@@ -264,9 +356,6 @@ ipcMain.handle('fs:scanFolder', async (_e, folderPath) => {
         const full = path.join(dir, item.name)
         if (item.isDirectory()) scan(full)
         else if (item.isFile() && AUDIO_EXTS.includes(path.extname(item.name).toLowerCase())) {
-          // mtimeMs lets the renderer detect changed files during a folder
-          // sync without re-parsing metadata for every file every time —
-          // just a stat, not a full tag read.
           let mtimeMs = 0
           try { mtimeMs = fs.statSync(full).mtimeMs } catch { /* file vanished mid-scan */ }
           results.push({ path: full, name: item.name, mtimeMs })
@@ -276,6 +365,32 @@ ipcMain.handle('fs:scanFolder', async (_e, folderPath) => {
   }
   scan(folderPath)
   return results
+}
+
+ipcMain.handle('fs:scanFolder', async (_e, folderPath) => scanFolderForAudio(folderPath))
+
+// Drag-and-drop: the renderer hands over whatever raw paths were dropped —
+// could be a mix of individual audio files and whole folders. Each path is
+// resolved here: a folder gets recursively scanned (and reported back so the
+// renderer can register it for Folder Sync, same as "Add Folder..."), a
+// recognized audio file is included directly, anything else is ignored.
+ipcMain.handle('fs:resolveDroppedPaths', async (_e, droppedPaths) => {
+  const files = []
+  const folders = []
+
+  for (const p of droppedPaths) {
+    let stat
+    try { stat = fs.statSync(p) } catch { continue }
+
+    if (stat.isDirectory()) {
+      folders.push(p)
+      files.push(...scanFolderForAudio(p))
+    } else if (stat.isFile() && AUDIO_EXTS.includes(path.extname(p).toLowerCase())) {
+      files.push({ path: p, name: path.basename(p), mtimeMs: stat.mtimeMs })
+    }
+  }
+
+  return { files, folders }
 })
 
 async function parseOneFile(filePath) {
@@ -362,3 +477,8 @@ ipcMain.on('window:minimize', () => mainWindow.minimize())
 ipcMain.on('window:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize())
 ipcMain.on('window:close',    () => mainWindow.close())
 ipcMain.handle('window:isMaximized', () => mainWindow.isMaximized())
+
+// Renderer pushes isPlaying here whenever it changes (in-app toggle, a song
+// ending and auto-advancing, etc.) so the taskbar thumbnail's Play/Pause
+// icon stays accurate even though the renderer has no way to update it directly.
+ipcMain.on('player:state-sync', (_e, { isPlaying }) => updateThumbarButtons(isPlaying))

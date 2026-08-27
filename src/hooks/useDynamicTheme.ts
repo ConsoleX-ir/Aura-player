@@ -75,18 +75,25 @@ export function useDynamicTheme(
   coverArt: string | null,
   theme: string,
   customAccentColor: string,
+  // True only on the Now Playing view — everywhere else the app sticks to
+  // the chosen theme's color, even while a song is playing. On Now Playing,
+  // the ambient color switches to the current song's actual album art
+  // instead, then reverts to the theme the moment you navigate away.
+  useAlbumArtColor: boolean = false,
 ) {
   useEffect(() => {
     // Custom uses the user's own picked color; every built-in preset (Forest,
     // Ocean, Sunset, ...) is just a curated hex from the shared registry.
     // Both go through the exact same colorToVars() formula below.
-    const idleHex = theme === 'custom'
+    const themeHex = theme === 'custom'
       ? customAccentColor
       : (PRESET_COLORS_BY_ID.get(theme) ?? PRESET_COLORS_BY_ID.get(DEFAULT_THEME_ID)!)
 
-    if (!coverArt) {
-      // No song playing — use the idle color for the current theme
-      const v = colorToVars(idleHex)
+    if (!useAlbumArtColor || !coverArt) {
+      // Everywhere except Now Playing (or Now Playing with no song loaded):
+      // always the chosen theme's color, regardless of whether music is
+      // currently playing.
+      const v = colorToVars(themeHex)
       applyVars(v.d1, v.d2, v.d3, v.glow)
       return
     }
@@ -107,9 +114,9 @@ export function useDynamicTheme(
         )
       })
       .catch(() => {
-        // On error, fall back to the idle color for the current theme
-        const v = colorToVars(idleHex)
+        // Album art failed to load/decode — fall back to the theme's color
+        const v = colorToVars(themeHex)
         applyVars(v.d1, v.d2, v.d3, v.glow)
       })
-  }, [coverArt, theme, customAccentColor])
+  }, [coverArt, theme, customAccentColor, useAlbumArtColor])
 }

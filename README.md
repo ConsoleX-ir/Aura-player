@@ -2,7 +2,7 @@
 
 > A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-![Version](https://img.shields.io/badge/version-v1.5-blue)
+![Version](https://img.shields.io/badge/version-v1.10.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
@@ -29,6 +29,7 @@ Instead of copying the look of existing players, Aura combines a premium glassmo
 - Automatic metadata detection
 - Album artwork support
 - Fast local library
+- "Show in Folder" — reveal any song's file in Explorer
 
 ### ❤️ Favorites
 
@@ -42,6 +43,8 @@ Instead of copying the look of existing players, Aura combines a premium glassmo
 - Delete playlists
 - Add songs individually, or many at once via "Add Songs"
 - Remove songs
+- Remove from queue (Now Playing view)
+- Export as M3U — opens in VLC, Winamp, and most other media players
 
 ### 🎼 Lyrics
 
@@ -56,10 +59,13 @@ Instead of copying the look of existing players, Aura combines a premium glassmo
 - Shuffle
 - Repeat
 - Crossfade — smooth fade between songs, adjustable 0–12s
+- Sleep Timer — auto-pause after 15/30/45/60 minutes (Now Playing view)
 - Volume Control
 - Seek Bar
 
 ### ⌨ Keyboard Shortcuts
+
+Open the in-app cheat sheet anytime with the **keyboard icon** in the title bar, or by pressing **?** — no need to memorize anything.
 
 | Key | Action |
 |------|--------|
@@ -73,22 +79,40 @@ Instead of copying the look of existing players, Aura combines a premium glassmo
 | L | Toggle Favorite |
 | S | Toggle Shuffle |
 | R | Cycle Repeat |
+| M | Mute / Unmute |
+| ? | Keyboard Shortcuts Guide |
+| Esc | Close Panels & Dialogs |
+| Scroll | Adjust Volume (over the volume control) |
+
+### 💬 Instant Feedback (Toasts)
+
+Every keyboard action gives visible confirmation — a small toast rises above the player bar:
+
+- ❤️ "Added to Favorites" — with the song's title and artist, so pressing L deep in a scrolled list is never a guess
+- 🔀 Shuffle on/off · 🔁 Repeat mode changes · 🔇 Mute/unmute
+- ▶️ "Now Playing" card when skipping with ←/→
+- 🌙 "Sleep Timer Ended" when the timer fires
+- Volume changes show a compact **% pill** right above the volume slider (works for keys, scroll wheel, mute — everything)
 
 ### 🎨 UI
 
 - Theme picker: ConsoleX (default), Forest, Ocean, Sunset, Amethyst, Crimson, or a fully Custom accent color
-- Dynamic Accent Colors extracted from album artwork
+- Dynamic Accent Colors: your chosen theme stays consistent everywhere, except the Now Playing view, which pulls its ambient color from the current song's actual album art
 - Glassmorphism
 - Album Grid View
 - List View
 - Search
 - Smooth Animations
 - Custom Accent Color
+- Keyboard focus indicators throughout — fully navigable without a mouse
 
 ### ⚡ Desktop
 
 - Native Electron application
 - Registered as a Windows music player — double-click any supported audio file to open it in Aura
+- Global media keys — Play/Pause/Next/Previous work even when Aura isn't focused
+- Windows taskbar thumbnail controls — Previous/Play-Pause/Next from the taskbar preview
+- Drag-and-drop import — drop audio files or whole folders anywhere on the window
 - Fast startup
 - Local music playback
 - Persistent settings
@@ -150,16 +174,20 @@ Package as a Windows installer (also registers file associations)
 npm run build:electron
 ```
 
+The installer is optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, since the renderer bundle is fully produced by Vite at build time. `Aura.Player.Setup-1.10.0.exe` comes out **under 100 MB**.
+
+> v1.10.0 — Phase 1 finale: anchored Lyrics/Visualizer popovers that open exactly on their play-bar icons, the in-app Keyboard Shortcuts guide, toast feedback for keyboard actions, mute (M), scroll-wheel volume, and a slimmed-down installer.
+
 ---
 
 # 📁 Project Structure
 
 ```
 src/
- ├── components/   # UI components, grouped by area (Sidebar, Player, Library, Modals)
+ ├── components/   # UI components, grouped by area (Sidebar, Player, Library, Modals, Toast)
  ├── hooks/        # useAudio, useLibraryImport, useLibrarySync, useLyrics, etc.
  ├── pages/        # Library, Playlist, Settings, NowPlaying
- ├── store/        # Single Zustand store — playerStore.ts
+ ├── store/        # Zustand stores — playerStore (playback/library), toastStore (feedback), uiStore (help modal)
  ├── types/        # Shared TS types, incl. the ElectronAPI contract
  └── lib/          # Small shared utilities (utils.ts)
 

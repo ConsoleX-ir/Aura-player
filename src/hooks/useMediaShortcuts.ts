@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { usePlayerStore } from "@/store/playerStore";
+import { toast } from "@/store/toastStore";
 
 // Only currentSong is subscribed to reactively — it's the one thing that
 // decides whether shortcuts should even be active, and it's what the effect
@@ -29,80 +30,104 @@ export function useMediaShortcuts() {
         return;
       }
 
-      const {
-        currentSong,
-        progress,
-        duration,
-        volume,
-        togglePlay,
-        nextSong,
-        prevSong,
-        seekTo,
-        setVolume,
-        toggleFavorite,
-        toggleShuffle,
-        cycleRepeat,
-      } = usePlayerStore.getState();
+      const s = usePlayerStore.getState();
+      if (!s.currentSong) return;
 
-      if (!currentSong) return;
-
+      // Shortcut feedback travels through toasts so the result of an action
+      // is unmistakable even when its button is off-screen or already playing
+      // a different song's state — e.g. pressing L deep in a scrolled list.
       switch (e.code) {
         // ▶ Play / Pause
         case "Space":
           e.preventDefault();
-          togglePlay();
+          s.togglePlay();
           break;
 
         // ⏭ Next
         case "ArrowRight":
           e.preventDefault();
-
           if (e.ctrlKey) {
-            const current = progress * duration;
-            seekTo(Math.min(current + 5, duration));
+            seekBy(s.progress, s.duration, +5);
           } else {
-            nextSong();
+            s.nextSong();
+            announceNowPlaying();
           }
           break;
 
         // ⏮ Previous
         case "ArrowLeft":
           e.preventDefault();
-
           if (e.ctrlKey) {
-            const current = progress * duration;
-            seekTo(Math.max(current - 5, 0));
+            seekBy(s.progress, s.duration, -5);
           } else {
-            prevSong();
+            s.prevSong();
+            announceNowPlaying();
           }
           break;
 
-        // 🔊 Volume +
+        // 🔊 Volume ± 5% — the PlayerBar's OSD pill shows the new level,
+        // so no toast needed here (two feedback UIs would be redundant).
         case "ArrowUp":
           e.preventDefault();
-          setVolume(Math.min(volume + 0.05, 1));
+          s.setVolume(Math.min(s.muted ? s.volume : s.volume + 0.05, 1));
           break;
 
-        // 🔉 Volume -
         case "ArrowDown":
           e.preventDefault();
-          setVolume(Math.max(volume - 0.05, 0));
+          s.setVolume(Math.max(s.volume - 0.05, 0));
           break;
 
-        // ❤️ Favorite
-        case "KeyL":
-          toggleFavorite(currentSong.id);
+        // ❤️ Favorite — with visible confirmation
+        case "KeyL": {
+          s.toggleFavorite(s.currentSong.id);
+          // Re-read once; capture locally so TS knows the song is still there
+          // right after the toggle.
+          const song = usePlayerStore.getState().currentSong;
+          if (!song) break;
+          const isFav = usePlayerStore.getState().favorites.includes(song.id);
+          toast({
+            kind: isFav ? "favorite-add" : "favorite-remove",
+            title: isFav ? "Added to Favorites" : "Removed from Favorites",
+            subtitle: `${song.title} — ${song.artist}`,
+          });
           break;
+        }
 
         // 🔀 Shuffle
-        case "KeyS":
-          toggleShuffle();
+        case "KeyS": {
+          s.toggleShuffle();
+          const on = usePlayerStore.getState().shuffle;
+          toast({ kind: on ? "shuffle-on" : "shuffle-off", title: on ? "Shuffle On" : "Shuffle Off" });
           break;
+        }
 
         // 🔁 Repeat
-        case "KeyR":
-          cycleRepeat();
+        case "KeyR": {
+          s.cycleRepeat();
+          const repeat = usePlayerStore.getState().repeat;
+          toast({
+            kind: repeat === "none" ? "repeat-none" : repeat === "all" ? "repeat-all" : "repeat-one",
+            title:
+              repeat === "none"
+                ? "Repeat Off"
+                : repeat === "all"
+                  ? "Repeat Queue"
+                  : "Repeat This Song",
+          });
           break;
+        }
+
+        // 🔇 Mute / Unmute
+        case "KeyM": {
+          s.toggleMute();
+          const muted = usePlayerStore.getState().muted;
+          toast({
+            kind: muted ? "mute" : "unmute",
+            title: muted ? "Muted" : "Sound Restored",
+            subtitle: muted ? undefined : `${Math.round(usePlayerStore.getState().volume * 100)}% volume`,
+          });
+          break;
+        }
       }
     };
 
@@ -112,4 +137,23 @@ export function useMediaShortcuts() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [currentSongId]);
+}
+
+function seekBy(progress: number, duration: number, deltaSeconds: number) {
+  const { seekTo } = usePlayerStore.getState();
+  const current = progress * duration;
+  seekTo(Math.min(Math.max(current + deltaSeconds, 0), duration || current + deltaSeconds));
+}
+
+// Fires AFTER the store update settles; getState() then holds the song that
+// just started — giving arrow-key skips the same "what's playing now?" cue
+// mouse users get from watching the player bar change.
+function announceNowPlaying() {
+  const { currentSong } = usePlayerStore.getState();
+  if (!currentSong) return;
+  toast({
+    kind: "now-playing",
+    title: "Now Playing",
+    subtitle: `${currentSong.title} — ${currentSong.artist}`,
+  });
 }

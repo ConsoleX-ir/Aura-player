@@ -1,10 +1,11 @@
-import { ArrowLeft, Play, Shuffle, Music2, Trash2, Pencil, ListPlus } from 'lucide-react'
+import { ArrowLeft, Play, Shuffle, Music2, Trash2, Pencil, ListPlus, Download, Loader2 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { useState } from 'react'
 import { PlaylistModal } from '@/components/Modals/PlaylistModal'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { AddSongsModal } from '@/components/Modals/AddSongsModal'
+import { useLibraryExport } from '@/hooks/useLibraryExport'
 
 export function PlaylistPage() {
   // Narrow selectors — avoids re-rendering the whole page on unrelated store
@@ -24,6 +25,7 @@ export function PlaylistPage() {
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showAddSongsModal, setShowAddSongsModal] = useState(false)
+  const { exportPlaylist, exporting } = useLibraryExport()
 
   if (!playlist) return null
 
@@ -92,6 +94,12 @@ export function PlaylistPage() {
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-white/50 text-sm hover:text-white/80 hover:bg-[var(--color-glass-mid)] active:scale-95 transition-all">
                 <ListPlus size={14} />
                 Add Songs
+              </button>
+              <button onClick={() => exportPlaylist(playlist.name, songs)} disabled={!songs.length || exporting}
+                title="Export as M3U — opens in VLC, Winamp, and most other media players"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-white/50 text-sm hover:text-white/80 hover:bg-[var(--color-glass-mid)] active:scale-95 transition-all disabled:opacity-30">
+                {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                Export
               </button>
               <button onClick={() => setShowDeleteModal(true)}
                 className="p-2 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-white/25 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-all">

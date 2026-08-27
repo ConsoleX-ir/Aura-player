@@ -70,9 +70,21 @@ export function useLibraryImport() {
     await importPaths(filePaths.map((path) => ({ path })))
   }
 
+  // Drag-and-drop: dropped items can be a mix of individual audio files and
+  // whole folders (Explorer hands both back as plain paths the same way).
+  // Any dropped folder is registered for Folder Sync too, exactly like
+  // picking it via "Add Folder...".
+  const importDroppedPaths = async (paths: string[]) => {
+    if (!window.electronAPI || paths.length === 0) return
+    const { files, folders } = await window.electronAPI.resolveDroppedPaths(paths)
+    await importPaths(files)
+    folders.forEach(addImportedFolder)
+  }
+
   return {
     importFolder,
     importFiles,
+    importDroppedPaths,
     importing,
     progress,
   }

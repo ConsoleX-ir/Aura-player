@@ -142,6 +142,18 @@ body {
 /* ── Selection ───────────────────────────────────────────────────────────── */
 ::selection { background: var(--color-dynamic-3); color: var(--color-text); }
 
+/* ── Keyboard focus ──────────────────────────────────────────────────────
+   Tailwind's base reset strips the default browser outline and nothing was
+   replacing it, so keyboard navigation had no visible focus indicator
+   anywhere — tabbing through the app, you couldn't tell what was focused.
+   :focus-visible (not :focus) means this only shows for keyboard/programmatic
+   focus, not every mouse click, matching how focus rings are meant to work. */
+:focus-visible {
+  outline: 2px solid var(--color-dynamic-1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* ── Electron drag ───────────────────────────────────────────────────────── */
 .titlebar-drag    { -webkit-app-region: drag; }
 .titlebar-no-drag { -webkit-app-region: no-drag; }
@@ -154,6 +166,20 @@ body {
 .animate-playing-bar {
   transform-origin: bottom;
   animation: playing-bar 0.8s ease-in-out infinite;
+}
+
+/* ── Offscreen render skip ────────────────────────────────────────────────
+   Tells the browser to skip layout/paint/style work entirely for elements
+   that are off-screen (e.g. album grid cards below the fold), only doing
+   that work once they actually scroll into view. contain-intrinsic-size
+   reserves the right amount of space up front so the scrollbar doesn't
+   jump around as things resolve. This is a pure-CSS alternative to writing
+   custom virtualization for the album grid — Chromium (Electron) supports
+   it natively, so a large library's grid view stays cheap to render without
+   any JS windowing logic. */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 240px;
 }
 
 /* ── Performance Mode ──────────────────────────────────────────────────────

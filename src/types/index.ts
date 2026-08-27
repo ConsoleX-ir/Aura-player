@@ -29,6 +29,15 @@ export interface ElectronAPI {
   openFolder:    () => Promise<string | null>
   openFiles:     () => Promise<string[]>
   scanFolder:    (path: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>
+  resolveDroppedPaths: (paths: string[]) => Promise<{
+    files: { path: string; name: string; mtimeMs: number }[]
+    folders: string[]
+  }>
+  // Playlist export (M3U) — shows a native save dialog, returns the chosen
+  // path (or null if cancelled), then writeTextFile actually writes it.
+  savePlaylistFile: (defaultName: string) => Promise<string | null>
+  writeTextFile: (filePath: string, content: string) => Promise<boolean>
+  showItemInFolder: (filePath: string) => void
   parseMetadata: (path: string) => Promise<Omit<Song, 'id' | 'path'>>
   // Parses many files with limited concurrency in the main process — used instead
   // of calling parseMetadata in a loop, which is slow due to per-call IPC overhead.
@@ -40,6 +49,9 @@ export interface ElectronAPI {
   // an audio file in Explorer), whether that's the launch itself or a second
   // launch attempt routed to the already-running instance.
   onFileOpened: (cb: (filePath: string) => void) => () => void
+  // Global media keys and Windows taskbar thumbnail controls both arrive here.
+  onMediaCommand: (cb: (command: 'toggle' | 'next' | 'previous') => void) => () => void
+  syncPlaybackState: (isPlaying: boolean) => void
   minimize:      () => void
   maximize:      () => void
   close:         () => void

@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Play, Heart, MoreHorizontal, Music2, ListX, Trash2 } from 'lucide-react'
+import { Play, Heart, MoreHorizontal, Music2, ListX, Trash2, FolderOpen } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime, cn } from '@/lib/utils'
@@ -118,6 +118,14 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               )}
 
               <DropdownMenu.Separator className="h-px bg-[var(--color-border)] my-1" />
+
+              <DropdownMenu.Item
+                onClick={() => window.electronAPI?.showItemInFolder(song.path)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-white/50 hover:text-white/90 hover:bg-white/5 outline-none transition-colors"
+              >
+                <FolderOpen size={13} />
+                Show in Folder
+              </DropdownMenu.Item>
 
               {playlistId && (
                 <DropdownMenu.Item

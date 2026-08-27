@@ -42,15 +42,29 @@ interface PlayerState {
   queueIndex: number
   isPlaying: boolean
   volume: number
+  // Mute lives in the store (not local UI state) so it can be driven both by
+  // the PlayerBar controls AND the "M" keyboard shortcut with a single source
+  // of truth. Not persisted — a user unmuting between sessions is the least
+  // surprising default, mirroring how system volume behaves.
+  muted: boolean
+  // What the volume was before the most recent mute, so unmute restores the
+  // exact level the user had rather than snapping to some arbitrary value.
+  lastAudibleVolume: number
   progress: number
   duration: number
   playSong: (song: Song, queue?: Song[]) => void
+  // Removes a song from the live queue by position. No-op if you try to
+  // remove the currently-playing song this way — deliberately not handling
+  // that edge case (skip to next? stop? something else?) by keeping the
+  // remove button hidden for the active row instead, in the UI.
+  removeFromQueue: (index: number) => void
   togglePlay: () => void
   setIsPlaying: (v: boolean) => void
   nextSong: () => void
   prevSong: () => void
   seekTo: (v: number) => void
   setVolume: (v: number) => void
+  toggleMute: () => void
   setProgress: (v: number) => void
   setDuration: (v: number) => void
 
@@ -75,6 +89,13 @@ interface PlayerState {
 
   crossfade: number
   setCrossfade: (v: number) => void
+
+  // Sleep Timer — a timestamp (ms) to auto-pause at, or null when off.
+  // Deliberately NOT persisted: a timer left running from a previous session
+  // silently firing on next launch would be a confusing surprise, not a
+  // convenience.
+  sleepTimerEndsAt: number | null
+  setSleepTimer: (minutes: number | null) => void
 
   activeView: AppView
   setActiveView: (v: AppView) => void
@@ -207,6 +228,8 @@ export const usePlayerStore = create<PlayerState>()(
       queueIndex: 0,
       isPlaying: false,
       volume: 0.8,
+      muted: false,
+      lastAudibleVolume: 0.8,
       progress: 0,
       duration: 0,
       seekRequest: null,
@@ -216,6 +239,15 @@ export const usePlayerStore = create<PlayerState>()(
         const idx = q.findIndex((s) => s.id === song.id)
         set({ currentSong: song, queue: q, queueIndex: Math.max(idx, 0), isPlaying: true, progress: 0 })
       },
+      removeFromQueue: (index) => set((s) => {
+        if (index === s.queueIndex) return s
+        return {
+          queue: s.queue.filter((_, i) => i !== index),
+          // Shift the pointer down if we removed something before the
+          // currently-playing song, so it keeps pointing at the same song.
+          queueIndex: index < s.queueIndex ? s.queueIndex - 1 : s.queueIndex,
+        }
+      }),
       togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
       setIsPlaying: (v) => set({ isPlaying: v }),
 
@@ -239,7 +271,17 @@ export const usePlayerStore = create<PlayerState>()(
 
       seekTo: (v) => set({ seekRequest: v }),
       clearSeekRequest: () => set({ seekRequest: null }),
-      setVolume: (v) => set({ volume: v }),
+      // Moving the slider always unmutes — that's what every mainstream
+      // player does, and silently changing volume while still muted is a
+      // classic "why is there no sound?!" trap.
+      setVolume: (v) => set({ volume: v, muted: false }),
+      toggleMute: () => set((s) => {
+        if (s.muted) {
+          const restore = s.lastAudibleVolume > 0 ? s.lastAudibleVolume : s.volume || 0.8
+          return { muted: false, volume: restore }
+        }
+        return { muted: true, lastAudibleVolume: s.volume }
+      }),
       setProgress: (v) => set({ progress: v }),
       setDuration: (v) => set({ duration: v }),
 
@@ -261,6 +303,11 @@ export const usePlayerStore = create<PlayerState>()(
 
       crossfade: 0,
       setCrossfade: (v) => set({ crossfade: v }),
+
+      sleepTimerEndsAt: null,
+      setSleepTimer: (minutes) => set({
+        sleepTimerEndsAt: minutes ? Date.now() + minutes * 60_000 : null
+      }),
 
       activeView: 'library',
       setActiveView: (v) => set({ activeView: v }),
