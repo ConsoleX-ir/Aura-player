@@ -439,6 +439,285 @@ async function parseOneFile(filePath) {
 
 ipcMain.handle('fs:parseMetadata', async (_e, filePath) => parseOneFile(filePath))
 
+// Technical file properties for the Properties dialog — file size/extension
+// from a cheap stat, audio format details from music-metadata's format block.
+// Deliberately on-demand (fetched when the dialog opens) instead of stored on
+// every Song at import time: most rows never open Properties, and keeping
+// bitrate/codec per song would needlessly grow the localStorage-persisted
+// library state.
+ipcMain.handle('fs:fileStats', async (_e, filePath) => {
+  const fallback = {
+    sizeBytes: 0, extension: path.extname(filePath).toLowerCase(),
+    bitrateKbps: null, sampleRateHz: null, channels: null, codec: null, container: null,
+  }
+  try {
+    const stat = fs.statSync(filePath)
+    let format = {}
+    try {
+      const { parseFile } = await import('music-metadata')
+      // duration:false + skipCovers:true — we only want the format block here,
+      // so skip the expensive duration estimate and cover extraction entirely.
+      const meta = await parseFile(filePath, { duration: false, skipCovers: true })
+      format = meta.format
+    } catch { /* unreadable tags — still show size/type from the stat */ }
+    return {
+      sizeBytes: stat.size,
+      extension: path.extname(filePath).toLowerCase(),
+      bitrateKbps:   format.bitrate            ? Math.round(format.bitrate / 1000) : null,
+      sampleRateHz:  format.sampleRate         || null,
+      channels:      format.numberOfChannels   || null,
+      codec:         format.codec              || null,
+      container:     format.container          || null,
+    }
+  } catch {
+    return fallback
+  }
+})
+
+// ── Keyless "Find Info Online" — Deezer + iTunes + MusicBrainz ───────────────
+// All three sources are free public search APIs that require NO API key, no
+// account, and no audio upload — only plain text queries ("artist + title").
+// Runs in the main process (not the renderer) so CORS never matters, the
+// User-Agent MusicBrainz asks for is set in one place, and the merge/scoring
+// logic stays out of the UI bundle.
+//
+// Each source may fail independently (offline, rate-limited, reshaped
+// response); a failed source simply contributes zero candidates instead of
+// failing the whole lookup. Only when EVERY source errors does the renderer
+// see a network error.
+
+const FIND_USER_AGENT = 'AuraPlayer/1.11.3 (desktop music player)'
+
+// shared fetch with timeout — returns parsed JSON or throws
+async function fetchJson(url, options = {}, timeoutMs = 9000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal })
+    if (!res.ok) throw new Error(`http_${res.status}`)
+    return await res.json()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Normalize for comparison: lowercase, strip diacritics, collapse whitespace.
+function normStr(s) {
+  return (s || '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Strip junk that pollutes tags/filenames: "(feat. X)", "[Radio Edit]", and
+// site-watermark suffixes like "BEHMELODY.IN" — same idea as the renderer's
+// useLyrics cleanField, mirrored here so search queries are clean.
+function cleanTag(s) {
+  return (s || '')
+    .replace(/\s+[A-Z0-9]{3,}\.[A-Z]{2,4}$/i, '')
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/\s*\[.*?\]\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Sørensen–Dice coefficient over character bigrams — forgiving similarity for
+// short strings (1.0 identical, 0.0 nothing in common).
+function dice(a, b) {
+  if (a === b) return 1
+  if (a.length < 2 || b.length < 2) return 0
+  const grams = new Map()
+  for (let i = 0; i < a.length - 1; i++) {
+    const g = a.slice(i, i + 2)
+    grams.set(g, (grams.get(g) || 0) + 1)
+  }
+  let hits = 0
+  for (let i = 0; i < b.length - 1; i++) {
+    const g = b.slice(i, i + 2)
+    const n = grams.get(g) || 0
+    if (n > 0) { hits++; grams.set(g, n - 1) }
+  }
+  return (2 * hits) / (a.length - 1 + b.length - 1)
+}
+
+// 0..1 — how close the found duration is to the local file's (±15s full span).
+function durationScore(queryDur, candDurSec) {
+  if (!queryDur || !candDurSec) return 0.5 // unknown → neutral, don't punish
+  const delta = Math.abs(queryDur - candDurSec)
+  return Math.max(0, 1 - delta / 15)
+}
+
+// Weighted match score: the title matters most, artist second, album and
+// duration act as tie-breakers between near-identical candidates.
+function scoreCandidate(q, c) {
+  const t = dice(normStr(cleanTag(q.title)), normStr(cleanTag(c.title || '')))
+  const a = dice(normStr(cleanTag(q.artist)), normStr(cleanTag(c.artist || '')))
+  const al = q.album ? dice(normStr(cleanTag(q.album)), normStr(cleanTag(c.album || ''))) : 0
+  const d = durationScore(q.duration, c.durationSec)
+  return t * 0.45 + a * 0.30 + al * 0.10 + d * 0.15
+}
+
+async function searchDeezer(q) {
+  const term = [cleanTag(q.artist), cleanTag(q.title)].filter(Boolean).join(' ')
+  if (!term) return []
+  const url = 'https://api.deezer.com/search?q=' + encodeURIComponent(term) + '&limit=8'
+  const data = await fetchJson(url, {}, 9000)
+  return (data.data || []).map((t) => ({
+    source: 'deezer',
+    title: t.title || null,
+    artist: t.artist?.name || null,
+    album: t.album?.title || null,
+    year: null,
+    genre: null,
+    durationSec: t.duration || null,
+    artworkUrl: t.album?.cover_xl || t.album?.cover_big || t.album?.cover_medium || null,
+    link: t.link || null,
+  }))
+}
+
+async function searchITunes(q) {
+  const term = [cleanTag(q.artist), cleanTag(q.title)].filter(Boolean).join(' ')
+  if (!term) return []
+  const url = 'https://itunes.apple.com/search?term=' + encodeURIComponent(term) +
+    '&media=music&entity=song&limit=8'
+  const data = await fetchJson(url, {}, 9000)
+  return (data.results || []).map((t) => ({
+    source: 'itunes',
+    title: t.trackName || null,
+    artist: t.artistName || null,
+    album: t.collectionName || null,
+    year: t.releaseDate ? parseInt(t.releaseDate.slice(0, 4), 10) || null : null,
+    genre: t.primaryGenreName || null,
+    durationSec: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : null,
+    artworkUrl: t.artworkUrl100 ? t.artworkUrl100.replace(/100x100bb/, '600x600bb') : null,
+    link: t.trackViewUrl || null,
+  }))
+}
+
+async function searchMusicBrainz(q) {
+  // Lucene-ish query: quoted phrases survive multi-word titles/artists.
+  const parts = []
+  if (cleanTag(q.title))  parts.push('recording:"' + cleanTag(q.title).replace(/"/g, '') + '"')
+  if (cleanTag(q.artist)) parts.push('artist:"' + cleanTag(q.artist).replace(/"/g, '') + '"')
+  if (parts.length === 0) return []
+  const url = 'https://musicbrainz.org/ws/2/recording?query=' + encodeURIComponent(parts.join(' AND ')) +
+    '&fmt=json&limit=8'
+  // MusicBrainz asks clients to identify themselves and keep to ~1 req/sec —
+  // one request per explicit user search fits comfortably within both rules.
+  const data = await fetchJson(url, { headers: { 'User-Agent': FIND_USER_AGENT } }, 10000)
+  return (data.recordings || []).map((r) => {
+    const artistNames = (r['artist-credit'] || [])
+      .map((ac) => ac.name || ac.artist?.name)
+      .filter(Boolean)
+    const datedRelease = (r.releases || []).find((rel) => rel.date)
+    return {
+      source: 'musicbrainz',
+      title: r.title || null,
+      artist: artistNames.join(', ') || null,
+      album: r.releases?.[0]?.title || null,
+      year: datedRelease ? parseInt(datedRelease.date.slice(0, 4), 10) || null : null,
+      genre: null,
+      durationSec: r.length ? Math.round(r.length / 1000) : null,
+      artworkUrl: null, // Cover Art Archive needs extra per-release requests — skip
+      link: r.id ? 'https://musicbrainz.org/recording/' + r.id : null,
+    }
+  })
+}
+
+async function findCandidates(q) {
+  if (!cleanTag(q.title) && !cleanTag(q.artist)) {
+    return { ok: false, error: 'empty_query' }
+  }
+
+  const settled = await Promise.allSettled([
+    searchDeezer(q), searchITunes(q), searchMusicBrainz(q),
+  ])
+  const anyResolved = settled.some((s) => s.status === 'fulfilled')
+  if (!anyResolved) return { ok: false, error: 'network_error' }
+
+  // Flatten, score, then merge near-duplicates across sources: the same
+  // song found on Deezer AND iTunes should appear as ONE candidate with
+  // both source badges and the best fields of each, not as two rows.
+  const scored = []
+  for (const s of settled) {
+    if (s.status === 'fulfilled') {
+      for (const c of s.value) scored.push({ ...c, score: scoreCandidate(q, c) })
+    }
+  }
+  scored.sort((a, b) => b.score - a.score)
+
+  const groups = new Map()
+  for (const c of scored) {
+    const key = normStr(cleanTag(c.title)) + '|' + normStr(cleanTag(c.artist).split(',')[0] || '')
+    const prev = groups.get(key)
+    if (!prev) {
+      groups.set(key, { ...c, sources: [c.source], links: c.link ? [c.link] : [] })
+      continue
+    }
+    // Fill blanks / keep the best-valued field from the higher-ranked twin
+    if (!prev.title  && c.title)  prev.title  = c.title
+    if (!prev.artist && c.artist) prev.artist = c.artist
+    if (!prev.album  && c.album)  prev.album  = c.album
+    if (!prev.year   && c.year)   prev.year   = c.year
+    if (!prev.genre  && c.genre)  prev.genre  = c.genre
+    if (!prev.artworkUrl && c.artworkUrl) prev.artworkUrl = c.artworkUrl
+    if (prev.durationSec == null && c.durationSec != null) prev.durationSec = c.durationSec
+    if (!prev.sources.includes(c.source)) prev.sources.push(c.source)
+    if (c.link && !prev.links.includes(c.link) && prev.links.length < 3) prev.links.push(c.link)
+    if (c.score > prev.score) prev.score = c.score
+  }
+
+  const candidates = [...groups.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map(({ source, link, ...rest }) => rest) // internal fields stay internal
+
+  return { ok: true, candidates }
+}
+
+ipcMain.handle('net:findMetadata', async (_e, query) => {
+  try {
+    return await findCandidates({
+      title: (query?.title || '').toString(),
+      artist: (query?.artist || '').toString(),
+      album: (query?.album || '').toString(),
+      duration: Number(query?.duration) || 0,
+    })
+  } catch (err) {
+    return { ok: false, error: err.message || 'network_error' }
+  }
+})
+
+// Downloads a remote artwork image (Deezer / iTunes CDN) into the same
+// covers cache local art uses, so an applied online match behaves exactly like
+// artwork embedded in the file: served via aura://, persistent, offline-safe.
+ipcMain.handle('net:cacheArtwork', async (_e, url) => {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20_000)
+    let res
+    try {
+      res = await fetch(url, { signal: controller.signal })
+    } finally {
+      clearTimeout(timeout)
+    }
+    if (!res.ok) return null
+    const type = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim()
+    if (!type.startsWith('image/')) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length === 0) return null
+    const ext = COVER_EXT_BY_MIME[type] || '.jpg'
+    const cachedPath = path.join(coversDir, hashStr(url) + ext)
+    fs.writeFileSync(cachedPath, buf)
+    return `aura://local?path=${encodeURIComponent(cachedPath)}`
+  } catch (e) {
+    console.error('Artwork cache error:', e.message)
+    return null
+  }
+})
+
 // Parses many files with a small worker pool instead of one IPC round-trip
 // per file — importing a 2,000-song folder serially (as the renderer used to
 // do by calling parseMetadata in a loop) means 2,000 separate IPC calls, each

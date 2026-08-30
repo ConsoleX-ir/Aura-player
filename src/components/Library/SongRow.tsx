@@ -1,10 +1,11 @@
 import { memo, useState } from 'react'
-import { Play, Heart, MoreHorizontal, Music2, ListX, Trash2, FolderOpen } from 'lucide-react'
+import { Play, Heart, MoreHorizontal, Music2, ListX, Trash2, FolderOpen, Info, Sparkles } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime, cn } from '@/lib/utils'
 import type { Song } from '@/types'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
+import { PropertiesModal } from '@/components/Modals/PropertiesModal'
 
 interface SongRowProps {
   song: Song
@@ -37,6 +38,9 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
   const removeFromLibrary = usePlayerStore((s) => s.removeFromLibrary)
   const isActive = currentSongId === song.id
   const [confirmRemoveLibrary, setConfirmRemoveLibrary] = useState(false)
+  // Properties dialog — 'info' shows file/song details, 'find' jumps straight
+  // to the keyless online-lookup section of the same dialog.
+  const [propertiesView, setPropertiesView] = useState<null | 'info' | 'find'>(null)
 
   return (
     <div
@@ -120,6 +124,22 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               <DropdownMenu.Separator className="h-px bg-[var(--color-border)] my-1" />
 
               <DropdownMenu.Item
+                onClick={() => setPropertiesView('info')}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-white/50 hover:text-white/90 hover:bg-white/5 outline-none transition-colors"
+              >
+                <Info size={13} />
+                Properties
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
+                onClick={() => setPropertiesView('find')}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-white/50 hover:text-white/90 hover:bg-white/5 outline-none transition-colors"
+              >
+                <Sparkles size={13} />
+                Find Info Online
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
                 onClick={() => window.electronAPI?.showItemInFolder(song.path)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-white/50 hover:text-white/90 hover:bg-white/5 outline-none transition-colors"
               >
@@ -148,6 +168,13 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       </div>
+
+      <PropertiesModal
+        song={song}
+        open={propertiesView !== null}
+        initialFind={propertiesView === 'find'}
+        onClose={() => setPropertiesView(null)}
+      />
 
       <ConfirmModal
         open={confirmRemoveLibrary}

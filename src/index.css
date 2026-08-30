@@ -78,14 +78,83 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* ── Dynamic ambient background ─────────────────────────────────────────── */
-/* Default: cloud gray glow. When a song plays, JS shifts --color-dynamic-* */
+/* ── Dynamic ambient background — two drifting light orbs ──────────────────
+   The old background was two fixed radial gradients painted onto this
+   element. They're now real (pseudo-element) orbs so they can MOVE: huge,
+   heavily blurred circles that drift and breathe behind all content, each on
+   its own slow clock, giving the app a quiet "alive" feel.
+   Implementation notes:
+   • Only transform is animated (GPU-composited, no layout/paint per frame).
+   • isolation:isolate + z-index:-1 keeps the orbs above this element's own
+     background but below every piece of content, on every page.
+   • Colors come from --color-dynamic-1 via color-mix, so orbs follow the
+     active theme AND the album-art ambient color on Now Playing; the
+     background-color transition makes theme switches fade instead of snap. */
 .dynamic-bg {
-  background:
-    radial-gradient(ellipse 60% 45% at 25% 15%, var(--color-dynamic-3), transparent 70%),
-    radial-gradient(ellipse 45% 55% at 75% 85%, color-mix(in srgb, var(--color-dynamic-1) 8%, transparent), transparent 70%),
-    var(--color-base);
+  --aura-a: color-mix(in srgb, var(--color-dynamic-1) 16%, transparent);
+  --aura-b: color-mix(in srgb, var(--color-dynamic-1) 10%, transparent);
+  position: relative;
+  isolation: isolate;
+  background: var(--color-base);
   transition: background 1.4s var(--ease-smooth);
+}
+.dynamic-bg::before,
+.dynamic-bg::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+/* Orb A — the big one, hanging off the top-left like the old first gradient */
+.dynamic-bg::before {
+  width: 58vmax;
+  height: 58vmax;
+  top: -20vmax;
+  left: -14vmax;
+  background: var(--aura-a);
+  filter: blur(64px);
+  transition: background 1.4s var(--ease-smooth);
+  animation: aura-drift-a 42s ease-in-out infinite alternate;
+}
+/* Orb B — smaller, counter-drifting near the bottom-right */
+.dynamic-bg::after {
+  width: 50vmax;
+  height: 50vmax;
+  bottom: -18vmax;
+  right: -12vmax;
+  background: var(--aura-b);
+  filter: blur(64px);
+  transition: background 1.4s var(--ease-smooth);
+  animation: aura-drift-b 55s ease-in-out infinite alternate;
+}
+@keyframes aura-drift-a {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(9vmax, 5vmax, 0) scale(1.14); }
+  100% { transform: translate3d(-3vmax, 11vmax, 0) scale(0.95); }
+}
+@keyframes aura-drift-b {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-8vmax, -6vmax, 0) scale(0.92); }
+  100% { transform: translate3d(5vmax, -11vmax, 0) scale(1.12); }
+}
+/* Performance Mode / reduced motion: freeze the drift. The blur filter is
+   also swapped for a pre-softened radial gradient — same look, zero GPU
+   filter cost for weak integrated GPUs. */
+:root[data-performance="on"] .dynamic-bg::before,
+:root[data-performance="on"] .dynamic-bg::after {
+  animation: none;
+  filter: none;
+}
+:root[data-performance="on"] .dynamic-bg::before {
+  background: radial-gradient(circle closest-side, var(--aura-a), transparent 72%);
+}
+:root[data-performance="on"] .dynamic-bg::after {
+  background: radial-gradient(circle closest-side, var(--aura-b), transparent 72%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dynamic-bg::before, .dynamic-bg::after { animation: none; }
 }
 
 /* ── Glass utilities ─────────────────────────────────────────────────────── */

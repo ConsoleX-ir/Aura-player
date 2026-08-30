@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- CSP: img-src CDNs cover suggestion artwork — Deezer (*.dzcdn.net), Apple Music (*.mzstatic.com) -->
     <meta
   http-equiv="Content-Security-Policy"
   content="
@@ -11,7 +12,7 @@
     script-src 'self';
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com data:;
-    img-src 'self' data: blob: aura:;
+    img-src 'self' data: blob: aura: https://*.dzcdn.net https://*.mzstatic.com;
     media-src 'self' aura: blob:;
     connect-src 'self' http://localhost:5173 ws://localhost:5173 https://lrclib.net;
   "

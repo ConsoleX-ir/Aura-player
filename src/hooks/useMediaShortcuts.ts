@@ -141,8 +141,10 @@ export function useMediaShortcuts() {
 
 function seekBy(progress: number, duration: number, deltaSeconds: number) {
   const { seekTo } = usePlayerStore.getState();
+  if (!duration) return;
   const current = progress * duration;
-  seekTo(Math.min(Math.max(current + deltaSeconds, 0), duration || current + deltaSeconds));
+  const newTime = Math.min(Math.max(current + deltaSeconds, 0), duration);
+  seekTo(newTime / duration);
 }
 
 // Fires AFTER the store update settles; getState() then holds the song that

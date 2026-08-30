@@ -12,6 +12,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showItemInFolder: (filePath) => ipcRenderer.send('shell:showItemInFolder', filePath),
   parseMetadata: (p)      => ipcRenderer.invoke('fs:parseMetadata', p),
   parseMetadataBatch: (paths) => ipcRenderer.invoke('fs:parseMetadataBatch', paths),
+  // Technical file properties for the Properties dialog (size, codec, bitrate...).
+  getFileStats: (p)       => ipcRenderer.invoke('fs:fileStats', p),
+  // Keyless "Find Info Online" — searches Deezer, iTunes, and MusicBrainz
+  // from the main process (text queries only, no audio upload, no API key)
+  // and returns scored, de-duplicated metadata candidates.
+  findMetadata: (query)  => ipcRenderer.invoke('net:findMetadata', query),
+  // Downloads a remote artwork URL into Aura's local covers cache and returns
+  // a persistent aura:// URL for it (or null on failure).
+  cacheArtwork: (url)     => ipcRenderer.invoke('net:cacheArtwork', url),
   onMetadataProgress: (cb) => {
     const listener = (_e, done, total) => cb(done, total)
     ipcRenderer.on('metadata:progress', listener)

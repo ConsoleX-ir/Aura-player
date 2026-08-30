@@ -40,7 +40,7 @@ const SECTIONS: { title: string; rows: ShortcutRow[] }[] = [
   {
     title: 'General',
     rows: [
-      { label: 'Open this shortcuts guide',       keys: ['?'] },
+      { label: 'Toggle this shortcuts guide',       keys: ['?'] },
       { label: 'Close panels & dialogs',          keys: ['Esc'] },
       { label: 'Play / pause, next & previous from hardware media keys', hint: 'system-wide' },
       { label: 'Scroll over the volume control · click the seek bar to jump', hint: 'mouse' },
@@ -76,7 +76,11 @@ export function HelpModal() {
         }
         return
       }
-      if (e.key === 'Escape') setOpen(false)
+      // Close with Escape or ?
+      if (e.key === 'Escape' || e.key === '?' || (e.code === 'Slash' && !e.ctrlKey && !e.altKey && !e.metaKey)) {
+        e.preventDefault()
+        setOpen(false)
+      }
     }
 
     window.addEventListener('keydown', onKey)
@@ -155,7 +159,7 @@ export function HelpModal() {
                 {/* Footer hint */}
                 <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)]">
                   <p className="text-[11px] text-white/35 leading-relaxed">
-                    Press <Kbd>?</Kbd> anytime to reopen this guide. Shortcut hints also appear in button tooltips across the app.
+                    Press <Kbd>?</Kbd> to toggle this guide. Shortcut hints also appear in button tooltips across the app.
                   </p>
                 </div>
               </div>

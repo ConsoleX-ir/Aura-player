@@ -19,6 +19,7 @@ export type ToastKind =
   | 'unmute'
   | 'sleep-timer'
   | 'now-playing'
+  | 'metadata-updated'
 
 export interface ToastItem {
   id: number

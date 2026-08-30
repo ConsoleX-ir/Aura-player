@@ -1,21 +1,22 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Heart, Shuffle, Repeat, Repeat1, VolumeX, Volume2, MoonStar, Music2 } from 'lucide-react'
+import { Heart, Shuffle, Repeat, Repeat1, VolumeX, Volume2, MoonStar, Music2, BadgeCheck } from 'lucide-react'
 import { useToastStore, type ToastKind } from '@/store/toastStore'
 
 // Maps each toast kind to its icon + accent color. Kept as a plain record so
 // adding a new kind is a one-line change plus the kind in the union type.
 const TOAST_STYLE: Record<ToastKind, { icon: typeof Music2; color: string; bg: string }> = {
-  'favorite-add':     { icon: Heart,    color: '#FB7185', bg: 'rgba(251,113,133,0.14)' },
-  'favorite-remove':  { icon: Heart,    color: 'rgba(255,255,255,0.4)', bg: 'var(--color-glass-mid)' },
-  'shuffle-on':       { icon: Shuffle,  color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
-  'shuffle-off':      { icon: Shuffle,  color: 'rgba(255,255,255,0.4)', bg: 'var(--color-glass-mid)' },
-  'repeat-none':      { icon: Repeat,   color: 'rgba(255,255,255,0.4)', bg: 'var(--color-glass-mid)' },
-  'repeat-all':       { icon: Repeat,   color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
-  'repeat-one':       { icon: Repeat1,  color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
-  'mute':             { icon: VolumeX,  color: '#FBBF24', bg: 'rgba(251,191,36,0.12)' },
-  'unmute':           { icon: Volume2,  color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
-  'sleep-timer':      { icon: MoonStar, color: '#A5B4FC', bg: 'rgba(165,180,252,0.12)' },
-  'now-playing':      { icon: Music2,   color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
+  'favorite-add':      { icon: Heart,    color: '#FB7185', bg: 'rgba(251,113,133,0.14)' },
+  'favorite-remove':   { icon: Heart,    color: 'rgba(255,255,255,0.4)', bg: 'var(--color-glass-mid)' },
+  'shuffle-on':        { icon: Shuffle,  color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
+  'shuffle-off':       { icon: Shuffle,  color: 'rgba(255,255,255,0.4)', bg: 'var(--color-glass-mid)' },
+  'repeat-none':       { icon: Repeat,   color: 'rgba(255,255,255,0.4)', bg: 'var(--color-glass-mid)' },
+  'repeat-all':        { icon: Repeat,   color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
+  'repeat-one':        { icon: Repeat1,  color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
+  'mute':              { icon: VolumeX,  color: '#FBBF24', bg: 'rgba(251,191,36,0.12)' },
+  'unmute':            { icon: Volume2,  color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
+  'sleep-timer':       { icon: MoonStar, color: '#A5B4FC', bg: 'rgba(165,180,252,0.12)' },
+  'now-playing':       { icon: Music2,   color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
+  'metadata-updated':  { icon: BadgeCheck, color: 'var(--color-dynamic-1)', bg: 'var(--color-glass-strong)' },
 }
 
 // Purely presentational — auto-dismiss timers live in toastStore, so this

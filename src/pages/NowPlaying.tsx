@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
@@ -34,14 +34,50 @@ export function NowPlaying() {
   const setSleepTimer = usePlayerStore((s) => s.setSleepTimer)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
   const queue = usePlayerStore((s) => s.queue)
-  const queueIndex = usePlayerStore((s) => s.queueIndex)
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue)
+
+  // When shuffle is on, display the queue in a shuffled order so the user
+  // cannot predict the next song. The actual store queue is untouched.
+  const displayQueue = useMemo(() => {
+    if (!shuffle || queue.length <= 1) return queue
+    // Fisher-Yates shuffle (stable via index-keyed pairs)
+    const arr = queue.map((song, i) => ({ song, i }))
+    for (let j = arr.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1))
+      ;[arr[j], arr[k]] = [arr[k], arr[j]]
+    }
+    return arr.map((x) => x.song)
+  }, [shuffle, queue])
 
   const { lines, plain, loading } = useLyrics(currentSong)
   const currentTime = progress * duration
   const isFav = currentSong ? favorites.includes(currentSong.id) : false
   const lyricsRef = useRef<HTMLDivElement>(null)
   const activeLineRef = useRef<HTMLDivElement>(null)
+  const npSeekBarRef = useRef<HTMLDivElement>(null)
+  const npDragRef = useRef(0)
+  const [npDragging, setNpDragging] = useState(false)
+  const [npDragVal, setNpDragVal] = useState(0)
+
+  // Smooth seek-drag for the NowPlaying seek bar
+  useEffect(() => {
+    if (!npDragging) return
+    const onMove = (e: MouseEvent) => {
+      const el = npSeekBarRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const val = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+      npDragRef.current = val
+      setNpDragVal(val)
+    }
+    const onUp = () => {
+      seekTo(npDragRef.current)
+      setNpDragging(false)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [npDragging, seekTo])
 
   // Active lyric line index
   const activeIdx = lines.reduce((best, line, i) => currentTime >= line.time ? i : best, -1)
@@ -206,22 +242,33 @@ export function NowPlaying() {
           {/* Seek bar */}
           <div className="w-full space-y-1.5">
             <div
+              ref={npSeekBarRef}
               className="relative w-full h-1.5 rounded-full bg-white/10 cursor-pointer group"
+              onMouseDown={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const val = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+                npDragRef.current = val
+                setNpDragVal(val)
+                setNpDragging(true)
+                e.preventDefault()
+              }}
               onClick={(e) => {
+                if (npDragging) return
                 const rect = e.currentTarget.getBoundingClientRect()
                 seekTo((e.clientX - rect.left) / rect.width)
               }}
             >
               <div
-                className="absolute top-0 left-0 h-full rounded-full transition-all"
+                className="absolute top-0 left-0 h-full rounded-full"
                 style={{
-                  width: `${progress * 100}%`,
+                  width: `${(npDragging ? npDragVal : progress) * 100}%`,
                   background: 'linear-gradient(90deg, var(--color-dynamic-1), var(--color-dynamic-2))',
+                  transition: npDragging ? 'none' : 'width 0.15s linear',
                 }}
               />
               <div
                 className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity -translate-x-1/2"
-                style={{ left: `${progress * 100}%` }}
+                style={{ left: `${(npDragging ? npDragVal : progress) * 100}%` }}
               />
             </div>
             <div className="flex justify-between text-[11px] text-white/25 tabular-nums">
@@ -336,8 +383,8 @@ export function NowPlaying() {
               <span className="text-xs text-white/20 ml-auto">{queue.length} songs</span>
             </div>
             <div className="flex-1 overflow-y-auto py-1">
-              {queue.map((song, i) => {
-                const isActive = i === queueIndex
+              {displayQueue.map((song, i) => {
+                const isActive = song.id === currentSong.id
                 return (
                   <div
                     key={`${song.id}-${i}`}
@@ -356,7 +403,7 @@ export function NowPlaying() {
                     </div>
                     {!isActive && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); removeFromQueue(i) }}
+                        onClick={(e) => { e.stopPropagation(); const realIdx = queue.findIndex(s => s.id === song.id); if (realIdx !== -1) removeFromQueue(realIdx) }}
                         title="Remove from queue"
                         className="p-1 rounded-md text-white/0 group-hover:text-white/40 hover:text-white/80 hover:bg-white/5 transition-colors shrink-0"
                       >

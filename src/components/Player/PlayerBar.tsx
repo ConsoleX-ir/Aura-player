@@ -45,6 +45,12 @@ export function PlayerBar() {
   const lyricsAnchorRef = useRef<HTMLSpanElement>(null)
   const visualizerAnchorRef = useRef<HTMLSpanElement>(null)
 
+  // Seek bar drag state
+  const seekBarRef = useRef<HTMLDivElement>(null)
+  const dragProgressRef = useRef(0)
+  const [isSeekDragging, setIsSeekDragging] = useState(false)
+  const [dragProgress, setDragProgress] = useState(0)
+
   // Volume OSD — a small percentage pill that appears whenever volume (or
   // mute) changes and fades out after a beat. Works for every source: the
   // slider, scroll-wheel, ↑/↓ keys, M mute… all funnel into store volume.
@@ -87,6 +93,27 @@ export function PlayerBar() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [openPanel])
+
+  // Smooth seek-drag handlers — ref for value (avoids stale closure in onUp),
+  // state for render.
+  useEffect(() => {
+    if (!isSeekDragging) return
+    const onMove = (e: MouseEvent) => {
+      const el = seekBarRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const val = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+      dragProgressRef.current = val
+      setDragProgress(val)
+    }
+    const onUp = () => {
+      seekTo(dragProgressRef.current)
+      setIsSeekDragging(false)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [isSeekDragging, seekTo])
 
   const effectiveVolume = muted ? 0 : volume
 
@@ -137,8 +164,17 @@ export function PlayerBar() {
 
         {/* Seek bar */}
         <div
+          ref={seekBarRef}
           className="absolute top-0 left-0 right-0 h-1 group cursor-pointer"
+          onMouseDown={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const val = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+            setDragProgress(val)
+            setIsSeekDragging(true)
+            e.preventDefault()
+          }}
           onClick={(e) => {
+            if (isSeekDragging) return
             const rect = e.currentTarget.getBoundingClientRect()
             seekTo((e.clientX - rect.left) / rect.width)
           }}
@@ -148,14 +184,14 @@ export function PlayerBar() {
           <div
             className="absolute top-0 left-0 h-full pointer-events-none"
             style={{
-              width: `${progress * 100}%`,
+              width: `${(isSeekDragging ? dragProgress : progress) * 100}%`,
               background: 'linear-gradient(90deg, var(--color-dynamic-1), var(--color-dynamic-2))',
-              transition: 'width 0.15s linear',
+              transition: isSeekDragging ? 'none' : 'width 0.15s linear',
             }}
           />
           <div
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-            style={{ left: `${progress * 100}%`, transform: 'translate(-50%, -50%)' }}
+            style={{ left: `${(isSeekDragging ? dragProgress : progress) * 100}%`, transform: 'translate(-50%, -50%)' }}
           />
         </div>
 
