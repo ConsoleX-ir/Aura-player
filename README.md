@@ -2,7 +2,7 @@
 
 > A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-![Version](https://img.shields.io/badge/version-v1.11.3-blue)
+![Version](https://img.shields.io/badge/version-v1.11.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
@@ -189,8 +189,14 @@ Package as a Windows installer (also registers file associations)
 npm run build:electron
 ```
 
-The installer is optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, since the renderer bundle is fully produced by Vite at build time. `Aura.Player.Setup-1.11.3.exe` comes out **under 100 MB**.
+The installer is optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, since the renderer bundle is fully produced by Vite at build time. `Aura.Player.Setup-1.11.6.exe` comes out **under 100 MB**.
 
+> v1.11.6 — Calmer background: the drifting light-orb motion is gone — the glow is back to the original still, fixed look. On the playlist view the glow now takes its color from the playlist's cover image (the first song with artwork), so the ambient light extends from the playlist art itself. Settings → Online Services now lists **Lyrics (LRCLIB)** as its own entry.
+>
+> v1.11.5 — Queue panel fix: the Now Playing queue now reads top-to-bottom in true playback order — the playing song first, then what comes after it, wrapping around — so "what plays next" is always right below the current song, wherever you started in the list. Shuffle display unchanged (still deliberately unpredictable).
+>
+> v1.11.4 — The ambient background got more alive: the drifting light orbs are brighter, bigger, and sweep visibly across the window — including behind the playlist view, which now shares the same living background as the rest of the app.
+>
 > v1.11.3 — Cleaned up: the optional "Identify by sound" experiment was removed — every audio-recognition API requires a personal key, and Aura stays 100% keyless. The keyless Find Info Online search (Deezer + Apple Music + MusicBrainz) with editable search terms remains the way to fix wrong tags.
 >
 > v1.11.0 — Phase 2 kickoff: Song Properties dialog (tags + technical file info), keyless "Find Info Online" that searches Deezer, Apple Music, and MusicBrainz (no API key, no audio upload) and lets you apply the correct metadata with a field-by-field diff, plus two slow-drifting ambient light orbs in the background.

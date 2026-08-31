@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react'
+import { useEffect, useMemo, lazy, Suspense } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar } from '@/components/Sidebar/Sidebar'
 import { PlayerBar } from '@/components/Player/PlayerBar'
@@ -37,13 +37,35 @@ export default function App() {
   useAudio()
 
   const isNowPlaying = activeView === 'nowplaying'
+  const isPlaylistView = activeView === 'playlist'
+
+  // Playlist view: derive the playlist's cover the same way the playlist hero
+  // does — the first song in the playlist that has embedded artwork — so the
+  // ambient glow can take its color from the playlist's own image. Any other
+  // view: null, and the theme color is used as before.
+  const playlists = usePlayerStore((s) => s.playlists)
+  const selectedPlaylistId = usePlayerStore((s) => s.selectedPlaylistId)
+  const library = usePlayerStore((s) => s.library)
+  const playlistCover = useMemo(() => {
+    if (!isPlaylistView) return null
+    const pl = playlists.find((p) => p.id === selectedPlaylistId)
+    for (const id of pl?.songIds ?? []) {
+      const song = library.find((s) => s.id === id)
+      if (song?.coverArt) return song.coverArt
+    }
+    return null
+  }, [isPlaylistView, playlists, selectedPlaylistId, library])
 
   // Shift CSS color vars:
   // → Now Playing view, with a song loaded: pull the ambient color from that
   //   song's actual album art — an immersive, per-song effect.
+  // → Playlist view, with cover art available: pull the ambient color from
+  //   the playlist's cover image, so the background glow extends from the
+  //   playlist art. Playlists without any artwork stay on the theme color.
   // → everywhere else: stick to the chosen theme's color (ConsoleX cloud
   //   gray, Forest green, Custom, ...), even while music is playing.
-  useDynamicTheme(currentSong?.coverArt ?? null, theme, customAccentColor, isNowPlaying)
+  const ambientCover = isNowPlaying ? currentSong?.coverArt ?? null : playlistCover
+  useDynamicTheme(ambientCover, theme, customAccentColor, isNowPlaying || !!playlistCover)
 
   useMediaShortcuts()
   useFileAssociationLaunch()

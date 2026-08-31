@@ -34,11 +34,13 @@ export function NowPlaying() {
   const setSleepTimer = usePlayerStore((s) => s.setSleepTimer)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
   const queue = usePlayerStore((s) => s.queue)
+  const queueIndex = usePlayerStore((s) => s.queueIndex)
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue)
 
   // When shuffle is on, display the queue in a shuffled order so the user
-  // cannot predict the next song. The actual store queue is untouched.
-  const displayQueue = useMemo(() => {
+  // cannot predict the next song (the real order is random anyway). The
+  // actual store queue is untouched.
+  const shuffledQueue = useMemo(() => {
     if (!shuffle || queue.length <= 1) return queue
     // Fisher-Yates shuffle (stable via index-keyed pairs)
     const arr = queue.map((song, i) => ({ song, i }))
@@ -48,6 +50,17 @@ export function NowPlaying() {
     }
     return arr.map((x) => x.song)
   }, [shuffle, queue])
+
+  // Sequential playback: the panel reads top-to-bottom in true playback
+  // order — the playing song leads, followed by the song AFTER it, and so
+  // on, wrapping past the queue's end back to the top. "What plays next"
+  // is always the second row, no matter where in the queue we are.
+  const upNextQueue = useMemo(() => {
+    const idx = queueIndex >= 0 && queueIndex < queue.length ? queueIndex : 0
+    return [...queue.slice(idx), ...queue.slice(0, idx)]
+  }, [queue, queueIndex])
+
+  const displayQueue = shuffle ? shuffledQueue : upNextQueue
 
   const { lines, plain, loading } = useLyrics(currentSong)
   const currentTime = progress * duration

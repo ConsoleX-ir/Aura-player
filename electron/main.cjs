@@ -486,7 +486,7 @@ ipcMain.handle('fs:fileStats', async (_e, filePath) => {
 // failing the whole lookup. Only when EVERY source errors does the renderer
 // see a network error.
 
-const FIND_USER_AGENT = 'AuraPlayer/1.11.3 (desktop music player)'
+const FIND_USER_AGENT = 'AuraPlayer/1.11.6 (desktop music player)'
 
 // shared fetch with timeout — returns parsed JSON or throws
 async function fetchJson(url, options = {}, timeoutMs = 9000) {

@@ -1,7 +1,7 @@
 {
   "name": "aura-player",
   "private": true,
-  "version": "1.11.3",
+  "version": "1.11.6",
   "description": "Aura",
   "author": "ConsoleX",
   "main": "electron/main.cjs",
@@ -35,14 +35,62 @@
       "allowToChangeInstallationDirectory": true
     },
     "fileAssociations": [
-      { "ext": "mp3",  "name": "MP3 Audio",      "description": "MP3 Audio File",      "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "flac", "name": "FLAC Audio",     "description": "FLAC Audio File",     "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "wav",  "name": "WAV Audio",      "description": "WAV Audio File",      "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "ogg",  "name": "OGG Audio",      "description": "OGG Audio File",      "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "m4a",  "name": "M4A Audio",      "description": "M4A Audio File",      "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "aac",  "name": "AAC Audio",      "description": "AAC Audio File",      "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "opus", "name": "Opus Audio",     "description": "Opus Audio File",     "role": "Viewer", "icon": "public/icon.ico" },
-      { "ext": "wma",  "name": "WMA Audio",      "description": "WMA Audio File",      "role": "Viewer", "icon": "public/icon.ico" }
+      {
+        "ext": "mp3",
+        "name": "MP3 Audio",
+        "description": "MP3 Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "flac",
+        "name": "FLAC Audio",
+        "description": "FLAC Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "wav",
+        "name": "WAV Audio",
+        "description": "WAV Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "ogg",
+        "name": "OGG Audio",
+        "description": "OGG Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "m4a",
+        "name": "M4A Audio",
+        "description": "M4A Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "aac",
+        "name": "AAC Audio",
+        "description": "AAC Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "opus",
+        "name": "Opus Audio",
+        "description": "Opus Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      },
+      {
+        "ext": "wma",
+        "name": "WMA Audio",
+        "description": "WMA Audio File",
+        "role": "Viewer",
+        "icon": "public/icon.ico"
+      }
     ]
   },
   "dependencies": {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe } from 'lucide-react'
+import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { useLibrarySync } from '@/hooks/useLibrarySync'
@@ -118,13 +118,25 @@ export function Settings() {
         <Section title="Online Services">
           <SettingRow
             label="Find Info Online"
-            description="Song lookup (⋯ menu on any song) uses free public search APIs — Deezer, Apple Music, and MusicBrainz. No account or API token needed; only a text query is sent, never your files. Lyrics come from LRCLIB."
+            description="Song lookup (⋯ menu on any song) uses free public search APIs — Deezer, Apple Music, and MusicBrainz. No account or API token needed; only a text query is sent, never your files."
           >
             <div
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium"
               style={{ background: 'var(--color-dynamic-3)', color: 'var(--color-dynamic-1)' }}
             >
               <Globe size={11} />
+              No token needed
+            </div>
+          </SettingRow>
+          <SettingRow
+            label="Lyrics"
+            description="Synced & plain lyrics in the Now Playing view come from LRCLIB (lrclib.net) — a free, open lyrics service. No account or API token needed; only the song's title and artist are sent."
+          >
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium"
+              style={{ background: 'var(--color-dynamic-3)', color: 'var(--color-dynamic-1)' }}
+            >
+              <Mic2 size={11} />
               No token needed
             </div>
           </SettingRow>
@@ -185,7 +197,7 @@ export function Settings() {
             <Info size={15} className="text-white/30 mt-0.5 shrink-0" />
             <div>
               <p className="text-sm text-white/70 font-medium">Aura Player</p>
-              <p className="text-xs text-white/30 mt-1">aura v1.11.3 ·Created with ❤️ by ConsoleX · desktop music player</p>
+              <p className="text-xs text-white/30 mt-1">aura v1.11.6 · by ConsoleX · offline desktop music player</p>
             </div>
           </div>
         </Section>
