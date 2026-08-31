@@ -47,10 +47,17 @@ function colorToVars(hex: string) {
   }
 }
 
-// Extract dominant color from a data URL using a canvas — no library needed
-function getDominantColor(dataUrl: string): Promise<[number, number, number]> {
+// Extract dominant color from an image URL using a canvas — no library needed.
+// `src` is either a data: URL or an aura:// cover path. crossOrigin is
+// REQUIRED for the aura:// ones: without it the canvas is treated as tainted
+// under webSecurity (production — dev runs with webSecurity off, which is why
+// this only ever broke in packaged builds) and getImageData throws. The
+// aura:// protocol handler answers with Access-Control-Allow-Origin: *, so
+// the CORS request passes and the canvas stays readable.
+function getDominantColor(src: string): Promise<[number, number, number]> {
   return new Promise((resolve, reject) => {
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas')
@@ -67,7 +74,7 @@ function getDominantColor(dataUrl: string): Promise<[number, number, number]> {
       } catch (e) { reject(e) }
     }
     img.onerror = reject
-    img.src = dataUrl
+    img.src = src
   })
 }
 
