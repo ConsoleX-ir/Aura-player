@@ -239,7 +239,7 @@ Contributions, ideas, and bug reports are always welcome.
 
 Feel free to open an Issue or submit a Pull Request.
 
-1.Arsalan Jafarnezhad : tester and feature suggester. Github: https://github.com/Arsalan-Jafarnezhad
+1. Arsalan Jafarnezhad: tester and feature suggester. Github: https://github.com/Arsalan-Jafarnezhad
 
 ---
 
