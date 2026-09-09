@@ -1,7 +1,12 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Song, Playlist, RepeatMode, AppView } from '@/types'
 import { DEFAULT_THEME_ID, type ThemePresetId } from '@/lib/themePresets'
+import { idbStorage } from '@/lib/idbStorage'
+import {
+  shuffledAround, nextIndex, prevIndex, removeByIds,
+} from '@/lib/queueEngine'
+import { eqPresetById, clampDb, isFlat, sanitizeGains } from '@/lib/eq'
 
 interface PlayerState {
   library: Song[]
@@ -38,8 +43,14 @@ interface PlayerState {
   toggleFavorite: (songId: string) => void
 
   currentSong: Song | null
+  // The queue IS the actual playback order — what the queue view shows is
+  // exactly what will play, shuffle ON or OFF (queueEngine enforces this).
   queue: Song[]
   queueIndex: number
+  // The un-shuffled context playSong() was given. Kept alongside `queue` so
+  // toggling shuffle OFF can restore the natural order instead of leaving
+  // the queue permanently scrambled. Not persisted (matches `queue`).
+  naturalQueue: Song[]
   isPlaying: boolean
   volume: number
   // Mute lives in the store (not local UI state) so it can be driven both by
@@ -72,11 +83,31 @@ interface PlayerState {
   repeat: RepeatMode
   toggleShuffle: () => void
   cycleRepeat: () => void
+  // Auto-advance when a track finishes naturally (audio 'ended'). Unlike
+  // nextSong() (manual skip, always advances/wraps), this respects the
+  // repeat mode as an END-OF-QUEUE policy: repeat=none STOPS playback at
+  // the last song instead of silently restarting it (a v1.x UI/audio
+  // desync bug).
+  trackEnded: () => void
 
   // Settings — Performance Mode disables backdrop blur + decorative animations,
   // aimed at weaker systems (older GPUs, integrated graphics, low RAM)
   performanceMode: boolean
   setPerformanceMode: (v: boolean) => void
+
+  // ── Appearance (v2.0.0 — Wave 5 light activation) ─────────────────────
+  // 'dark' is the true Aura form; 'light' is the designed glow-first
+  // foundation from tokens.css now given a toggle. Persisted.
+  appearance: 'dark' | 'light'
+  setAppearance: (v: 'dark' | 'light') => void
+
+  // ── Folder watching (Wave 4) ──────────────────────────────────────────
+  // When on, every imported folder is watched via Electron's fs.watch and
+  // the library auto-reconciles through Folder Sync. Persisted; defaults
+  // ON so the feature works out of the box (it is event-driven — zero
+  // polling cost while nothing changes).
+  watchFolders: boolean
+  setWatchFolders: (v: boolean) => void
 
   // 'default' = ConsoleX (the original cloud-gray look), 'forest' = same
   // dark base with a green ambient color, 'custom' = user-picked accent color.
@@ -89,6 +120,16 @@ interface PlayerState {
 
   crossfade: number
   setCrossfade: (v: number) => void
+
+  // EQ (Wave 3): per-band gains in dB for the 10 reserved BiquadFilter bands
+  // (31 Hz → 16 kHz). `eqPreset` is the last preset applied, or 'custom' once
+  // a band is moved by hand — purely cosmetic bookkeeping for the UI. Flat =
+  // all zeros = the engine's zero-cost bypass (peaking filters at 0 dB are
+  // transparent), so "EQ off" needs no special audio path at all.
+  eqGains: number[]
+  eqPreset: string
+  setEqBand: (index: number, gainDb: number) => void
+  applyEqPreset: (presetId: string) => void
 
   // Sleep Timer — a timestamp (ms) to auto-pause at, or null when off.
   // Deliberately NOT persisted: a timer left running from a previous session
@@ -120,11 +161,14 @@ export const usePlayerStore = create<PlayerState>()(
       // is left pointing at a song that no longer exists in the library.
       removeFromLibrary: (songId) => set((s) => {
         const wasCurrentSong = s.currentSong?.id === songId
+        const queueNext = removeByIds(s.queue, new Set([songId]), s.queueIndex)
         return {
           library: s.library.filter((song) => song.id !== songId),
           playlists: s.playlists.map((p) => ({ ...p, songIds: p.songIds.filter((id) => id !== songId) })),
           favorites: s.favorites.filter((id) => id !== songId),
-          queue: s.queue.filter((song) => song.id !== songId),
+          queue: queueNext.items,
+          queueIndex: queueNext.currentIndex ?? s.queueIndex,
+          naturalQueue: s.naturalQueue.filter((song) => song.id !== songId),
           currentSong: wasCurrentSong ? null : s.currentSong,
           isPlaying: wasCurrentSong ? false : s.isPlaying,
         }
@@ -132,11 +176,14 @@ export const usePlayerStore = create<PlayerState>()(
       removeSongsFromLibrary: (songIds) => set((s) => {
         const idSet = new Set(songIds)
         const wasCurrentSong = !!s.currentSong && idSet.has(s.currentSong.id)
+        const queueNext = removeByIds(s.queue, idSet, s.queueIndex)
         return {
           library: s.library.filter((song) => !idSet.has(song.id)),
           playlists: s.playlists.map((p) => ({ ...p, songIds: p.songIds.filter((id) => !idSet.has(id)) })),
           favorites: s.favorites.filter((id) => !idSet.has(id)),
-          queue: s.queue.filter((song) => !idSet.has(song.id)),
+          queue: queueNext.items,
+          queueIndex: queueNext.currentIndex ?? s.queueIndex,
+          naturalQueue: s.naturalQueue.filter((song) => !idSet.has(song.id)),
           currentSong: wasCurrentSong ? null : s.currentSong,
           isPlaying: wasCurrentSong ? false : s.isPlaying,
         }
@@ -152,10 +199,13 @@ export const usePlayerStore = create<PlayerState>()(
             ? updatesById.get(s.currentSong.id)!
             : s.currentSong,
           queue: s.queue.map((song) => updatesById.get(song.id) ?? song),
+          // Same freshness for the natural-order snapshot — otherwise a
+          // shuffle-off restore would resurrect stale titles/cover art.
+          naturalQueue: s.naturalQueue.map((song) => updatesById.get(song.id) ?? song),
         }
       }),
       clearLibrary: () => set({
-        library: [], playlists: [], favorites: [], queue: [],
+        library: [], playlists: [], favorites: [], queue: [], naturalQueue: [],
         currentSong: null, isPlaying: false, queueIndex: 0,
         importedFolders: [],
       }),
@@ -226,6 +276,7 @@ export const usePlayerStore = create<PlayerState>()(
       currentSong: null,
       queue: [],
       queueIndex: 0,
+      naturalQueue: [],
       isPlaying: false,
       volume: 0.8,
       muted: false,
@@ -235,38 +286,73 @@ export const usePlayerStore = create<PlayerState>()(
       seekRequest: null,
 
       playSong: (song, queue) => {
+        const { shuffle } = get()
         const q = queue ?? get().library
         const idx = q.findIndex((s) => s.id === song.id)
-        set({ currentSong: song, queue: q, queueIndex: Math.max(idx, 0), isPlaying: true, progress: 0 })
+        if (idx >= 0) {
+          // Shuffle ON: the new context gets a real shuffled play order with
+          // this song anchored where it was — the queue view then shows the
+          // truth about what plays next.
+          const playQueue = shuffle ? shuffledAround(q, song.id) : q
+          set({ currentSong: song, naturalQueue: q, queue: playQueue, queueIndex: idx, isPlaying: true, progress: 0 })
+        } else {
+          // Song isn't part of the given context (e.g. launched from a file
+          // association with an empty library). v1.x pointed queueIndex at 0
+          // — a DIFFERENT song — so next/prev navigated from the wrong anchor.
+          // Leading the queue with the song gives every later action a valid
+          // anchor and a sensible continuation.
+          const q2 = [song, ...q]
+          set({ currentSong: song, naturalQueue: q2, queue: q2, queueIndex: 0, isPlaying: true, progress: 0 })
+        }
       },
       removeFromQueue: (index) => set((s) => {
-        if (index === s.queueIndex) return s
+        if (index === s.queueIndex || index < 0 || index >= s.queue.length) return s
+        const removedId = s.queue[index].id
+        const next = removeByIds(s.queue, new Set([removedId]), s.queueIndex)
         return {
-          queue: s.queue.filter((_, i) => i !== index),
-          // Shift the pointer down if we removed something before the
-          // currently-playing song, so it keeps pointing at the same song.
-          queueIndex: index < s.queueIndex ? s.queueIndex - 1 : s.queueIndex,
+          queue: next.items,
+          queueIndex: next.currentIndex ?? s.queueIndex,
+          // Keep the natural-order snapshot in sync so shuffle OFF restores
+          // the context minus the song you just removed.
+          naturalQueue: s.naturalQueue.filter((song) => song.id !== removedId),
         }
       }),
       togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
       setIsPlaying: (v) => set({ isPlaying: v }),
 
+      // Manual skip: always advances (wraps at the end) so navigation is
+      // never stuck. The queue is the real play order, so "next" is simply
+      // the next item — v1.x re-rolled Math.random() here, which could
+      // replay the same song and never matched the displayed queue.
       nextSong: () => {
-        const { queue, queueIndex, shuffle, repeat } = get()
+        const { queue, queueIndex, repeat } = get()
         if (!queue.length) return
-        let next: number
-        if (shuffle) next = Math.floor(Math.random() * queue.length)
-        else if (repeat === 'all') next = (queueIndex + 1) % queue.length
-        else next = Math.min(queueIndex + 1, queue.length - 1)
+        const next = nextIndex(queue.length, queueIndex, repeat, false)
+        if (next === null) return
         set({ currentSong: queue[next], queueIndex: next, isPlaying: true, progress: 0 })
       },
 
       prevSong: () => {
-        const { queue, queueIndex, progress, duration } = get()
+        const { queue, queueIndex, progress, duration, repeat } = get()
         if (!queue.length) return
         if (progress * duration > 3) { set({ seekRequest: 0 }); return }
-        const prev = Math.max(queueIndex - 1, 0)
+        const prev = prevIndex(queue.length, queueIndex, repeat)
         set({ currentSong: queue[prev], queueIndex: prev, isPlaying: true, progress: 0 })
+      },
+
+      // Natural end-of-track. repeat=one is handled entirely by the audio
+      // controller (it restarts the element without touching the queue);
+      // everything else follows the queue's real order, and repeat=none
+      // STOPS at the end instead of restarting the last song.
+      trackEnded: () => {
+        const { queue, queueIndex, repeat } = get()
+        if (!queue.length || repeat === 'one') return
+        const next = nextIndex(queue.length, queueIndex, repeat, true)
+        if (next === null) {
+          set({ isPlaying: false })
+          return
+        }
+        set({ currentSong: queue[next], queueIndex: next, isPlaying: true, progress: 0 })
       },
 
       seekTo: (v) => set({ seekRequest: v }),
@@ -287,7 +373,25 @@ export const usePlayerStore = create<PlayerState>()(
 
       shuffle: false,
       repeat: 'none',
-      toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
+      // Shuffle becomes a REAL reorder of the queue (the play order), not a
+      // per-skip dice roll. Turning it on permutes the queue around the
+      // current song (its index is preserved — playback state untouched) and
+      // snapshots the natural order; turning it off restores that snapshot.
+      // Either way the queue view shows exactly what will play.
+      toggleShuffle: () => set((s) => {
+        if (!s.shuffle) {
+          const shuffled = shuffledAround(s.queue, s.currentSong?.id ?? null)
+          const idx = s.currentSong
+            ? shuffled.findIndex((x) => x.id === s.currentSong!.id)
+            : s.queueIndex
+          return { shuffle: true, naturalQueue: s.queue, queue: shuffled, queueIndex: Math.max(idx, 0) }
+        }
+        const restored = s.naturalQueue.length ? s.naturalQueue : s.queue
+        const idx = s.currentSong
+          ? restored.findIndex((x) => x.id === s.currentSong!.id)
+          : s.queueIndex
+        return { shuffle: false, queue: restored, queueIndex: Math.max(idx, 0) }
+      }),
       cycleRepeat: () => set((s) => {
         const cycle: RepeatMode[] = ['none', 'all', 'one']
         return { repeat: cycle[(cycle.indexOf(s.repeat) + 1) % cycle.length] }
@@ -296,6 +400,12 @@ export const usePlayerStore = create<PlayerState>()(
       performanceMode: false,
       setPerformanceMode: (v) => set({ performanceMode: v }),
 
+      appearance: 'dark',
+      setAppearance: (v) => set({ appearance: v }),
+
+      watchFolders: true,
+      setWatchFolders: (v) => set({ watchFolders: v }),
+
       theme: DEFAULT_THEME_ID,
       setTheme: (t) => set({ theme: t }),
       customAccentColor: '#B0B8C8',
@@ -303,6 +413,24 @@ export const usePlayerStore = create<PlayerState>()(
 
       crossfade: 0,
       setCrossfade: (v) => set({ crossfade: v }),
+
+      eqGains: sanitizeGains(undefined),
+      eqPreset: 'flat',
+      setEqBand: (index, gainDb) => set((s) => {
+        if (index < 0 || index > 9) return s
+        const eqGains = s.eqGains.map((g, i) => (i === index ? clampDb(gainDb) : g))
+        // Manual edits label the state 'custom' — unless the user dragged
+        // everything back to zero, which is just Flat again.
+        return {
+          eqGains,
+          eqPreset: isFlat(eqGains) ? 'flat' : 'custom',
+        }
+      }),
+      applyEqPreset: (presetId) => set(() => {
+        const preset = eqPresetById(presetId)
+        if (!preset) return {}
+        return { eqGains: [...preset.gains], eqPreset: preset.id }
+      }),
 
       sleepTimerEndsAt: null,
       setSleepTimer: (minutes) => set({
@@ -316,6 +444,15 @@ export const usePlayerStore = create<PlayerState>()(
     }),
     {
       name: 'aura-player',
+      // v2: IndexedDB instead of localStorage. Two wins: async writes that
+      // never block the main thread, and debounced flushes that coalesce
+      // the ~4-10Hz playback progress ticks (previously each tick
+      // re-stringified the whole library JSON synchronously). The adapter
+      // transparently migrates a v1.x localStorage library on first run.
+      // NOTE: version stays 0 (the v1.x default) on purpose — the persisted
+      // SHAPE is unchanged; only the storage backend moved. Bumping it
+      // without a migrate fn would make zustand discard users' libraries.
+      storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({
         library: s.library,
         playlists: s.playlists,
@@ -328,6 +465,10 @@ export const usePlayerStore = create<PlayerState>()(
         theme: s.theme,
         customAccentColor: s.customAccentColor,
         crossfade: s.crossfade,
+        eqGains: s.eqGains,
+        eqPreset: s.eqPreset,
+        appearance: s.appearance,
+        watchFolders: s.watchFolders,
       }),
     }
   )

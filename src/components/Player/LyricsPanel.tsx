@@ -50,7 +50,9 @@ export function LyricsPanel({ anchorX, onClose }: { anchorX: number; onClose: ()
         WebkitBackdropFilter: 'blur(24px)',
         border: '1px solid var(--color-border-mid)',
         borderRadius: 16,
-        boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+        /* v2.1.0: token shadow (was hardcoded black + white-alpha ring that
+           looked wrong over light chrome) */
+        boxShadow: 'var(--shadow-overlay)',
         transformOrigin: 'bottom center',
       }}
     >
@@ -61,7 +63,10 @@ export function LyricsPanel({ anchorX, onClose }: { anchorX: number; onClose: ()
         style={{
           top: -7,
           left: caretLeft,
-          background: '#17171e', // opaque core of --color-chrome so no seam shows where it overlaps the panel
+          /* Opaque core of --color-chrome so no seam shows where it overlaps
+             the panel — theme-aware via the token (v2.1.0; was hardcoded
+             #17171e and glowed white-edged in light mode). */
+          background: 'var(--color-chrome-solid)',
           borderTop: '1px solid var(--color-border-mid)',
           borderLeft: '1px solid var(--color-border-mid)',
         }}
@@ -69,9 +74,9 @@ export function LyricsPanel({ anchorX, onClose }: { anchorX: number; onClose: ()
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] shrink-0">
         <div className="flex items-center gap-2">
           <Mic2 size={13} style={{ color: 'var(--color-dynamic-1)' }} />
-          <span className="text-xs font-semibold text-white/70 tracking-wide">Lyrics</span>
+          <span className="text-xs font-semibold text-ink-sub tracking-wide">Lyrics</span>
         </div>
-        <button onClick={onClose} className="w-5 h-5 rounded flex items-center justify-center text-white/20 hover:text-white/50 hover:bg-white/5 transition-all">
+        <button onClick={onClose} className="w-5 h-5 rounded flex items-center justify-center text-ink-faint hover:text-ink-sub hover:bg-ink/5 transition-all">
           <X size={11} />
         </button>
       </div>
@@ -92,20 +97,21 @@ export function LyricsPanel({ anchorX, onClose }: { anchorX: number; onClose: ()
 
         {!loading && lines.length === 0 && !plain && (
           <div className="flex flex-col items-center py-8 gap-2">
-            <Mic2 size={20} className="text-white/10" />
-            <p className="text-xs text-white/20">No lyrics found</p>
+            <Mic2 size={20} className="text-ink-faint" />
+            <p className="text-xs text-ink-faint">No lyrics found</p>
           </div>
         )}
 
         {lines.map((line, i) => (
           <div key={i} ref={i === activeIdx ? activeRef : null}>
+            {/* v2.1.0: line colors moved to CSS classes (.lyric-line / .lyric-line-active)
+                — var-driven, so dark AND light themes get correct contrast, and the
+                color cross-fade is a cheap CSS transition instead of a framer
+                interpolation between hardcoded white alphas. */}
             <motion.p
-              animate={{
-                color: i === activeIdx ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.22)',
-                scale: i === activeIdx ? 1.02 : 1,
-              }}
+              animate={{ scale: i === activeIdx ? 1.02 : 1 }}
               transition={{ duration: 0.25 }}
-              className="text-sm leading-relaxed text-center"
+              className={`text-sm leading-relaxed text-center lyric-line ${i === activeIdx ? 'lyric-line-active' : ''}`}
               style={{ fontWeight: i === activeIdx ? 500 : 400 }}
             >
               {line.text || '·'}
@@ -114,7 +120,7 @@ export function LyricsPanel({ anchorX, onClose }: { anchorX: number; onClose: ()
         ))}
 
         {plain && lines.length === 0 && (
-          <pre className="text-xs text-white/30 leading-6 whitespace-pre-wrap font-sans text-center">{plain}</pre>
+          <pre className="text-xs text-ink-ter leading-6 whitespace-pre-wrap font-sans text-center">{plain}</pre>
         )}
       </div>
 

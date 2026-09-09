@@ -47,6 +47,13 @@ function colorToVars(hex: string) {
   }
 }
 
+// Dominant-color cache, keyed by image src. Covers repeat constantly (every
+// entry into Now Playing re-requested + re-decoded the same album art in
+// v1.x); the map turns that into a lookup. Keys are aura:// cover URLs
+// (stable per song — the cache file path is a hash of the audio file) or
+// data:/https: URLs. Successful decodes only; failures retry next time.
+const dominantColorCache = new Map<string, [number, number, number]>()
+
 // Extract dominant color from an image URL using a canvas — no library needed.
 // `src` is either a data: URL or an aura:// cover path. crossOrigin is
 // REQUIRED for the aura:// ones: without it the canvas is treated as tainted
@@ -55,6 +62,8 @@ function colorToVars(hex: string) {
 // aura:// protocol handler answers with Access-Control-Allow-Origin: *, so
 // the CORS request passes and the canvas stays readable.
 function getDominantColor(src: string): Promise<[number, number, number]> {
+  const cached = dominantColorCache.get(src)
+  if (cached) return Promise.resolve(cached)
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -70,7 +79,9 @@ function getDominantColor(src: string): Promise<[number, number, number]> {
         for (let i = 0; i < data.length; i += 16) { // sample every 4th pixel
           r += data[i]; g += data[i + 1]; b += data[i + 2]; count++
         }
-        resolve([Math.round(r / count), Math.round(g / count), Math.round(b / count)])
+        const rgb: [number, number, number] = [Math.round(r / count), Math.round(g / count), Math.round(b / count)]
+        dominantColorCache.set(src, rgb)
+        resolve(rgb)
       } catch (e) { reject(e) }
     }
     img.onerror = reject

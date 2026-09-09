@@ -19,6 +19,15 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
     const c: HTMLCanvasElement = canvasRef.current
     const ctx = c.getContext('2d')!
 
+    // v2.1.0 perf: the frequency buffer is allocated ONCE per effect (was:
+    // a fresh 2048-byte Uint8Array every frame) and the accent colors are
+    // cached and refreshed ~1.5×/s (was: getComputedStyle every frame — one
+    // of the most expensive DOM reads to put in a rAF loop).
+    const analyser0 = audioAnalyserRef.current
+    const freq = new Uint8Array(analyser0 ? analyser0.frequencyBinCount : 2048)
+    let colors = getColors()
+    let colorAge = 0
+
     function getColors() {
       const s = getComputedStyle(document.documentElement)
       return {
@@ -31,14 +40,14 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
       rafRef.current = requestAnimationFrame(draw)
       ctx.clearRect(0, 0, c.width, c.height)
       const analyser = audioAnalyserRef.current
-      const { c1, c2 } = getColors()
+      if (++colorAge >= 90) { colorAge = 0; colors = getColors() }
+      const { c1, c2 } = colors
 
-      if (!analyser) {
+      if (!analyser || analyser.frequencyBinCount !== freq.length) {
         drawIdle(ctx, c, mode, c1)
         return
       }
 
-      const freq = new Uint8Array(analyser.frequencyBinCount)
       analyser.getByteFrequencyData(freq)
 
       if (mode === 'bars') drawBars(ctx, c, freq, c1, c2)
@@ -72,7 +81,7 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
         WebkitBackdropFilter: 'blur(24px)',
         border: '1px solid var(--color-border-mid)',
         borderRadius: 16,
-        boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+        boxShadow: 'var(--shadow-overlay)',
         transformOrigin: 'bottom center',
       }}
     >
@@ -83,7 +92,7 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
         style={{
           top: -7,
           left: caretLeft,
-          background: '#17171e', // opaque core of --color-chrome so no seam shows where it overlaps the panel
+          background: 'var(--color-chrome-solid)', // theme-aware opaque core (v2.1.0)
           borderTop: '1px solid var(--color-border-mid)',
           borderLeft: '1px solid var(--color-border-mid)',
         }}
@@ -91,9 +100,9 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] shrink-0">
         <div className="flex items-center gap-2">
           <BarChart2 size={13} style={{ color: 'var(--color-dynamic-1)' }} />
-          <span className="text-xs font-semibold text-white/70 tracking-wide">Visualizer</span>
+          <span className="text-xs font-semibold text-ink-sub tracking-wide">Visualizer</span>
         </div>
-        <button onClick={onClose} className="w-5 h-5 rounded flex items-center justify-center text-white/20 hover:text-white/50 hover:bg-white/5 transition-all">
+        <button onClick={onClose} className="w-5 h-5 rounded flex items-center justify-center text-ink-faint hover:text-ink-sub hover:bg-ink/5 transition-all">
           <X size={11} />
         </button>
       </div>
@@ -101,7 +110,7 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
       <div className="flex gap-1 px-3 pt-2.5">
         {(['bars', 'circle', 'wave'] as Mode[]).map((m) => (
           <button key={m} onClick={() => setMode(m)}
-            className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium capitalize transition-all ${mode === m ? 'text-white/90 bg-[var(--color-glass-strong)]' : 'text-white/30 hover:text-white/60 hover:bg-white/5'}`}
+            className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium capitalize transition-all ${mode === m ? 'text-ink bg-[var(--color-glass-strong)]' : 'text-ink-ter hover:text-ink-sub hover:bg-ink/5'}`}
             style={mode === m ? { color: 'var(--color-dynamic-1)' } : undefined}>
             {m}
           </button>
@@ -110,7 +119,7 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
 
       <div className="p-3 pt-2">
         <canvas ref={canvasRef} width={264} height={110}
-          className="w-full rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }} />
+          className="w-full rounded-xl" style={{ background: 'var(--glass-1)' }} />
       </div>
 
       <div className="h-0.5 shrink-0"

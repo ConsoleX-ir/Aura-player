@@ -13,6 +13,10 @@ export interface Song {
   // lets Folder Sync detect changed files with a cheap stat instead of
   // re-parsing every file's metadata on every sync.
   mtimeMs?: number
+  // Epoch ms when the song first entered the library (v2.1.0) — powers the
+  // "Recently Added" sort. Optional because every song imported before
+  // v2.1.0 lacks it; those fall back to mtimeMs at sort time (see lib/sort).
+  addedAt?: number
 }
 
 export interface Playlist {
@@ -23,7 +27,57 @@ export interface Playlist {
 }
 
 export type RepeatMode = 'none' | 'one' | 'all'
-export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings'
+// 'rewind' = Aura Rewind (Wave 4) — the monthly listening-story destination.
+export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind'
+
+// ── Folder watching (Wave 4) ─────────────────────────────────────────────
+// One change event per watched folder, already debounced in the main
+// process — the renderer responds by re-running the Folder Sync
+// reconciliation for that folder (or all of them, cheap either way).
+export interface FolderWatchChange {
+  folder: string
+  // Main-process epoch ms when the change was first seen (pre-debounce).
+  at: number
+}
+
+export interface RewindMonthData {
+  // Aggregates over the month window (see lib/rewind.ts for the math).
+  monthStart: number
+  monthEnd: number
+  hasData: boolean
+  totalPlayedMs: number
+  sessions: number
+  completed: number
+  skipped: number
+  uniqueSongs: number
+  uniqueArtists: number
+  uniqueAlbums: number
+  topSongs: { key: string; title: string; artist: string; album: string; ms: number; plays: number }[]
+  topArtists: { key: string; name: string; ms: number; plays: number }[]
+  topAlbums: { key: string; name: string; artist: string; ms: number; plays: number }[]
+  topGenres: { name: string; plays: number }[]
+  hourHistogram: number[]        // 24 buckets, session-start counts
+  weekdayHistogram: number[]     // 7 buckets, Mon-first, session-start counts
+  // Per-day listening totals, day-of-month → ms (0 when silent).
+  dayTotals: number[]
+  longestStreak: number          // consecutive days with ≥1 scrobble
+  mostActiveDay: { day: number; ms: number } | null
+  // Cover art (aura:// or file path) for the #1 song/album/artist's top song,
+  // resolved at query time from the live library when still available.
+  topSongCover: string | null
+  // The color the Rewind story is told in — derived from the top song's art
+  // by the caller (useDynamicTheme pipeline), not stored here.
+}
+
+// Aggregated local listening stats for one song — computed on demand from
+// the append-only scrobble store (see getSongStats in lib/scrobbleStore).
+export interface SongListenStats {
+  plays: number          // listening sessions (sub-200ms double-clicks excluded)
+  completed: number      // sessions that reached ≥90% of the track
+  skipped: number        // sessions abandoned before the halfway point
+  totalPlayedMs: number  // cumulative audible listen time
+  lastPlayedAt: number | null // ms epoch of the most recent session
+}
 
 // Technical file properties, fetched on demand by the Properties dialog.
 export interface SongFileStats {
@@ -96,6 +150,17 @@ export interface ElectronAPI {
   // Global media keys and Windows taskbar thumbnail controls both arrive here.
   onMediaCommand: (cb: (command: 'toggle' | 'next' | 'previous') => void) => () => void
   syncPlaybackState: (isPlaying: boolean) => void
+  // ── Folder watching (Wave 4) ────────────────────────────────────────────
+  // Replaces the live watcher set with exactly the given folders (recursive).
+  // Returns the count of folders actually watched (0 in a plain browser).
+  watchFolders: (folders: string[]) => Promise<number>
+  // Fires at most once per watched folder per debounce window, no matter how
+  // noisy the filesystem churn was underneath (main process debounces).
+  onWatchChange: (cb: (change: FolderWatchChange) => void) => () => void
+  // Rewind share-card export: shows a native save dialog, then writes the
+  // given base64 data URL (image/png) to disk as binary. Returns the chosen
+  // path or null if the user cancelled.
+  saveImageFile: (defaultName: string, dataUrl: string) => Promise<string | null>
   minimize:      () => void
   maximize:      () => void
   close:         () => void

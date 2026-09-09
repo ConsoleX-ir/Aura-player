@@ -1,67 +1,124 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
-/* ── ConsoleX × Aura Player — Dark Premium Design System ──────────────────
-   Tailwind v4: all tokens live in @theme, zero config file needed
-────────────────────────────────────────────────────────────────────────── */
+/* ── Aura Player v2 — base styles & utilities ─────────────────────────────
+   Every constant lives in ./styles/tokens.css (the design system).
+   This file: Tailwind wiring, element defaults, and shared utilities.
+
+   Tailwind v4 @theme: mapping the semantic tokens here auto-generates
+   utilities (e.g. --color-primary → text-primary / bg-primary), so
+   components can use either the utility or var(--token) directly.
+   Legacy names (--color-base, --color-glass, --color-text, …) are kept
+   as aliases because several v1-era components (NowPlaying, modals,
+   panels) still read them; they now RESOLVE to the semantic tokens, so
+   the light theme (Wave 5) will restyle those components for free. */
 
 @theme {
-  /* ── Core palette ── */
-  --color-base:          #0A0A0F;   /* Near-black app background */
-  --color-base-2:        #111118;   /* Slightly lifted surface */
-  --color-base-3:        #18181F;   /* Cards, sidebar */
+  /* Surfaces → Tailwind color utilities */
+  --color-base:        var(--surface-base);
+  --color-base-2:      var(--surface-raised);
+  --color-base-3:      var(--surface-card);
+  --color-chrome:      var(--surface-chrome);
 
-  /* White glass — layered on dark */
-  --color-glass:         rgba(255, 255, 255, 0.05);
-  --color-glass-mid:     rgba(255, 255, 255, 0.08);
-  --color-glass-strong:  rgba(255, 255, 255, 0.12);
+  /* Glass family */
+  --color-glass:        var(--glass-1);
+  --color-glass-mid:    var(--glass-2);
+  --color-glass-strong: var(--glass-3);
 
-  /* Near-opaque "floating chrome" — the player bar and popovers (dropdown
-     menus, lyrics/visualizer panels) that need to read clearly over busy
-     content behind them, unlike the more transparent --color-glass family. */
-  --color-chrome:        rgba(12, 12, 17, 0.94);
+  /* Text ladder */
+  --color-text:        var(--text-primary);
+  --color-text-sub:    var(--text-secondary);
+  --color-text-ghost:  var(--text-faint);
 
-  /* Cloud gray — the default ambient color before any song plays */
-  --color-cloud:         #B0B8C8;
-  --color-cloud-soft:    rgba(176, 184, 200, 0.15);
-  --color-cloud-glow:    rgba(176, 184, 200, 0.08);
-
-  /* Dynamic — JS overwrites these from album art */
-  --color-dynamic-1:     #B0B8C8;
-  --color-dynamic-2:     #C8D0DC;
-  --color-dynamic-3:     rgba(176, 184, 200, 0.12);
-  --color-dynamic-glow:  rgba(176, 184, 200, 0.06);
-
-  /* Text */
-  --color-text:          rgba(255, 255, 255, 0.92);
-  --color-text-sub:      rgba(255, 255, 255, 0.50);
-  --color-text-ghost:    rgba(255, 255, 255, 0.25);
+  /* Ink ladder — theme-aware replacements for the v1-era white/NN utilities.
+     Any remaining text-white/NN in older components was swept to these in
+     v2.0.0 so dark AND light themes render correctly everywhere. */
+  --color-ink:        var(--text-primary);
+  --color-ink-sub:    var(--text-secondary);
+  --color-ink-ter:    var(--text-tertiary);
+  --color-ink-faint:  var(--text-faint);
 
   /* Borders */
-  --color-border:        rgba(255, 255, 255, 0.08);
-  --color-border-mid:    rgba(255, 255, 255, 0.12);
+  --color-border:      var(--border-default);
+  --color-border-mid:  var(--border-strong);
 
-  /* Typography */
-  --font-display:        'Geist', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-  --font-body:           'Inter', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  /* Status */
+  --color-danger:      var(--danger);
+  --color-warning:     var(--warning);
+  --color-success:     var(--success);
+  --color-favorite:    var(--favorite);
+
+  /* Cloud (idle ambient) */
+  --color-cloud:       var(--cloud);
+  --color-cloud-soft:  var(--cloud-soft);
+  --color-cloud-glow:  var(--cloud-glow);
+
+  /* Accent aliases — the living dynamic family */
+  --color-accent:        var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-veil:   var(--accent-veil);
+
+  /* Dynamic family (legacy names — resolved through the accent layer) */
+  --color-dynamic-1:    var(--accent);
+  --color-dynamic-2:    var(--accent-strong);
+  --color-dynamic-3:    var(--accent-veil);
+  --color-dynamic-glow: var(--accent-whisper);
+
+  /* Motion */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Layout */
-  --spacing-sidebar:     256px;
-  --spacing-player:      90px;
+  --spacing-sidebar: 256px;
+  --spacing-player:  90px;
 
   /* Effects */
-  --blur-glass:          20px;
-  --blur-glow:           80px;
+  --blur-glass: 20px;
+  --blur-glow:  80px;
 
   /* Radii */
-  --radius-card:         16px;
-  --radius-pill:         999px;
-
-  /* Easing */
-  --ease-spring:         cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-smooth:         cubic-bezier(0.4, 0, 0.2, 1);
+  --radius-card: 16px;
+  --radius-pill: 999px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+/* ── Pointer cursor restoration (v2.1.0 hover-UX audit) ────────────────────
+   Tailwind v4's preflight intentionally drops the browser's pointer cursor
+   on buttons/controls, which made the whole app feel inert under the mouse —
+   every clickable element communicated "not interactive" at the most
+   primitive level. Restore the convention everywhere in one rule, and make
+   disabled controls read as disabled (not-allowed, not pointer). */
+button:not(:disabled),
+[role='button']:not(:disabled),
+[role='menuitem'],
+[role='menuitemradio'],
+[role='option'],
+[role='tab'],
+label:has(> input[type='checkbox']),
+summary { cursor: pointer; }
+button:disabled,
+[role='button'][aria-disabled='true'],
+[role='menuitem'][aria-disabled='true'] { cursor: not-allowed; }
+
+/* ── Radix menu highlight (v2.1.0 hover-UX audit) ──────────────────────────
+   One rule that gives EVERY Radix dropdown item both a pointer-hover veil
+   and the keyboard-driven data-highlighted state, so mouse and arrow-key
+   navigation finally look identical. Components can still layer their own
+   accents on top (this only owns background + text lift). */
+[role='menuitem'],
+[role='menuitemradio'] {
+  transition: background-color var(--dur-instant) var(--ease-smooth),
+              color var(--dur-instant) var(--ease-smooth);
+}
+[role='menuitem']:hover,
+[role='menuitem'][data-highlighted],
+[role='menuitemradio']:hover,
+[role='menuitemradio'][data-highlighted] {
+  background-color: var(--glass-2);
+  color: var(--text-primary);
+  outline: none;
+}
 
 html, body, #root {
   height: 100%;
@@ -72,10 +129,13 @@ html, body, #root {
 
 body {
   font-family: var(--font-body);
-  background: var(--color-base);
-  color: var(--color-text);
+  background: var(--surface-base);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -webkit-app-region: no-drag;
+  /* Theme cross-fade: when Wave 5 flips data-theme, every token-driven
+     surface/text/border fades instead of snapping. Cheap (color-only). */
+  transition: background var(--dur-ambient) var(--ease-smooth);
 }
 
 /* ── Dynamic ambient background — two fixed light orbs ───────────────────
@@ -86,17 +146,18 @@ body {
    Implementation notes:
    • isolation:isolate + z-index:-1 keeps the orbs above this element's own
      background but below every piece of content, on every page.
-   • Colors come from --color-dynamic-1 via color-mix, so orbs follow the
-     active theme, the album-art ambient color on Now Playing, and the
-     playlist artwork color on the playlist view; the background-color
-     transition makes those switches fade instead of snap. */
+   • Colors come from the live accent (--accent → --color-dynamic-1) via
+     color-mix, so orbs follow the active theme, the album-art ambient color
+     on Now Playing, and the playlist artwork color on the playlist view;
+     the background-color transition makes those switches fade instead of
+     snap. */
 .dynamic-bg {
-  --aura-a: color-mix(in srgb, var(--color-dynamic-1) 28%, transparent);
-  --aura-b: color-mix(in srgb, var(--color-dynamic-1) 18%, transparent);
+  --aura-a: color-mix(in srgb, var(--accent) 28%, transparent);
+  --aura-b: color-mix(in srgb, var(--accent) 18%, transparent);
   position: relative;
   isolation: isolate;
-  background: var(--color-base);
-  transition: background 1.4s var(--ease-smooth);
+  background: var(--surface-base);
+  transition: background var(--dur-ambient) var(--ease-smooth);
 }
 .dynamic-bg::before,
 .dynamic-bg::after {
@@ -114,7 +175,7 @@ body {
   left: -16vmax;
   background: var(--aura-a);
   filter: blur(72px);
-  transition: background 1.4s var(--ease-smooth);
+  transition: background var(--dur-ambient) var(--ease-smooth);
 }
 /* Orb B — smaller, anchored near the bottom-right */
 .dynamic-bg::after {
@@ -124,7 +185,7 @@ body {
   right: -14vmax;
   background: var(--aura-b);
   filter: blur(72px);
-  transition: background 1.4s var(--ease-smooth);
+  transition: background var(--dur-ambient) var(--ease-smooth);
 }
 /* Performance Mode: the blur filter is swapped for a pre-softened radial
    gradient — same look, zero GPU filter cost for weak integrated GPUs. */
@@ -141,57 +202,60 @@ body {
 
 /* ── Glass utilities ─────────────────────────────────────────────────────── */
 .glass {
-  background: var(--color-glass);
+  background: var(--glass-1);
   backdrop-filter: blur(var(--blur-glass));
   -webkit-backdrop-filter: blur(var(--blur-glass));
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border-default);
 }
 
 .glass-mid {
-  background: var(--color-glass-mid);
+  background: var(--glass-2);
   backdrop-filter: blur(var(--blur-glass));
   -webkit-backdrop-filter: blur(var(--blur-glass));
-  border: 1px solid var(--color-border-mid);
+  border: 1px solid var(--border-strong);
 }
 
 .glass-strong {
-  background: var(--color-glass-strong);
+  background: var(--glass-3);
   backdrop-filter: blur(var(--blur-glass));
   -webkit-backdrop-filter: blur(var(--blur-glass));
-  border: 1px solid rgba(255,255,255,0.16);
+  border: 1px solid var(--border-emphasis);
 }
 
-/* ── 3D card hover ───────────────────────────────────────────────────────── */
+/* ── 3D card hover ─────────────────────────────────────────────────────────
+   v2.1.0: will-change:transform removed — it promoted EVERY grid card to its
+   own compositor layer permanently (real GPU memory at 100+ albums) for an
+   effect that only matters during the hover itself. The hover transition
+   still promotes on demand; nothing visual changed. */
 .card-3d {
   transform-style: preserve-3d;
   transition: transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease-smooth);
-  will-change: transform;
 }
 .card-3d:hover {
   transform: perspective(900px) rotateX(-2deg) rotateY(3deg) translateY(-5px);
   box-shadow:
-    0 24px 64px -8px var(--color-dynamic-3),
-    0 8px 24px rgba(0,0,0,0.5),
-    inset 0 1px 0 rgba(255,255,255,0.12);
+    0 24px 64px -8px var(--accent-veil),
+    var(--shadow-3),
+    inset 0 1px 0 var(--border-emphasis);
 }
 
 /* ── Glow pulse (album art sync) ─────────────────────────────────────────── */
 .glow-dynamic {
-  box-shadow: 0 0 40px var(--color-dynamic-3), 0 0 80px var(--color-dynamic-glow);
-  transition: box-shadow 1.4s var(--ease-smooth);
+  box-shadow: 0 0 40px var(--accent-veil), 0 0 80px var(--accent-whisper);
+  transition: box-shadow var(--dur-ambient) var(--ease-smooth);
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-mid);
+  background: var(--border-strong);
   border-radius: var(--radius-pill);
 }
-::-webkit-scrollbar-thumb:hover { background: var(--color-dynamic-1); opacity: 0.5; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); opacity: 0.5; }
 
 /* ── Selection ───────────────────────────────────────────────────────────── */
-::selection { background: var(--color-dynamic-3); color: var(--color-text); }
+::selection { background: var(--accent-veil); color: var(--text-primary); }
 
 /* ── Keyboard focus ──────────────────────────────────────────────────────
    Tailwind's base reset strips the default browser outline and nothing was
@@ -200,7 +264,7 @@ body {
    :focus-visible (not :focus) means this only shows for keyboard/programmatic
    focus, not every mouse click, matching how focus rings are meant to work. */
 :focus-visible {
-  outline: 2px solid var(--color-dynamic-1);
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -217,6 +281,64 @@ body {
 .animate-playing-bar {
   transform-origin: bottom;
   animation: playing-bar 0.8s ease-in-out infinite;
+}
+
+/* ── Lyrics line states (v2.1.0) ───────────────────────────────────────────
+   Theme-aware replacement for the LyricsPanel's hardcoded white-alpha line
+   colors: CSS owns the color transition (var-driven, correct in dark AND
+   light), and the old per-line framer color animation is gone — one fewer
+   JS-driven interpolation running while the panel is open. */
+.lyric-line {
+  color: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  transition: color 0.25s var(--ease-smooth);
+}
+.lyric-line-active {
+  color: var(--text-primary);
+}
+
+/* ── Skeleton shimmer — loading states (Wave 2) ────────────────────────────
+   A soft highlight sweeps across placeholder blocks. Uses transform only
+   (compositor-friendly), pauses under Performance Mode and honors
+   prefers-reduced-motion. */
+@keyframes aura-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-active);
+  border-radius: var(--radius-sm);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--text-primary) 7%, transparent),
+    transparent
+  );
+  animation: aura-shimmer 1.6s ease-in-out infinite;
+}
+:root[data-performance="on"] .skeleton::after { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+}
+
+/* ── Breathing — idle ambient pulse (boot screen, empty states) ────────── */
+@keyframes aura-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.97); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+.animate-breathe {
+  animation: aura-breathe 2.4s var(--ease-smooth) infinite;
+}
+:root[data-performance="on"] .animate-breathe { animation: none; opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-breathe { animation: none; opacity: 1; }
 }
 
 /* ── Offscreen render skip ────────────────────────────────────────────────
@@ -237,12 +359,164 @@ body {
    Toggled from Settings. Strips backdrop-filter blur (one of the most
    expensive CSS properties, especially on integrated/older GPUs) and
    disables decorative continuous animations, replacing blur with a plain
-   solid dark background so the glass panels stay visually distinct. */
+   solid background so the glass panels stay visually distinct.
+   v2.1.0 bugfix: the standard declaration is deliberately LAST — the CSS
+   minifier dedupes it against the -webkit- alias otherwise, and the surviving
+   -webkit- form does NOT override elements whose backdrop-filter is set
+   inline (pill, titlebar, sidebar card, mini-player). With the standard
+   property last, the !important rule wins over inline styles again. */
 :root[data-performance="on"] .perf-blur {
-  backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  background: rgba(8, 8, 12, 0.97) !important;
+  backdrop-filter: none !important;
+  background: var(--surface-solid) !important;
 }
 :root[data-performance="on"] .perf-spin {
   animation: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v2.0.0 MOTION + HOVER SYSTEM
+   One vocabulary for the whole app so hover/motion feels designed, not
+   assembled. Rules of the system:
+     • Only background/color/opacity/box-shadow/transform transition — never
+       layout properties, so hover can never shift content.
+     • Durations come from tokens (dur-instant for micro feedback).
+     • Everything respects Performance Mode + prefers-reduced-motion.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Micro press feedback — the tactile "the button felt me" moment */
+.pressable {
+  transition: transform var(--dur-instant) var(--ease-smooth);
+}
+.pressable:active {
+  transform: scale(0.97);
+}
+
+/* Surface hover — quiet veil for rows/cards/containers. The !important
+   pair exists because several components pass token colors via inline
+   style (the v1 pattern); the class needs to win on hover without
+   rewriting every call site at once. */
+.hover-surface {
+  transition: background-color var(--dur-instant) var(--ease-smooth),
+              box-shadow var(--dur-base) var(--ease-smooth);
+}
+.hover-surface:hover {
+  background-color: var(--surface-hover) !important;
+}
+
+/* Icon hover — the pill/panel button vocabulary: color lifts and a faint
+   glass veil appears; active buttons get a scale instead (their color IS
+   the state). */
+.icon-hover {
+  transition: color var(--dur-instant) var(--ease-smooth),
+              background-color var(--dur-instant) var(--ease-smooth),
+              transform var(--dur-instant) var(--ease-smooth);
+}
+.icon-hover:hover {
+  color: var(--text-primary) !important;
+  background-color: var(--glass-1) !important;
+}
+.icon-hover:active {
+  transform: scale(0.94);
+}
+.icon-hover.is-active:hover {
+  color: var(--accent) !important;
+  background-color: var(--glass-2) !important;
+}
+
+/* Gentle lift for chrome that hosts content (the pill on hover) */
+.pb-lift {
+  transition: transform var(--dur-base) var(--ease-smooth),
+              box-shadow var(--dur-base) var(--ease-smooth),
+              border-color var(--dur-base) var(--ease-smooth);
+}
+.pb-lift:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-emphasis) !important;
+}
+
+/* ── Aura Pulse layers (Wave 4 / v2.0.0) ─────────────────────────────────── */
+
+/* Orbit: one faint light circling behind the pill while playing. The wrapper
+   fades on pause via the root's data-active attribute — no JS involvement. */
+.aura-pulse-orbit {
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+[data-aura-pulse][data-active='true'] .aura-pulse-orbit {
+  opacity: 1;
+}
+.aura-orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46%;
+  height: 220%;
+  margin-left: -23%;
+  margin-top: -110%;
+  border-radius: 50%;
+  /* v2.1.0: accent-veil (was whisper) so the orbit reads at a glance */
+  background: radial-gradient(ellipse closest-side, var(--accent-veil), transparent 72%);
+  animation: aura-orbit 9s var(--ease-smooth) infinite alternate;
+  will-change: transform;
+}
+@keyframes aura-orbit {
+  from { transform: rotate(0deg) translateX(34%) ; }
+  to   { transform: rotate(180deg) translateX(-34%); }
+}
+/* Stillness guarantees: Performance Mode and reduced-motion remove the
+   decorative layers entirely — the rings' resting glow is enough. */
+:root[data-performance="on"] .aura-pulse-orbit,
+:root[data-performance="on"] .aura-pulse-pool {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aura-pulse-orbit { display: none; }
+}
+
+/* ── Pill Play Bar responsive columns ───────────────────────────────────────
+   The pill keeps 256px info + side columns down to ~960px; below that the
+   side columns slim down, the hint line drops, extra panel buttons fold,
+   and the volume slider shortens — the transport never crowds. Pure CSS:
+   zero resize listeners, zero re-renders. */
+@media (max-width: 960px) {
+  [data-player-bar] .pb-info  { width: 13rem; }
+  [data-player-bar] .pb-side  { width: 13rem; }
+  [data-player-bar] .pb-hint  { display: none; }
+  [data-player-bar] .pb-extra { display: none; }
+  [data-player-bar] .pb-vol   { width: 4.5rem; }
+}
+@media (max-width: 720px) {
+  [data-player-bar] .pb-info  { width: 9rem; }
+  [data-player-bar] .pb-side  { width: auto; }
+  [data-player-bar] .pb-vol   { width: 3rem; }
+}
+
+/* ── Theme switch cross-fade (v2.0.0 light mode) ────────────────────────────
+   Applied to <html> for ~800ms around a dark↔light switch, then removed so
+   it never taxes steady-state rendering. Color-only transitions — cheap
+   even on a 5k-row library (no layout, no composite). */
+.theme-anim,
+.theme-anim *:not(svg):not(path):not(circle):not(rect):not(line):not(text) {
+  transition: background-color var(--dur-ambient) var(--ease-smooth),
+              color var(--dur-ambient) var(--ease-smooth),
+              border-color var(--dur-ambient) var(--ease-smooth),
+              fill var(--dur-ambient) var(--ease-smooth),
+              box-shadow var(--dur-ambient) var(--ease-smooth) !important;
+}
+
+/* ── Light-theme ambience corrections ───────────────────────────────────────
+   The accent orbs were tuned for dark ink; over light paper the same
+   percentages read as a pleasant watercolor wash — they only need their
+   blend window tightened so white text zones stay readable. The chrome
+   veil under the titlebar also flips to a soft ink tint. */
+[data-theme='light'] .dynamic-bg {
+  --aura-a: color-mix(in srgb, var(--accent) 16%, transparent);
+  --aura-b: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: rgba(16, 16, 24, 0.14);
+}
+[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, rgba(16, 16, 24, 0.14));
 }

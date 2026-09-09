@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURA DESIGN TOKENS — v2 design system (Wave 2)
+   ═══════════════════════════════════════════════════════════════════════════
+   The single source of truth for every visual constant in Aura.
+
+   Architecture (three layers):
+
+     1. PRIMITIVES      --aura-*          raw physical values, never used
+                                          directly by components
+     2. SEMANTIC        --surface-*,      what things MEAN (a card, a border,
+                        --text-*, ...     secondary text). Components consume
+                                          ONLY this layer.
+     3. ACCENT          --accent-*        the living color family driven by
+                                          useDynamicTheme (theme preset,
+                                          custom picker, or album-art ambient).
+                                          The pipeline writes the legacy
+                                          --color-dynamic-* names; the accent
+                                          aliases below simply point at them.
+
+   LIGHT THEME FOUNDATION (locked decision — light is not an inversion):
+   The semantic layer is deliberately structured so that light mode re-maps
+   ONLY the values in this file. The light mapping is designed around the
+   glow system: on light surfaces the accent family works as a *tinted veil*
+   (accent at low alpha OVER light surfaces) rather than as a light source,
+   and text/borders flip to ink-based values. The [data-theme='light'] block
+   below ships the designed values now; activating it (settings toggle +
+   animated transition) is Wave 5. Zero component changes needed when that
+   happens — that is the whole point of this file.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1 · PRIMITIVES ─────────────────────────────────────────────────────── */
+:root {
+  /* Ink scale — Aura's surfaces are blue-shifted near-black, never pure #000 */
+  --aura-ink-900: #0A0A0F;
+  --aura-ink-800: #101017;
+  --aura-ink-700: #16161E;
+  --aura-ink-600: #1D1D27;
+
+  /* Cloud — the identity gray, warm-cool neutral */
+  --aura-cloud-500: #B0B8C8;
+
+  /* Status hues */
+  --aura-red:      #F87171;
+  --aura-amber:    #FBBF24;
+  --aura-emerald:  #34D399;
+  --aura-rose:     #FB7185;
+
+  /* Drag/motion physics */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── 2 · SEMANTIC — DARK (the true Aura form) ───────────────────────────── */
+:root,
+[data-theme='dark'] {
+  /* Surfaces — elevation ladder, base → card → floating chrome */
+  --surface-base:    var(--aura-ink-900);
+  --surface-raised:  var(--aura-ink-800);
+  --surface-card:    var(--aura-ink-700);
+  --surface-inset:   rgba(255, 255, 255, 0.03);
+  --surface-hover:   rgba(255, 255, 255, 0.05);
+  --surface-active:  rgba(255, 255, 255, 0.08);
+  --surface-selected: rgba(255, 255, 255, 0.12);
+  /* Floating chrome — popovers/player/toasts that must read over busy bg */
+  --surface-chrome:  rgba(12, 12, 17, 0.94);
+  /* Performance-mode fallback (no backdrop-filter): near-opaque ink */
+  --surface-solid:   rgba(8, 8, 12, 0.97);
+  /* Opaque equivalent of --surface-chrome composited over --surface-base.
+     For the popovers' rotated caret squares: a translucent caret would show
+     a seam where it overlaps the panel edge, so it needs the SOLID color the
+     chrome surface ends up rendering as. Theme-aware (v2.1.0). */
+  --color-chrome-solid: #121218;
+
+  /* Glass family — layered translucency for in-page panels */
+  --glass-1: rgba(255, 255, 255, 0.05);
+  --glass-2: rgba(255, 255, 255, 0.08);
+  --glass-3: rgba(255, 255, 255, 0.12);
+
+  /* Text — a 4-step legibility ladder */
+  --text-primary:   rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary:  rgba(255, 255, 255, 0.32);
+  --text-faint:     rgba(255, 255, 255, 0.20);
+  --text-on-accent: #FFFFFF;
+
+  /* Borders */
+  --border-subtle:   rgba(255, 255, 255, 0.06);
+  --border-default:  rgba(255, 255, 255, 0.08);
+  --border-strong:   rgba(255, 255, 255, 0.12);
+  --border-emphasis: rgba(255, 255, 255, 0.16);
+
+  /* Status (semantic intent, primitive hue) */
+  --danger:         var(--aura-red);
+  --danger-veil:    rgba(248, 113, 113, 0.12);
+  --danger-border:  rgba(248, 113, 113, 0.25);
+  --warning:        var(--aura-amber);
+  --warning-veil:   rgba(251, 191, 36, 0.12);
+  --success:        var(--aura-emerald);
+  --success-veil:   rgba(52, 211, 153, 0.12);
+  --favorite:       var(--aura-rose);
+  --favorite-veil:  rgba(251, 113, 133, 0.14);
+
+  /* Ambient cloud — idle state before any theme/artwork takes over */
+  --cloud:       var(--aura-cloud-500);
+  --cloud-soft:  rgba(176, 184, 200, 0.15);
+  --cloud-glow:  rgba(176, 184, 200, 0.08);
+
+  /* ── Motion ── */
+  --dur-instant: 100ms;
+  --dur-fast:    150ms;
+  --dur-base:    250ms;
+  --dur-slow:    400ms;
+  --dur-ambient: 1400ms;   /* theme/glow cross-fades — slow by design */
+
+  /* ── Radius ── */
+  --radius-sm:    8px;
+  --radius-md:    12px;
+  --radius-lg:    16px;
+  --radius-xl:    20px;
+  --radius-2xl:   24px;
+  --radius-pill:  999px;
+
+  /* ── Shadow ladder ── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.50);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --shadow-overlay: 0 16px 44px rgba(0, 0, 0, 0.55);
+
+  /* ── Typography ── */
+  --font-display: 'Geist', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --font-body:    'Inter', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --tracking-caps: 0.18em;   /* uppercase micro-labels */
+
+  /* ── Z-index scale (single registry — no more magic numbers) ── */
+  --z-panel:    150;   /* player bar flyout panels */
+  --z-dropdown: 200;   /* radix menus */
+  --z-toast:    250;
+  --z-drag:     300;   /* drag-and-drop overlay */
+
+  /* ── Blur ── */
+  --blur-glass: 20px;
+  --blur-chrome: 40px;
+
+  /* ── Focus ring (keyboard only — see :focus-visible in index.css) ── */
+  --focus-ring-color: var(--color-dynamic-1);
+}
+
+/* ── 3 · ACCENT aliases ───────────────────────────────────────────────────
+   useDynamicTheme.ts writes --color-dynamic-* at runtime (theme presets,
+   custom picker, album-art ambient). Components read them through these
+   semantic names — the accent pipeline could change implementation without
+   touching a single component. */
+:root {
+  --accent:         var(--color-dynamic-1);      /* the accent itself */
+  --accent-strong:  var(--color-dynamic-2);      /* lightened companion */
+  --accent-veil:    var(--color-dynamic-3);      /* ~12% alpha wash */
+  --accent-whisper: var(--color-dynamic-glow);   /* ~6% alpha glow field */
+  /* Interactive accent surface (hover/selected chips) — computed from the
+     live accent via color-mix so it tracks custom themes automatically. */
+  --accent-dim: color-mix(in srgb, var(--color-dynamic-1) 14%, transparent);
+  --accent-border: color-mix(in srgb, var(--color-dynamic-1) 40%, transparent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT FOUNDATION — designed around the glow, NOT inverted.
+   Dormant until Wave 5 flips the toggle. Surfaces go warm-paper (not gray);
+   the accent keeps working as a translucent veil over them, which is why
+   every veil/whisper token survives light mode unchanged — only inks,
+   borders, and chrome remap. Tuned further in Wave 5 with the animated
+   transition; values here are the designed starting point.
+   ═══════════════════════════════════════════════════════════════════════════ */
+[data-theme='light'] {
+  --surface-base:    #F3F4F7;
+  --surface-raised:  #FFFFFF;
+  --surface-card:    #FFFFFF;
+  --surface-inset:   rgba(10, 10, 15, 0.03);
+  --surface-hover:   rgba(10, 10, 15, 0.045);
+  --surface-active:  rgba(10, 10, 15, 0.07);
+  --surface-selected: rgba(10, 10, 15, 0.10);
+  --surface-chrome:  rgba(255, 255, 255, 0.92);
+  --surface-solid:   rgba(248, 248, 250, 0.98);
+  /* Opaque equivalent of light --surface-chrome over light --surface-base */
+  --color-chrome-solid: #fbfbfd;
+
+  --glass-1: rgba(10, 10, 15, 0.04);
+  --glass-2: rgba(10, 10, 15, 0.06);
+  --glass-3: rgba(10, 10, 15, 0.09);
+
+  --text-primary:   rgba(16, 16, 24, 0.92);
+  --text-secondary: rgba(16, 16, 24, 0.55);
+  --text-tertiary:  rgba(16, 16, 24, 0.38);
+  --text-faint:     rgba(16, 16, 24, 0.24);
+  --text-on-accent: #FFFFFF;
+
+  --border-subtle:   rgba(16, 16, 24, 0.06);
+  --border-default:  rgba(16, 16, 24, 0.09);
+  --border-strong:   rgba(16, 16, 24, 0.13);
+  --border-emphasis: rgba(16, 16, 24, 0.18);
+
+  --shadow-1: 0 1px 2px rgba(16, 16, 24, 0.08);
+  --shadow-2: 0 8px 24px rgba(16, 16, 24, 0.10);
+  --shadow-3: 0 24px 64px rgba(16, 16, 24, 0.12);
+  --shadow-overlay: 0 16px 44px rgba(16, 16, 24, 0.14);
+
+  --cloud:       #6B7488;
+  --cloud-soft:  rgba(107, 116, 136, 0.16);
+  --cloud-glow:  rgba(107, 116, 136, 0.10);
+}
+
+/* ── Layout constants (not theme-dependent — live on :root) ────────────── */
+:root {
+  --spacing-sidebar: 256px;
+  /* Wave 3: the player is a floating capsule (72px + 10px bottom offset +
+     breathing room) — content still reserves this space so nothing hides
+     permanently beneath the pill. */
+  --spacing-player:  96px;
+}

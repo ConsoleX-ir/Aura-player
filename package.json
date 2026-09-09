@@ -1,7 +1,7 @@
 {
   "name": "aura-player",
   "private": true,
-  "version": "1.11.6",
+  "version": "2.1.0",
   "description": "Aura",
   "author": "ConsoleX",
   "main": "electron/main.cjs",
@@ -24,7 +24,9 @@
     "artifactName": "Aura.Player.Setup-${version}.${ext}",
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "!**/*.map",
+      "!**/*.tsbuildinfo"
     ],
     "win": {
       "target": "nsis",
@@ -91,6 +93,10 @@
         "role": "Viewer",
         "icon": "public/icon.ico"
       }
+    ],
+    "asar": true,
+    "electronLanguages": [
+      "en-US"
     ]
   },
   "dependencies": {

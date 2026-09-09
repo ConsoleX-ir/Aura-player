@@ -47,4 +47,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Lets main process keep the taskbar thumbnail's Play/Pause icon accurate.
   syncPlaybackState: (isPlaying) => ipcRenderer.send('player:state-sync', { isPlaying }),
+  // ── Folder watching (Wave 4) ──────────────────────────────────────────────
+  // Sends the FULL desired watch set every time — main replaces its live
+  // watchers wholesale, so renderer-side bookkeeping stays trivial.
+  watchFolders: (folders) => ipcRenderer.invoke('fs:watchFolders', folders),
+  onWatchChange: (cb) => {
+    const listener = (_e, change) => cb(change)
+    ipcRenderer.on('watch:changed', listener)
+    return () => ipcRenderer.removeListener('watch:changed', listener)
+  },
+  // Rewind share-card export: save dialog + binary PNG write in one hop.
+  saveImageFile: (defaultName, dataUrl) => ipcRenderer.invoke('dialog:saveImageFile', defaultName, dataUrl),
 })

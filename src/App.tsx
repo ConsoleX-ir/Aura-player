@@ -12,8 +12,13 @@ import { useFileAssociationLaunch } from '@/hooks/useFileAssociationLaunch'
 import { useSleepTimer } from '@/hooks/useSleepTimer'
 import { useMediaKeys } from '@/hooks/useMediaKeys'
 import { useDragDropImport } from '@/hooks/useDragDropImport'
+import { useStoreHydration } from '@/hooks/useStoreHydration'
 import { Toaster } from '@/components/Toast/Toaster'
 import { HelpModal } from '@/components/Modals/HelpModal'
+import { CommandPalette } from '@/components/CommandPalette'
+import { MiniPlayer } from '@/components/Player/MiniPlayer'
+import { useFolderWatcher } from '@/hooks/useFolderWatcher'
+import { useUiStore } from '@/store/uiStore'
 import { UploadCloud, Loader2 } from 'lucide-react'
 
 // Library is what's shown on launch almost every time, so it stays a normal
@@ -25,6 +30,8 @@ import { UploadCloud, Loader2 } from 'lucide-react'
 const PlaylistPage = lazy(() => import('@/pages/Playlist').then((m) => ({ default: m.PlaylistPage })))
 const NowPlaying = lazy(() => import('@/pages/NowPlaying').then((m) => ({ default: m.NowPlaying })))
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })))
+const PropertiesPage = lazy(() => import('@/pages/PropertiesPage').then((m) => ({ default: m.PropertiesPage })))
+const RewindPage = lazy(() => import('@/pages/RewindPage').then((m) => ({ default: m.default })))
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)
@@ -32,12 +39,16 @@ export default function App() {
   const theme = usePlayerStore((s) => s.theme)
   const customAccentColor = usePlayerStore((s) => s.customAccentColor)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
+  const appearance = usePlayerStore((s) => s.appearance)
+  const miniPlayer = useUiStore((s) => s.miniPlayer)
 
   // Mount audio engine once — never unmounts
   useAudio()
 
   const isNowPlaying = activeView === 'nowplaying'
   const isPlaylistView = activeView === 'playlist'
+  const isPropertiesView = activeView === 'properties'
+  const isRewindView = activeView === 'rewind'
 
   // Playlist view: derive the playlist's cover the same way the playlist hero
   // does — the first song in the playlist that has embedded artwork — so the
@@ -71,12 +82,27 @@ export default function App() {
   useFileAssociationLaunch()
   useSleepTimer()
   useMediaKeys()
+  useFolderWatcher()
   const { isDraggingFiles, dragHandlers } = useDragDropImport()
+
+  // Hold the shell on the boot screen until the persisted store (IndexedDB,
+  // async since Wave 1) has rehydrated — otherwise the Library flashes its
+  // empty state for a frame on every cold start.
+  const hydrated = useStoreHydration()
 
   useEffect(() => {
     document.documentElement.setAttribute('data-performance', performanceMode ? 'on' : 'off')
   }, [performanceMode])
 
+  // ── Appearance (v2.0.0) ─────────────────────────────────────────────────
+  // data-theme drives the whole token layer, so switching is one attribute.
+  // The visual cross-fade: .theme-anim is applied for the transition window
+  // (see setAppearance below / index.css) so colors glide instead of snap.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', appearance)
+  }, [appearance])
+
+  if (!hydrated) return <BootScreen />
 
   return (
     <div
@@ -96,11 +122,11 @@ export default function App() {
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               className="flex flex-col items-center gap-3 px-12 py-10 rounded-3xl border-2 border-dashed"
-              style={{ borderColor: 'var(--color-dynamic-1)', background: 'var(--color-chrome)' }}
+              style={{ borderColor: 'var(--accent)', background: 'var(--surface-chrome)' }}
             >
-              <UploadCloud size={32} style={{ color: 'var(--color-dynamic-1)' }} />
-              <p className="text-sm font-medium text-white/90">Drop to import</p>
-              <p className="text-xs text-white/40">Audio files or folders</p>
+              <UploadCloud size={32} style={{ color: 'var(--accent)' }} />
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Drop to import</p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Audio files or folders</p>
             </motion.div>
           </motion.div>
         )}
@@ -114,7 +140,7 @@ export default function App() {
       >
         {/* Sidebar hidden in Now Playing view */}
         <AnimatePresence>
-          {!isNowPlaying && (
+          {!isNowPlaying && !isPropertiesView && !isRewindView && (
             <motion.div
               key="sidebar"
               initial={{ x: -20, opacity: 0 }}
@@ -164,6 +190,28 @@ export default function App() {
               >
                 <Settings />
               </motion.div>
+            ) : isPropertiesView ? (
+              <motion.div
+                key="properties"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.2 }}
+                className="h-full overflow-hidden"
+              >
+                <PropertiesPage />
+              </motion.div>
+            ) : isRewindView ? (
+              <motion.div
+                key="rewind"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <RewindPage />
+              </motion.div>
             ) : (
               <motion.div
                 key="library"
@@ -181,13 +229,43 @@ export default function App() {
         </main>
       </div>
 
-      <PlayerBar />
+      {/* Player: pill bar or mini-player — the two never show together, and
+          the crossfade keeps the handoff continuous. Panels (lyrics/queue/
+          visualizer) stay mounted with the pill they anchor to. */}
+      <AnimatePresence mode="wait">
+        {miniPlayer
+          ? <MiniPlayer key="mini" />
+          : <PlayerBar key="pill" />}
+      </AnimatePresence>
+      {!miniPlayer && <PlayerBarPanels />}
 
-      {/* Global overlays — feedback toasts + the keyboard shortcuts guide.
-          Rendered last so they layer above every view and the player bar. */}
+      {/* Global overlays — feedback toasts, the keyboard shortcuts guide,
+          and the Ctrl+K command palette. Rendered last so they layer above
+          every view and the player bar. */}
       <Toaster />
       <HelpModal />
+      <CommandPalette />
     </div>
+  )
+}
+
+// Player-bar flyout panels, lifted here so they mount/unmount from the
+// single uiStore.openPanel source (shortcuts + palette + pill all agree).
+// Lives in its own tiny component so App doesn't re-render on panel toggles.
+import { LyricsPanel } from '@/components/Player/LyricsPanel'
+import { VisualizerPanel } from '@/components/Player/VisualizerPanel'
+import { QueuePanel } from '@/components/Player/QueuePanel'
+function PlayerBarPanels() {
+  const openPanel = useUiStore((s) => s.openPanel)
+  const panelAnchorX = useUiStore((s) => s.panelAnchorX)
+  const setOpenPanel = useUiStore((s) => s.setOpenPanel)
+
+  return (
+    <AnimatePresence>
+      {openPanel === 'lyrics' && <LyricsPanel key="lyrics" anchorX={panelAnchorX} onClose={() => setOpenPanel(null)} />}
+      {openPanel === 'visualizer' && <VisualizerPanel key="vis" anchorX={panelAnchorX} onClose={() => setOpenPanel(null)} />}
+      {openPanel === 'queue' && <QueuePanel key="queue" anchorX={panelAnchorX} onClose={() => setOpenPanel(null)} />}
+    </AnimatePresence>
   )
 }
 
@@ -198,7 +276,41 @@ export default function App() {
 function PageLoadingFallback() {
   return (
     <div className="h-full flex items-center justify-center">
-      <Loader2 size={20} className="animate-spin text-white/20" />
+      <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-faint)' }} />
+    </div>
+  )
+}
+
+// Boot screen — shown only while the persisted store rehydrates from
+// IndexedDB on cold start (a few ms, longer on cold caches). The brand
+// glyph breathes once or twice; on fast boots most users never see it.
+// Deliberately NOT a skeleton: skeletons imply known layout, and we don't
+// yet know which view the user will land in.
+function BootScreen() {
+  return (
+    <div className="h-full flex items-center justify-center" style={{ background: 'var(--surface-base)' }}>
+      <div className="flex flex-col items-center gap-4">
+        <div
+          className="w-12 h-12 rounded-2xl flex items-center justify-center animate-breathe"
+          style={{
+            background: 'var(--glass-2)',
+            border: '1px solid var(--border-strong)',
+            boxShadow: '0 0 48px var(--accent-whisper)',
+          }}
+        >
+          <div className="flex items-end gap-[2px] h-5">
+            {[2, 3, 4, 3, 2].map((h, i) => (
+              <div key={i} className="w-[2.5px] rounded-full" style={{ height: h * 5, background: 'var(--accent)', opacity: 0.85 }} />
+            ))}
+          </div>
+        </div>
+        <span
+          className="text-[10px] font-semibold uppercase"
+          style={{ color: 'var(--text-faint)', letterSpacing: '0.3em' }}
+        >
+          Aura
+        </span>
+      </div>
     </div>
   )
 }

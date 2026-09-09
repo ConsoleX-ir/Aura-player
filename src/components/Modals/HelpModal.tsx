@@ -34,12 +34,16 @@ const SECTIONS: { title: string; rows: ShortcutRow[] }[] = [
       { label: 'Add current song to Favorites',   keys: ['L'] },
       { label: 'Shuffle on / off',                keys: ['S'] },
       { label: 'Repeat: Off → All → One',         keys: ['R'] },
+      { label: 'Now Playing view',                keys: ['N'] },
+      { label: 'Queue panel',                     keys: ['Q'] },
+      { label: 'Mini-player',                     keys: ['P'] },
       { label: 'Open Lyrics & Visualizer panels', hint: 'play bar toggles' },
     ],
   },
   {
     title: 'General',
     rows: [
+      { label: 'Command palette — everything, one spot', keys: ['Ctrl', 'K'] },
       { label: 'Toggle this shortcuts guide',       keys: ['?'] },
       { label: 'Close panels & dialogs',          keys: ['Esc'] },
       { label: 'Play / pause, next & previous from hardware media keys', hint: 'system-wide' },
@@ -51,7 +55,7 @@ const SECTIONS: { title: string; rows: ShortcutRow[] }[] = [
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd
-      className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-md border border-[var(--color-border-mid)] bg-[var(--color-glass-mid)] text-[10.5px] font-semibold text-white/65 shadow-[0_1.5px_0_rgba(0,0,0,0.45)]"
+      className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-md border border-[var(--color-border-mid)] bg-[var(--color-glass-mid)] text-[10.5px] font-semibold text-ink-sub shadow-[0_1.5px_0_rgba(0,0,0,0.45)]"
       style={{ fontFamily: 'inherit' }}
     >
       {children}
@@ -120,14 +124,14 @@ export function HelpModal() {
                     <Keyboard size={18} style={{ color: 'var(--color-dynamic-1)' }} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-white/90" style={{ fontFamily: 'var(--font-display)' }}>
+                    <h2 className="text-lg font-semibold text-ink" style={{ fontFamily: 'var(--font-display)' }}>
                       Keyboard Shortcuts
                     </h2>
-                    <p className="text-xs text-white/35 mt-0.5">Drive Aura without leaving home row</p>
+                    <p className="text-xs text-ink-ter mt-0.5">Drive Aura without leaving home row</p>
                   </div>
                 </div>
-                <button onClick={() => setOpen(false)} className="p-2 rounded-lg hover:bg-white/5 transition shrink-0" aria-label="Close shortcuts guide">
-                  <X size={16} className="text-white/35" />
+                <button onClick={() => setOpen(false)} className="p-2 rounded-lg hover:bg-ink/5 transition shrink-0" aria-label="Close shortcuts guide">
+                  <X size={16} className="text-ink-ter" />
                 </button>
               </div>
 
@@ -135,20 +139,20 @@ export function HelpModal() {
               <div className="px-6 pb-6 space-y-5">
                 {SECTIONS.map((section) => (
                   <section key={section.title}>
-                    <h3 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/25 mb-2">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-faint mb-2">
                       {section.title}
                     </h3>
                     <div className="rounded-2xl border border-[var(--color-border)] overflow-hidden divide-y divide-[var(--color-border)] bg-[var(--color-glass)]">
                       {section.rows.map((row) => (
                         <div key={row.label} className="flex items-center gap-4 px-4 py-2.5">
-                          <p className="flex-1 text-[12.5px] text-white/60 leading-snug">{row.label}</p>
+                          <p className="flex-1 text-[12.5px] text-ink-sub leading-snug">{row.label}</p>
                           {(row.keys?.length ?? 0) > 0 && (
                             <div className="flex items-center gap-1 shrink-0">
                               {row.keys!.map((k) => <Kbd key={k}>{k}</Kbd>)}
                             </div>
                           )}
                           {(row.keys?.length ?? 0) === 0 && (
-                            <span className="text-[11px] text-white/25 shrink-0">{row.hint}</span>
+                            <span className="text-[11px] text-ink-faint shrink-0">{row.hint}</span>
                           )}
                         </div>
                       ))}
@@ -158,7 +162,7 @@ export function HelpModal() {
 
                 {/* Footer hint */}
                 <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)]">
-                  <p className="text-[11px] text-white/35 leading-relaxed">
+                  <p className="text-[11px] text-ink-ter leading-relaxed">
                     Press <Kbd>?</Kbd> to toggle this guide. Shortcut hints also appear in button tooltips across the app.
                   </p>
                 </div>

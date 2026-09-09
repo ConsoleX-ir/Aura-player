@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, X } from 'lucide-react'
 
@@ -46,7 +47,9 @@ export function ConfirmModal({
     onClose()
   }
 
-  return (
+  // v2.1.0: portal to <body> — same containing-block reasoning as
+  // PlaylistModal (backdrop-filter ancestors would trap the fixed overlay).
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -69,48 +72,70 @@ export function ConfirmModal({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-3xl border border-[var(--color-border-mid)] bg-[var(--color-base-2)] shadow-2xl"
+              /* v2.1.0 proportions: a confirm dialog is a short question —
+                 max-w-sm + tighter padding balances width against its natural
+                 height instead of reading as a stretched ribbon. */
+              className="w-full max-w-sm rounded-3xl"
+              style={{
+                background: 'var(--surface-raised)',
+                border: '1px solid var(--border-strong)',
+                boxShadow: 'var(--shadow-3)',
+              }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-5 pb-4" style={{ borderBottom: '1px solid var(--border-default)' }}>
                 <div className="flex items-center gap-3">
                   <div
                     className="w-11 h-11 rounded-xl flex items-center justify-center"
                     style={{
-                      background: destructive ? 'rgba(248,113,113,0.12)' : 'var(--color-glass-mid)',
+                      background: destructive ? 'var(--danger-veil)' : 'var(--glass-2)',
                     }}
                   >
                     <AlertTriangle
                       size={18}
-                      className={destructive ? 'text-red-400' : 'text-white/70'}
+                      style={{ color: destructive ? 'var(--danger)' : 'var(--text-secondary)' }}
                     />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-white/90" style={{ fontFamily: 'var(--font-display)' }}>
+                    <h2 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
                       {title}
                     </h2>
-                    <p className="text-xs text-white/35 mt-0.5 max-w-[280px]">{description}</p>
+                    <p className="text-xs mt-0.5 max-w-[240px]" style={{ color: 'var(--text-tertiary)' }}>{description}</p>
                   </div>
                 </div>
-                <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/5 transition shrink-0">
-                  <X size={16} className="text-white/35" />
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="p-2 rounded-lg icon-hover transition shrink-0"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <X size={16} />
                 </button>
               </div>
 
               {/* Footer */}
-              <div className="flex justify-end gap-3 p-6">
+              <div className="flex justify-end gap-3 px-5 pb-5 pt-2">
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] text-white/60 hover:text-white transition"
+                  className="px-4 py-2 rounded-xl transition-all hover-surface"
+                  style={{ border: '1px solid var(--border-default)', background: 'var(--glass-1)', color: 'var(--text-secondary)', transitionDuration: 'var(--dur-fast)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
                 >
                   {cancelLabel}
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className="px-5 py-2 rounded-xl text-white transition"
+                  /* v2.1.0 hover: the destructive/primary action now responds
+                     (brightness + press) instead of sitting flat under the mouse */
+                  className="px-5 py-2 rounded-xl pressable transition-all"
                   style={{
-                    background: destructive ? '#ef4444' : 'var(--color-dynamic-1)',
+                    background: destructive ? 'var(--danger)' : 'var(--accent)',
+                    color: 'var(--text-on-accent)',
+                    transitionDuration: 'var(--dur-fast)',
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.filter = 'brightness(1.12)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.filter = '' }}
                 >
                   {confirmLabel}
                 </button>
@@ -119,6 +144,7 @@ export function ConfirmModal({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

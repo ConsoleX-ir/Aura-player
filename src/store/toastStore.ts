@@ -20,6 +20,8 @@ export type ToastKind =
   | 'sleep-timer'
   | 'now-playing'
   | 'metadata-updated'
+  | 'library-synced'   // Wave 4 folder watcher: silent scans stay silent, real changes speak
+  | 'rewind-saved'     // Rewind share card written to disk
 
 export interface ToastItem {
   id: number

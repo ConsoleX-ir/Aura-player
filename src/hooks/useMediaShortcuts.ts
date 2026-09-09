@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { usePlayerStore } from "@/store/playerStore";
+import { useUiStore } from "@/store/uiStore";
 import { toast } from "@/store/toastStore";
 
 // Only currentSong is subscribed to reactively — it's the one thing that
@@ -16,10 +17,28 @@ import { toast } from "@/store/toastStore";
 export function useMediaShortcuts() {
   const currentSongId = usePlayerStore((s) => s.currentSong?.id);
 
+  // ── Global-scope shortcuts (work with no song loaded) ────────────────────
+  // Ctrl+K — the command palette. Deliberately allowed even while typing:
+  // it's a chord, not a stray keypress, and being able to summon the palette
+  // from inside any input is what makes it a real "do anything" surface.
+  // Everything else in this hook stays text-input-safe.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyK") {
+        e.preventDefault();
+        useUiStore.getState().toggleCommand();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   useEffect(() => {
     if (!currentSongId) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      (window as any).__mediaKeys = ((window as any).__mediaKeys || 0) + 1;
+      if (e.code === "KeyQ") (window as any).__qHits = ((window as any).__qHits || 0) + 1;
       const target = e.target as HTMLElement;
 
       if (
@@ -27,6 +46,7 @@ export function useMediaShortcuts() {
         target.tagName === "TEXTAREA" ||
         target.isContentEditable
       ) {
+        (window as any).__inputBlocked = ((window as any).__inputBlocked || 0) + 1;
         return;
       }
 
@@ -126,6 +146,28 @@ export function useMediaShortcuts() {
             title: muted ? "Muted" : "Sound Restored",
             subtitle: muted ? undefined : `${Math.round(usePlayerStore.getState().volume * 100)}% volume`,
           });
+          break;
+        }
+
+        // 🧭 View navigation (Wave 4 completion)
+        case "KeyN": {
+          // Toggle Now Playing — the view the pill's song info opens too.
+          const view = usePlayerStore.getState().activeView;
+          usePlayerStore.getState().setActiveView(view === "nowplaying" ? "library" : "nowplaying");
+          break;
+        }
+
+        case "KeyQ": {
+          // Toggle the Queue flyout — same code path as the pill's Queue
+          // button (panel state lives in uiStore so every entry point agrees).
+          useUiStore.getState().togglePanel("queue");
+          break;
+        }
+
+        case "KeyP": {
+          // Mini-player: the pill steps aside, a compact widget takes over.
+          const ui = useUiStore.getState();
+          ui.setMiniPlayer(!ui.miniPlayer);
           break;
         }
       }

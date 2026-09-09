@@ -107,28 +107,28 @@ export function AddSongsModal({ open, playlist, onClose }: AddSongsModalProps) {
                     <ListPlus size={18} style={{ color: 'var(--color-dynamic-1)' }} />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-lg font-semibold text-white/90 truncate" style={{ fontFamily: 'var(--font-display)' }}>
+                    <h2 className="text-lg font-semibold text-ink truncate" style={{ fontFamily: 'var(--font-display)' }}>
                       Add Songs
                     </h2>
-                    <p className="text-xs text-white/35 mt-0.5 truncate">to "{playlist.name}"</p>
+                    <p className="text-xs text-ink-ter mt-0.5 truncate">to "{playlist.name}"</p>
                   </div>
                 </div>
-                <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/5 transition shrink-0">
-                  <X size={16} className="text-white/35" />
+                <button onClick={onClose} className="p-2 rounded-lg hover:bg-ink/5 transition shrink-0">
+                  <X size={16} className="text-ink-ter" />
                 </button>
               </div>
 
               {/* Search */}
               <div className="px-6 pt-4 pb-3 shrink-0">
                 <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
                   <input
                     ref={searchRef}
                     type="text"
                     placeholder="Search your library..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-sm text-white/80 placeholder:text-white/20 outline-none focus:border-[var(--color-dynamic-1)] transition-all"
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)] text-sm text-ink placeholder:text-ink-faint outline-none focus:border-[var(--color-dynamic-1)] transition-all"
                   />
                 </div>
               </div>
@@ -137,8 +137,8 @@ export function AddSongsModal({ open, playlist, onClose }: AddSongsModalProps) {
               <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
                 {results.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40 gap-2">
-                    <Music2 size={22} className="text-white/10" />
-                    <p className="text-xs text-white/25">
+                    <Music2 size={22} className="text-ink-faint" />
+                    <p className="text-xs text-ink-faint">
                       {library.length === 0 ? 'Your library is empty' : `No results for "${search}"`}
                     </p>
                   </div>
@@ -159,20 +159,20 @@ export function AddSongsModal({ open, playlist, onClose }: AddSongsModalProps) {
 
               {/* Footer */}
               <div className="flex items-center justify-between gap-3 p-6 pt-4 border-t border-[var(--color-border)] shrink-0">
-                <p className="text-xs text-white/30 tabular-nums">
+                <p className="text-xs text-ink-ter tabular-nums">
                   {selected.size} {selected.size === 1 ? 'song' : 'songs'} selected
                 </p>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={onClose}
-                    className="px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] text-white/60 hover:text-white transition"
+                    className="px-4 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] text-ink-sub hover:text-ink transition"
                   >
                     Cancel
                   </button>
                   <button
                     disabled={selected.size === 0}
                     onClick={handleAdd}
-                    className="px-5 py-2 rounded-xl text-white disabled:opacity-40 transition"
+                    className="px-5 py-2 rounded-xl text-ink disabled:opacity-40 transition"
                     style={{ background: 'var(--color-dynamic-1)' }}
                   >
                     Add {selected.size > 0 ? selected.size : ''}
@@ -203,7 +203,7 @@ function SongPickRow({
       onClick={onToggle}
       disabled={alreadyInPlaylist}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors duration-100 ${
-        alreadyInPlaylist ? 'opacity-30 cursor-not-allowed' : 'hover:bg-white/[0.03]'
+        alreadyInPlaylist ? 'opacity-30 cursor-not-allowed' : 'hover:bg-ink/300'
       }`}
     >
       {/* Checkbox */}
@@ -225,21 +225,21 @@ function SongPickRow({
           <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-[var(--color-glass-mid)] flex items-center justify-center">
-            <Music2 size={12} className="text-white/20" />
+            <Music2 size={12} className="text-ink-faint" />
           </div>
         )}
       </div>
 
       {/* Title / artist */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white/80 truncate">{song.title}</p>
-        <p className="text-xs text-white/30 truncate">{song.artist}</p>
+        <p className="text-sm text-ink truncate">{song.title}</p>
+        <p className="text-xs text-ink-ter truncate">{song.artist}</p>
       </div>
 
       {alreadyInPlaylist ? (
-        <span className="text-[10px] text-white/20 shrink-0">Added</span>
+        <span className="text-[10px] text-ink-faint shrink-0">Added</span>
       ) : (
-        <span className="text-xs text-white/20 tabular-nums shrink-0">{formatTime(song.duration)}</span>
+        <span className="text-xs text-ink-faint tabular-nums shrink-0">{formatTime(song.duration)}</span>
       )}
     </button>
   )

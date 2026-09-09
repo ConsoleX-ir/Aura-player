@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
-import { Play, Music2 } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import type { Song } from '@/types'
+import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
 
 interface AlbumCardProps {
   album: string; artist: string; songs: Song[]; coverArt: string | null; index: number
@@ -18,39 +19,53 @@ export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = t
 
   const content = (
     <>
-      <div className="relative aspect-square overflow-hidden bg-[var(--color-glass)]">
+      <div className="relative aspect-square overflow-hidden" style={{ background: 'var(--glass-1)' }}>
         {coverArt
           ? <img src={coverArt} alt={album} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600" loading="lazy" />
-          : <div className="w-full h-full flex items-center justify-center">
-              <Music2 size={36} className="text-white/10" />
-            </div>
+          // Missing artwork → the album's own generated aura (stable per
+          // album key), not a dead gray box.
+          : <ArtworkPlaceholder seed={`${album}|||${artist}`} size="lg" />
         }
 
         {/* Overlay */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <div
+          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.40)' }}
+        >
           <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}
-            className="w-11 h-11 rounded-full bg-white/15 border border-white/20 backdrop-blur-sm flex items-center justify-center">
-            <Play size={16} className="text-white ml-0.5" fill="white" />
+            className="w-11 h-11 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--glass-3)', border: '1px solid var(--border-emphasis)', backdropFilter: 'blur(4px)' }}
+          >
+            <Play size={16} style={{ color: 'var(--text-on-accent)' }} className="ml-0.5" fill="currentColor" />
           </motion.div>
         </div>
 
-        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white/60 text-[10px]">
+        <div
+          className="absolute bottom-2 right-2 px-2 py-0.5 rounded-pill text-[10px]"
+          style={{ background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(4px)', color: 'var(--text-secondary)' }}
+        >
           {songs.length} {songs.length === 1 ? 'track' : 'tracks'}
         </div>
       </div>
 
       <div className="p-3">
-        <p className="text-sm font-medium text-white/80 truncate">{album}</p>
-        <p className="text-xs text-white/30 truncate mt-0.5">{artist}</p>
+        <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{album}</p>
+        <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+          <UnknownValue>{artist}</UnknownValue>
+        </p>
       </div>
     </>
   )
 
-  const className = "content-auto card-3d group cursor-pointer rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-base-3)]"
+  const className = "content-auto card-3d group cursor-pointer rounded-2xl overflow-hidden"
+  const cardStyle: React.CSSProperties = {
+    background: 'var(--surface-card)',
+    border: '1px solid var(--border-subtle)',
+  }
 
   if (!animateIn) {
     return (
-      <div className={className} onClick={() => playSong(songs[0], songs)}>
+      <div className={className} style={cardStyle} onClick={() => playSong(songs[0], songs)}>
         {content}
       </div>
     )
@@ -62,6 +77,7 @@ export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = t
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.04, 0.4), type: 'spring', stiffness: 300, damping: 28 }}
       className={className}
+      style={cardStyle}
       onClick={() => playSong(songs[0], songs)}
     >
       {content}

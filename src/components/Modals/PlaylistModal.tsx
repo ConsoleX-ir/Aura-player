@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ListMusic, X } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
@@ -92,7 +93,12 @@ useEffect(() => {
     onClose()
   }
 
-  return (
+  // v2.1.0: portal to <body>. The floating sidebar card carries a
+  // backdrop-filter, which makes it the CSS containing block for every
+  // fixed-position descendant — without the portal, this modal (mounted
+  // inside the Sidebar) would be clipped into the card instead of covering
+  // the whole window.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -121,9 +127,11 @@ useEffect(() => {
           >
             <div
               onClick={(e) => e.stopPropagation()}
+              /* v2.1.0 proportions: a one-field form doesn't need a 448px
+                 ribbon — max-w-sm + trimmed padding balances the card. */
               className="
               w-full
-              max-w-md
+              max-w-sm
               rounded-3xl
               border
               border-[var(--color-border-mid)]
@@ -133,7 +141,7 @@ useEffect(() => {
             >
               {/* Header */}
 
-              <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-5 pb-4 border-b border-[var(--color-border)]">
                 <div className="flex items-center gap-3">
                   <div
                     className="w-11 h-11 rounded-xl bg-[var(--color-glass-mid)] flex items-center justify-center"
@@ -147,7 +155,7 @@ useEffect(() => {
 
                   <div>
                     <h2
-                      className="text-lg font-semibold text-white/90"
+                      className="text-lg font-semibold text-ink"
                       style={{
                         fontFamily: 'var(--font-display)',
                       }}
@@ -157,7 +165,7 @@ useEffect(() => {
                         : 'Rename Playlist'}
                     </h2>
 
-                    <p className="text-xs text-white/35 mt-0.5">
+                    <p className="text-xs text-ink-ter mt-0.5">
                       {mode === 'create'
                         ? 'Create a new playlist.'
                         : 'Choose a new playlist name.'}
@@ -167,11 +175,11 @@ useEffect(() => {
 
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-white/5 transition"
+                  className="p-2 rounded-lg hover:bg-ink/5 transition"
                 >
                   <X
                     size={16}
-                    className="text-white/35"
+                    className="text-ink-ter"
                   />
                 </button>
               </div>
@@ -179,7 +187,7 @@ useEffect(() => {
               {/* Body */}
 
               <div className="p-6">
-                <label className="block text-xs text-white/35 mb-2">
+                <label className="block text-xs text-ink-ter mb-2">
                   Playlist Name
                 </label>
 
@@ -199,19 +207,19 @@ useEffect(() => {
                   bg-[var(--color-glass)]
                   px-4
                   py-3
-                  text-white/90
-                  placeholder:text-white/25
+                  text-ink
+                  placeholder:text-ink-faint
                   outline-none
                   transition
-                  ${error ? 'border-red-500/50 focus:border-red-500/70' : 'border-[var(--color-border)] focus:border-[var(--color-dynamic-1)]'}
+                  ${error ? 'border-[var(--danger-border)] focus:border-[var(--danger)]' : 'border-[var(--color-border)] focus:border-[var(--color-dynamic-1)]'}
                 `}
                 />
                 {error ? (
-                  <p className="text-[11px] text-red-400 mt-1.5">
+                  <p className="text-[11px] mt-1.5" style={{ color: 'var(--danger)' }}>
                     {error}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-white/20 mt-1.5 text-right tabular-nums">
+                  <p className="text-[11px] text-ink-faint mt-1.5 text-right tabular-nums">
                     {name.length}/60
                   </p>
                 )}
@@ -219,7 +227,7 @@ useEffect(() => {
 
               {/* Footer */}
 
-              <div className="flex justify-end gap-3 px-6 pb-6">
+              <div className="flex justify-end gap-3 px-5 pb-5 pt-1">
                 <button
                   onClick={onClose}
                   className="
@@ -229,8 +237,9 @@ useEffect(() => {
                   border
                   border-[var(--color-border)]
                   bg-[var(--color-glass)]
-                  text-white/60
-                  hover:text-white
+                  text-ink-sub
+                  hover:text-ink
+                  hover-surface
                   transition
                 "
                 >
@@ -244,14 +253,17 @@ useEffect(() => {
                   px-5
                   py-2
                   rounded-xl
-                  text-white
+                  text-ink
                   disabled:opacity-40
                   transition
+                  pressable
                 "
                   style={{
                     background:
                       'var(--color-dynamic-1)',
                   }}
+                  onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.filter = 'brightness(1.12)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.filter = '' }}
                 >
                   {mode === 'create'
                     ? 'Create'
@@ -262,6 +274,7 @@ useEffect(() => {
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

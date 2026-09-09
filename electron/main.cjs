@@ -5,6 +5,19 @@ const fs = require('fs')
 const isDev = process.env.NODE_ENV === 'development'
 let mainWindow
 
+// Windows System Media Transport Controls (v2.1.0) — the native media flyout
+// (Win+K / volume popup / lock screen) that shows track title, artist and
+// artwork with working Play/Pause/Previous/Next buttons, exactly like Spotify
+// or Windows Media Player. Chromium implements this through its
+// MediaSessionService, but Electron does NOT enable that service by default
+// on Windows — without this switch the renderer's navigator.mediaSession API
+// runs in "silent" mode (handlers fire, but the OS never hears about Aura).
+// Must be appended before app ready. Harmless no-op where unsupported.
+// NOTE: Aura's own globalShortcut hooks for the physical media keys stay
+// registered — they intercept the keys first; SMTC is the OS-facing surface
+// (flyout, lock screen, Bluetooth/headset buttons routed by Windows).
+app.commandLine.appendSwitch('enable-features', 'MediaSessionService')
+
 // Windows groups taskbar entries, notifications, and jump lists by this ID —
 // without it Windows may show the app under its default Electron identity
 // instead of "Aura Player". Also referenced by the NSIS installer's
@@ -227,8 +240,29 @@ app.whenReady().then(() => {
       if (rangeHeader) {
         const match = rangeHeader.match(/bytes=(\d*)-(\d*)/)
         if (match) {
-          const start = match[1] ? parseInt(match[1], 10) : 0
-          const end   = match[2] ? parseInt(match[2], 10) : size - 1
+          let start, end
+          if (match[1] === '' && match[2] !== '') {
+            // Suffix form "bytes=-N": the FINAL N bytes of the file
+            // (v1.x misread this as "from byte 0", serving the wrong range).
+            const suffixLen = parseInt(match[2], 10)
+            start = Math.max(0, size - suffixLen)
+            end = size - 1
+          } else {
+            start = match[1] ? parseInt(match[1], 10) : 0
+            end = match[2] ? parseInt(match[2], 10) : size - 1
+            // Clamp open-ended client ranges ("bytes=0-999999999") to the
+            // actual file end — v1.x advertised a Content-Length larger than
+            // the bytes it actually streamed, which can hang some players.
+            end = Math.min(end, size - 1)
+          }
+
+          if (start > end || start >= size) {
+            return new Response('Requested range not satisfiable', {
+              status: 416,
+              headers: { ...corsHeaders, 'Content-Range': `bytes */${size}` },
+            })
+          }
+
           const chunkSize = end - start + 1
 
           const stream = fs.createReadStream(filePath, { start, end })
@@ -339,8 +373,77 @@ ipcMain.handle('fs:writeTextFile', async (_e, filePath, content) => {
   }
 })
 
-// Opens Explorer (or Finder/the file manager on other platforms) with the
-// given file already selected — standard "Show in Folder" behavior.
+// Rewind share-card export: a native save dialog, then the renderer's canvas
+// PNG (arriving as a base64 data URL) decoded to real bytes on disk. Base64
+// in / binary out keeps the context bridge happy — only serializable data
+// crosses it.
+ipcMain.handle('dialog:saveImageFile', async (_e, defaultName, dataUrl) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Image',
+    defaultPath: defaultName,
+    filters: [{ name: 'PNG Image', extensions: ['png'] }],
+  })
+  if (result.canceled || !result.filePath) return null
+  try {
+    const m = /^data:image\/(?:png);base64,(.+)$/.exec(String(dataUrl || ''))
+    if (!m) return null
+    fs.writeFileSync(result.filePath, Buffer.from(m[1], 'base64'))
+    return result.filePath
+  } catch (e) {
+    console.error('Failed to write image:', result.filePath, e.message)
+    return null
+  }
+})
+
+// ── Folder watching (Wave 4) ─────────────────────────────────────────────────
+// Library folders are watched with fs.watch (recursive where the platform
+// supports it — Windows always does) and change events are DEBOUNCED per
+// folder before they reach the renderer: editors and sync clients often
+// produce dozens of events for one save, and each renderer response is a
+// library reconciliation, so collapsing the burst is the whole game.
+// Zero polling: while nothing changes, this costs nothing at all.
+const watchers = new Map() // folder → fs.FSWatcher
+const pendingChanges = new Map() // folder → NodeJS.Timeout
+
+function unwatchAll() {
+  for (const [, w] of watchers) { try { w.close() } catch { /* already gone */ } }
+  watchers.clear()
+  for (const [, t] of pendingChanges) clearTimeout(t)
+  pendingChanges.clear()
+}
+
+ipcMain.handle('fs:watchFolders', async (_e, folders) => {
+  // Always start from a clean slate — the renderer sends the FULL desired
+  // set every time (imports changed, toggle flipped, folder removed), which
+  // makes add/remove bookkeeping unnecessary and drift impossible.
+  unwatchAll()
+  let watched = 0
+  for (const folder of folders || []) {
+    try {
+      const w = fs.watch(folder, { recursive: true }, (_event, filename) => {
+        // Ignore events for entries that disappeared mid-burst — the
+        // follow-up reconciliation re-stats everything anyway.
+        const existing = pendingChanges.get(folder)
+        if (existing) clearTimeout(existing)
+        pendingChanges.set(folder, setTimeout(() => {
+          pendingChanges.delete(folder)
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('watch:changed', { folder, at: Date.now() })
+          }
+        }, 1200))
+        void filename
+      })
+      w.on('error', () => { /* folder deleted/unmounted mid-watch — ignore */ })
+      watchers.set(folder, w)
+      watched++
+    } catch {
+      // Folder vanished or unsupported recursion — Folder Sync's own
+      // "gone completely empty" cleanup will stop tracking it later.
+    }
+  }
+  return watched
+})
+
 ipcMain.on('shell:showItemInFolder', (_e, filePath) => {
   shell.showItemInFolder(filePath)
 })
@@ -348,22 +451,34 @@ ipcMain.on('shell:showItemInFolder', (_e, filePath) => {
 // Shared by fs:scanFolder and fs:resolveDroppedPaths — recursively walks a
 // directory for audio files, stat'ing each for mtimeMs (used by Folder Sync
 // to detect changes cheaply, without re-parsing every file's tags).
-function scanFolderForAudio(folderPath) {
+//
+// v2: fully async (fs.promises) — the v1.x version walked with
+// readdirSync/statSync, which blocked the MAIN process for the entire scan.
+// On a multi-thousand-file network/USB folder that froze the whole window
+// (title bar, IPC, every pending protocol response) until the walk ended.
+// Same results, same shape, without the freeze.
+async function scanFolderForAudio(folderPath) {
   const results = []
-  function scan(dir) {
+
+  async function scan(dir) {
+    let entries
     try {
-      for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, item.name)
-        if (item.isDirectory()) scan(full)
-        else if (item.isFile() && AUDIO_EXTS.includes(path.extname(item.name).toLowerCase())) {
-          let mtimeMs = 0
-          try { mtimeMs = fs.statSync(full).mtimeMs } catch { /* file vanished mid-scan */ }
-          results.push({ path: full, name: item.name, mtimeMs })
-        }
+      entries = await fs.promises.readdir(dir, { withFileTypes: true })
+    } catch { return /* skip unreadable dirs */ }
+
+    for (const item of entries) {
+      const full = path.join(dir, item.name)
+      if (item.isDirectory()) {
+        await scan(full)
+      } else if (item.isFile() && AUDIO_EXTS.includes(path.extname(item.name).toLowerCase())) {
+        let mtimeMs = 0
+        try { mtimeMs = (await fs.promises.stat(full)).mtimeMs } catch { /* file vanished mid-scan */ }
+        results.push({ path: full, name: item.name, mtimeMs })
       }
-    } catch { /* skip unreadable dirs */ }
+    }
   }
-  scan(folderPath)
+
+  await scan(folderPath)
   return results
 }
 
@@ -486,7 +601,7 @@ ipcMain.handle('fs:fileStats', async (_e, filePath) => {
 // failing the whole lookup. Only when EVERY source errors does the renderer
 // see a network error.
 
-const FIND_USER_AGENT = 'AuraPlayer/1.11.6 (desktop music player)'
+const FIND_USER_AGENT = 'AuraPlayer/2.1.0 (desktop music player)'
 
 // shared fetch with timeout — returns parsed JSON or throws
 async function fetchJson(url, options = {}, timeoutMs = 9000) {
