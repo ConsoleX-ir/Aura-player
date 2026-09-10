@@ -33,6 +33,30 @@ export interface IDBStateStorage {
   removeItem: (name: string) => Promise<void>
 }
 
+// ── Pre-hydration write gate (Wave 0 hardening) ───────────────────────────
+// zustand v5's persist middleware does NOT gate its write-back on
+// hydration: any set() that lands before the async IndexedDB read resolves
+// makes the middleware serialize the INCOMPLETE (default) state and
+// schedule its write. With this adapter's 800ms debounce, that stale
+// snapshot would flush AFTER hydration finished — overwriting the
+// freshly-loaded library with a half-empty one (the classic startup
+// overwrite, one future boot-time set() away). The Wave 0 audit verified
+// no current code writes pre-hydration; this gate makes that guarantee
+// structural instead of wishful. Pre-gate snapshots are held, then
+// DISCARDED when hydration lands — hydration overwrites in-memory state
+// anyway, so they are stale by definition. A 3s failsafe opens the gate
+// regardless, so a wedged hydration can never wedge persistence with it.
+let gateOpen = false
+const gatedSnapshots = new Map<string, string>()
+let gateFailsafeTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Called once the persist middleware has finished rehydrating (see useStoreHydration). */
+export function markHydrationComplete(): void {
+  gateOpen = true
+  gatedSnapshots.clear()
+  if (gateFailsafeTimer !== null) { clearTimeout(gateFailsafeTimer); gateFailsafeTimer = null }
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
@@ -104,6 +128,19 @@ export const idbStorage: IDBStateStorage = {
   },
 
   setItem(name, value) {
+    // Pre-hydration: hold the snapshot (see gate note above) — it describes
+    // default/incomplete state and must never reach the disk snapshot that
+    // hydration is about to establish.
+    if (!gateOpen) {
+      if (gateFailsafeTimer === null) {
+        gateFailsafeTimer = setTimeout(() => {
+          gateOpen = true
+          gatedSnapshots.clear()
+        }, 3000)
+      }
+      gatedSnapshots.set(name, value)
+      return Promise.resolve()
+    }
     // Coalesce bursts: replace any pending value and restart the timer.
     const existing = pending.get(name)
     if (existing) clearTimeout(existing.timer)
@@ -147,14 +184,32 @@ export function whenLegacyMigrationComplete(): Promise<void> {
 // pending key the moment the page starts going away (tab/app close, and
 // reloads) — same best-effort contract as the engine's beforeunload scrobble
 // flush. Fires at most once per pending value; no-op when nothing is pending.
-function flushAllPendingNow(): void {
+
+/**
+ * Flush every pending key NOW and resolve once they have all landed (or
+ * failed). The coordinated-shutdown path (Electron holds the window open
+ * until the renderer acks) awaits this — that's what closes the durability
+ * gap that made "change a setting, quit within 800ms, lose the setting"
+ * possible with the debounce alone. Wave 0, alongside the immediate-write
+ * pattern scrobbleStore already used.
+ */
+export function flushAllPending(): Promise<void> {
+  const jobs: Promise<void>[] = []
   for (const name of Array.from(pending.keys())) {
-    flushKey(name).catch(() => {
-      // Same policy as the debounced path: drop the failed value; reads
-      // fall back to the last successful snapshot.
-      pending.delete(name)
-    })
+    jobs.push(
+      flushKey(name).catch(() => {
+        // Same policy as the debounced path: drop the failed value; reads
+        // fall back to the last successful snapshot.
+        pending.delete(name)
+      })
+    )
   }
+  return Promise.all(jobs).then(() => {})
+}
+
+// Best-effort event variants (page going away — no ack channel available).
+function flushAllPendingNow(): void {
+  void flushAllPending()
 }
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {

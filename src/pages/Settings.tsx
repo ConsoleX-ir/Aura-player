@@ -262,7 +262,7 @@ export function Settings() {
                   className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums"
                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
                 >
-                  v2.1.0
+                  v2.1.1
                 </span>
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>

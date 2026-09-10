@@ -39,6 +39,13 @@ export async function importFiles(
 
   if (candidates.length === 0) return 0
 
+  // Explicit import intent: anything the user deliberately adds through a
+  // picker / drag-drop / file association is a conscious re-import, so
+  // clear any tombstone those files carry (Wave 0). Folder Sync never calls
+  // importFiles — its own inline path is the ONLY way to re-add files —
+  // so tombstone clearing can't be bypassed by a mere library scan.
+  usePlayerStore.getState().restoreImportedPaths(candidates.map((c) => c.path))
+
   onProgress?.({ done: 0, total: candidates.length })
   const unsubscribe = window.electronAPI.onMetadataProgress((done, total) => {
     onProgress?.({ done, total })
@@ -101,6 +108,7 @@ export async function importDroppedPaths(paths: string[], onProgress?: ProgressC
  *   • library entries under this folder no longer on disk → removed
  *   • files whose mtime changed since last import/sync    → re-parsed, updated
  *   • everything else                                     → left untouched
+ *   • paths the user DELETED from the library (tombstones) → never re-added
  *
  * The mtime check keeps this fast on large libraries: a folder scan is a
  * directory walk + stat per file (cheap), so re-syncing an unchanged folder
@@ -116,6 +124,24 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
   for (const folder of importedFolders) {
     const scanned = await window.electronAPI.scanFolder(folder)
     const scannedByPath = new Map(scanned.map((f) => [f.path, f]))
+
+    // Tombstone maintenance (Wave 0): paths under this folder the user
+    // removed from the library while the file still exists must NOT come
+    // back below; and once a tombstoned file disappears from disk, the
+    // tombstone has done its job — drop it so a future file re-created at
+    // the same path is treated as fresh import material.
+    const tombstones = usePlayerStore.getState().removedPaths
+    if (tombstones.length > 0) {
+      const staleTombstones = tombstones.filter(
+        (p) => p.startsWith(folder) && !scannedByPath.has(p)
+      )
+      if (staleTombstones.length > 0) {
+        usePlayerStore.getState().restoreImportedPaths(staleTombstones)
+      }
+    }
+    const tombstonedPaths = new Set(
+      usePlayerStore.getState().removedPaths
+    )
 
     const library = usePlayerStore.getState().library
     const librarySongsInFolder = library.filter((s) => s.path.startsWith(folder))
@@ -136,8 +162,12 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
       .map((s) => s.id)
 
     // New or changed: not in the library at all, or mtime moved on.
+    // Tombstoned paths (user-deleted from the library) are skipped — that
+    // is the whole point of the tombstone: sync reconciles the library
+    // with disk, but it must never override an explicit removal decision.
     const toParse: { path: string; id: string; mtimeMs: number; isUpdate: boolean }[] = []
     for (const file of scanned) {
+      if (tombstonedPaths.has(file.path)) continue
       const existing = existingByPath.get(file.path)
       if (!existing) {
         toParse.push({ path: file.path, id: hashStr(file.path), mtimeMs: file.mtimeMs, isUpdate: false })

@@ -13,6 +13,7 @@ import { useSleepTimer } from '@/hooks/useSleepTimer'
 import { useMediaKeys } from '@/hooks/useMediaKeys'
 import { useDragDropImport } from '@/hooks/useDragDropImport'
 import { useStoreHydration } from '@/hooks/useStoreHydration'
+import { flushAllPending } from '@/lib/idbStorage'
 import { Toaster } from '@/components/Toast/Toaster'
 import { HelpModal } from '@/components/Modals/HelpModal'
 import { CommandPalette } from '@/components/CommandPalette'
@@ -89,6 +90,20 @@ export default function App() {
   // async since Wave 1) has rehydrated — otherwise the Library flashes its
   // empty state for a frame on every cold start.
   const hydrated = useStoreHydration()
+
+  // ── Coordinated shutdown (Wave 0) ────────────────────────────────────────
+  // Main holds the window open once and asks us to flush; answer by writing
+  // every pending idbStorage key and acking. The scrobble pipeline writes
+  // immediately (no debounce), so it needs no participation here — and the
+  // engine's beforeunload flush still runs on the real close, as before.
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.onShutdown || !api?.notifyShutdownComplete) return
+    return api.onShutdown(async () => {
+      try { await flushAllPending() } catch { /* fail-soft — timeout path closes anyway */ }
+      api.notifyShutdownComplete()
+    })
+  }, [])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-performance', performanceMode ? 'on' : 'off')

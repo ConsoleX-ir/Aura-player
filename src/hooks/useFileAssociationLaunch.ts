@@ -26,6 +26,9 @@ export function useFileAssociationLaunch() {
       try {
         const [meta] = await window.electronAPI.parseMetadataBatch([filePath])
         const song: Song = { id, path: filePath, ...meta }
+        // Explicit user action (double-clicked the file in Explorer): lift
+        // any tombstone from a previous removal first (Wave 0), then import.
+        usePlayerStore.getState().restoreImportedPaths([filePath])
         addToLibrary([song])
         // addToLibrary updates the store synchronously (Zustand's set() is
         // not async), so re-reading it here already includes `song` — no

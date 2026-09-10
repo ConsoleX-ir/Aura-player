@@ -5,6 +5,15 @@ const fs = require('fs')
 const isDev = process.env.NODE_ENV === 'development'
 let mainWindow
 
+// Test/CI isolation hook (Wave 0): when AURA_USER_DATA_DIR is set, the whole
+// profile — IndexedDB state, covers cache — lives in that directory instead
+// of the OS default. Automated tests use this to run real restart cycles
+// (close → relaunch → verify persistence) against a throwaway profile. No
+// effect whatsoever in normal use; must run before anything reads userData.
+if (process.env.AURA_USER_DATA_DIR) {
+  app.setPath('userData', process.env.AURA_USER_DATA_DIR)
+}
+
 // Windows System Media Transport Controls (v2.1.0) — the native media flyout
 // (Win+K / volume popup / lock screen) that shows track title, artist and
 // artwork with working Play/Pause/Previous/Next buttons, exactly like Spotify
@@ -163,6 +172,41 @@ function createWindow() {
   })
 
   mainWindow.once('ready-to-show', () => mainWindow.show())
+
+  // ── Coordinated shutdown (Wave 0 — persistence stability) ────────────────
+  // The renderer persists state through a debounced IndexedDB pipeline
+  // (800ms coalescing window). Closing the window straight away could tear
+  // the process down mid-debounce and silently lose whatever the user
+  // changed last — the classic "I changed a setting, quit, and it forgot".
+  // So the FIRST close attempt is held: the renderer flushes every pending
+  // write and acks, and only then does the close proceed. Bounded by a
+  // hard 1.5s timeout so a hung/crashed renderer can never block quitting.
+  let shutdownFlushDone = false
+  let shutdownFallbackTimer = null
+  mainWindow.on('close', (event) => {
+    if (shutdownFlushDone) return // flush landed (or timed out) — proceed
+    const wc = mainWindow.webContents
+    if (wc.isDestroyed() || wc.isCrashed()) return // can't ask a dead renderer
+    event.preventDefault()
+    wc.send('app:shutdown')
+    if (shutdownFallbackTimer === null) {
+      shutdownFallbackTimer = setTimeout(() => {
+        shutdownFlushDone = true
+        if (!mainWindow.isDestroyed()) mainWindow.close()
+      }, 1500)
+    }
+  })
+  // The ack arrives over the renderer's own webContents, so this listener
+  // lives and dies with the window — no global listener bookkeeping needed.
+  mainWindow.webContents.on('ipc-message', (_event, channel) => {
+    if (channel !== 'app:shutdown-complete') return
+    shutdownFlushDone = true
+    if (shutdownFallbackTimer !== null) { clearTimeout(shutdownFallbackTimer); shutdownFallbackTimer = null }
+    if (!mainWindow.isDestroyed()) mainWindow.close()
+  })
+  mainWindow.on('closed', () => {
+    if (shutdownFallbackTimer !== null) { clearTimeout(shutdownFallbackTimer); shutdownFallbackTimer = null }
+  })
 
   // Delivers the file Aura was launched with (double-clicked from Explorer)
   // once the renderer has actually loaded and can handle it — sending it any
@@ -601,7 +645,7 @@ ipcMain.handle('fs:fileStats', async (_e, filePath) => {
 // failing the whole lookup. Only when EVERY source errors does the renderer
 // see a network error.
 
-const FIND_USER_AGENT = 'AuraPlayer/2.1.0 (desktop music player)'
+const FIND_USER_AGENT = 'AuraPlayer/2.1.1 (desktop music player)'
 
 // shared fetch with timeout — returns parsed JSON or throws
 async function fetchJson(url, options = {}, timeoutMs = 9000) {

@@ -208,6 +208,24 @@ export function initPlayback() {
   usePlayerStore.subscribe((state, prev) => {
     if (!audio || !ctx) return
 
+    // ── Song removed from the library / library cleared while playing ──
+    // removeFromLibrary + clearLibrary null currentSong; without this
+    // branch the "song changed" and "play/pause" handlers below both skip
+    // (they both require a non-null currentSong) and the AUDIO KEPT
+    // PLAYING under an empty UI — a state desync found by the Wave 0
+    // persistence/stability audit. Flush the dying session first (the
+    // guard inside still matches currentSongId), then silence the element.
+    if (!state.currentSong && prev.currentSong) {
+      flushListenSession(prev.currentSong, false)
+      currentSongId = null
+      playedMs = 0
+      lastTickAt = 0
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.load()
+      return
+    }
+
     // ── Song changed ────────────────────────────────────────────────────
     if (state.currentSong && state.currentSong.id !== currentSongId) {
       // Flush the previous song's session (unless 'ended' already did it —

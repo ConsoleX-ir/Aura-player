@@ -8,9 +8,7 @@ import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { AlbumCard } from '@/components/Library/AlbumCard'
 import { EmptyState, SongListSkeleton } from '@/components/States/EmptyState'
 import { useStoreHydration } from '@/hooks/useStoreHydration'
-import { sortSongs, SORT_KEYS, type SortKey, type SortDir } from '@/lib/sort'
-
-type ViewMode = 'list' | 'grid'
+import { sortSongs, SORT_KEYS } from '@/lib/sort'
 
 // Above this many albums, skip the framer-motion entrance animation on grid
 // cards entirely (see AlbumCard's animateIn prop) — same threshold VirtualSongList
@@ -28,13 +26,16 @@ export function Library() {
   const favorites = usePlayerStore((s) => s.favorites)
   const { importFolder, importing } = useLibraryImport()
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  // v2.1.0: Library sorting. Default 'added'/asc keeps the historical
-  // insertion-order look (oldest imports first); direction flips to newest
-  // first with one click. Session-local by design — the library's shape is
-  // remembered, the lens you're viewing it through resets with the app.
-  const [sortKey, setSortKey] = useState<SortKey>('added')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  // Wave 0 persistence: sort key/direction and view mode live in the
+  // persisted store (they used to be session-local useState, resetting on
+  // every launch — flagged by the Wave 0 persistence audit). Search stays
+  // local on purpose: it's a moment, not a preference.
+  const viewMode = usePlayerStore((s) => s.libraryViewMode)
+  const setViewMode = usePlayerStore((s) => s.setLibraryViewMode)
+  const sortKey = usePlayerStore((s) => s.librarySortKey)
+  const setSortKey = usePlayerStore((s) => s.setLibrarySortKey)
+  const sortDir = usePlayerStore((s) => s.librarySortDir)
+  const setSortDir = usePlayerStore((s) => s.setLibrarySortDir)
   const hydrated = useStoreHydration()
 
   // The input itself stays bound to `search` so typing is always instant —
@@ -143,7 +144,7 @@ export function Library() {
                     </DropdownMenu.Item>
                   ))}
                   <DropdownMenu.Item
-                    onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                    onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] outline-none"
                     style={{ color: 'var(--text-secondary)', borderTop: '1px solid var(--border-subtle)', borderRadius: 0, marginTop: 4, paddingTop: 8 }}
                   >

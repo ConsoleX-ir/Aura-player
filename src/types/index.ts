@@ -161,6 +161,13 @@ export interface ElectronAPI {
   // given base64 data URL (image/png) to disk as binary. Returns the chosen
   // path or null if the user cancelled.
   saveImageFile: (defaultName: string, dataUrl: string) => Promise<string | null>
+  // ── Coordinated shutdown (Wave 0 — persistence stability) ─────────────
+  // Main intercepts window close and asks the renderer to flush any
+  // pending IndexedDB state writes FIRST; the renderer resolves once its
+  // flush has landed (or main force-closes after a hard timeout). This is
+  // what makes a change made <800ms before quitting survive the restart.
+  onShutdown: (cb: () => void | Promise<void>) => () => void
+  notifyShutdownComplete: () => void
   minimize:      () => void
   maximize:      () => void
   close:         () => void

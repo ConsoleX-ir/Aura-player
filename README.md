@@ -2,7 +2,7 @@
 
 > A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-![Version](https://img.shields.io/badge/version-v2.1.0-blue)
+![Version](https://img.shields.io/badge/version-v2.1.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
@@ -220,7 +220,9 @@ Package as a Windows installer (also registers file associations)
 npm run build:electron
 ```
 
-The installer is optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and v2.1.0 strips every non-English Electron locale from the package (about 46 MB lighter unpacked) while keeping full functionality. `Aura.Player.Setup-2.1.0.exe` comes out **around 80 MB**.
+The installer is optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and v2.1.0 strips every non-English Electron locale from the package (about 46 MB lighter unpacked) while keeping full functionality. `Aura.Player.Setup-2.1.1.exe` comes out **around 80 MB**.
+
+> v2.1.1 — The stability wave. **What you delete stays deleted**: removing a song from the Library (while keeping the file on disk) no longer resurrects on the next Folder Sync — intentional removals are remembered as tombstones, cleared the moment you explicitly re-import the same file, and garbage-collected once the file disappears from disk. **What you change stays changed**: Library sort key, sort direction, and list/grid view now persist across restarts alongside every other preference, and a coordinated-shutdown handshake makes the renderer flush all pending state writes before the window actually closes — a setting changed half a second before quitting now survives the restart instead of dying inside the write debounce. **Nothing keeps playing that isn't there**: removing the currently-playing song (or clearing the library) now actually stops the audio instead of leaving it sounding under an empty UI, and the seek/time UI resets cleanly. Under the hood, the persistence layer gained a pre-hydration write gate (a boot-time state write can no longer clobber your library snapshot) built directly on the "why Rewind persistence just works" audit of the v1 storage paths.
 
 > v2.1.0 — Faster, cleaner, more native. The sidebar is now a **floating glass card** — rounded, shadowed, inset from the window edge, with the ambient background flowing around it and the same 256px footprint as before. Aura learned **Windows System Media Transport Controls**: the native media flyout (volume overlay, Win+K, lock screen) shows the current track, artist, album art, and live playback state with working Play/Pause/Previous/Next — including while Aura is minimized — driven by the standard MediaSession API with zero new dependencies. The Library gained a proper **Sort** menu (Recently Added, Title, Artist, Album, Duration, each ascending or descending) built on a pure, unit-tested ordering module. The **Light theme Lyrics modal was fixed** — lyric lines, carets, and shadows are all token-driven now, so text is readable in both themes (and the Visualizer and Queue popovers share the fix). The **Play Bar is wider and glassier** — min(1240px, 100vw−24), a saturating blur, an inset top highlight — and its aura got more present while still resting calmly on pause. Under the hood: the whole pill chrome and the entire Now Playing view stop re-rendering at the progress tick (only the seek bar and lyric highlight do), the Visualizer stopped allocating a buffer and calling getComputedStyle every frame, album-grid cards no longer hold a permanent GPU layer, and buttons across the app regained the pointer cursor Tailwind v4 had dropped — plus a consistent hover/highlight language for menus, toggles, and modal actions. Modal proportions were rebalanced per dialog (small forms no longer stretch), packaged size dropped by stripping non-English Electron locales, and a full 202-check regression battery — including a new 31-item v2.1.0 suite and the 5,000-track stress test — runs green.
 >
@@ -264,7 +266,7 @@ Contributions, ideas, and bug reports are always welcome.
 
 Feel free to open an Issue or submit a Pull Request.
 
-1. Arsalan Jafarnezhad: tester and feature suggester. Github: https://github.com/Arsalan-Jafarnezhad
+1.Arsalan Jafarnezhad : tester and feature suggester. Github: https://github.com/Arsalan-Jafarnezhad
 
 ---
 

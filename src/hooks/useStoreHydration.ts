@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
+import { markHydrationComplete } from '@/lib/idbStorage'
 
 /* ── Store hydration gate ────────────────────────────────────────────────────
    Since Wave 1 the persisted store lives in IndexedDB (async) instead of
@@ -18,9 +19,16 @@ export function useStoreHydration(): boolean {
   useEffect(() => {
     if (usePlayerStore.persist.hasHydrated()) {
       setHydrated(true)
+      // Opens the idbStorage pre-hydration write gate (Wave 0): from this
+      // point on, store writes describe complete, hydrated state and are
+      // safe to persist.
+      markHydrationComplete()
       return
     }
-    const unsub = usePlayerStore.persist.onFinishHydration(() => setHydrated(true))
+    const unsub = usePlayerStore.persist.onFinishHydration(() => {
+      setHydrated(true)
+      markHydrationComplete()
+    })
     return unsub
   }, [])
 

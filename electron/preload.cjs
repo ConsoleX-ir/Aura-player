@@ -58,4 +58,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Rewind share-card export: save dialog + binary PNG write in one hop.
   saveImageFile: (defaultName, dataUrl) => ipcRenderer.invoke('dialog:saveImageFile', defaultName, dataUrl),
+  // ── Coordinated shutdown (Wave 0) ─────────────────────────────────────────
+  // Main holds the window open once and asks us to flush pending state
+  // writes; the renderer resolves (possibly async) then acks, and only
+  // then does main let the close proceed. A no-op in plain browsers.
+  onShutdown: (cb) => {
+    const listener = () => { Promise.resolve(cb()).catch(() => {}) }
+    ipcRenderer.on('app:shutdown', listener)
+    return () => ipcRenderer.removeListener('app:shutdown', listener)
+  },
+  notifyShutdownComplete: () => ipcRenderer.send('app:shutdown-complete'),
 })

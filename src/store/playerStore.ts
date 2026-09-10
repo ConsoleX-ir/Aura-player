@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Song, Playlist, RepeatMode, AppView } from '@/types'
 import { DEFAULT_THEME_ID, type ThemePresetId } from '@/lib/themePresets'
 import { idbStorage } from '@/lib/idbStorage'
+import type { SortKey, SortDir } from '@/lib/sort'
 import {
   shuffledAround, nextIndex, prevIndex, removeByIds,
 } from '@/lib/queueEngine'
@@ -15,8 +16,23 @@ interface PlayerState {
   removeFromLibrary: (songId: string) => void
   // Batch sibling of removeFromLibrary — same playlist/favorites/queue
   // cleanup, but in one state update instead of N. Used by Folder Sync,
-  // which may need to drop many deleted files at once.
+  // which may need to drop many deleted files at once. NOTE: deliberately
+  // does NOT tombstone (see removedPaths) — a sync removal means the FILE
+  // is gone from disk, so there is nothing to prevent re-importing; if the
+  // file comes back (recycle-bin restore), it should re-appear.
   removeSongsFromLibrary: (songIds: string[]) => void
+
+  // ── Removal tombstones (Wave 0 — persistence stability) ───────────────
+  // Paths the user deliberately removed from the library (the file itself
+  // may still exist on disk). Folder Sync reconciles disk → library, so
+  // without tombstones every sync would silently resurrect exactly what
+  // the user deleted. Tombstones are cleared by explicit re-import
+  // (Add Files / Add Folder / drag-drop / file-association launch —
+  // restoreImportedPaths) and garbage-collected by Folder Sync once the
+  // file no longer exists on disk (a re-created file at the same path is
+  // fresh import material, not the song the user deleted).
+  removedPaths: string[]
+  restoreImportedPaths: (paths: string[]) => void
   // Replaces existing library entries (matched by id) with fresh metadata,
   // preserving their position. Used by Folder Sync when a file's mtime has
   // changed since it was last imported.
@@ -143,6 +159,18 @@ interface PlayerState {
   selectedPlaylistId: string | null
   setSelectedPlaylistId: (id: string | null) => void
 
+  // ── Library view state (Wave 0 — persisted) ───────────────────────────
+  // v2.1.0 kept these session-local; the Wave 0 persistence gate overrides
+  // that: sort key, sort direction and list/grid mode must survive
+  // Change → Close → Restart like every other user preference. Search text
+  // stays ephemeral by design (a search is a moment, not a preference).
+  librarySortKey: SortKey
+  librarySortDir: SortDir
+  libraryViewMode: 'list' | 'grid'
+  setLibrarySortKey: (k: SortKey) => void
+  setLibrarySortDir: (d: SortDir) => void
+  setLibraryViewMode: (m: 'list' | 'grid') => void
+
   // seekTo trigger watched by audio engine
   seekRequest: number | null
   clearSeekRequest: () => void
@@ -162,6 +190,12 @@ export const usePlayerStore = create<PlayerState>()(
       removeFromLibrary: (songId) => set((s) => {
         const wasCurrentSong = s.currentSong?.id === songId
         const queueNext = removeByIds(s.queue, new Set([songId]), s.queueIndex)
+        // Tombstone the file path so Folder Sync never resurrects this song
+        // (Wave 0: user-intent removals are remembered across syncs).
+        const removedSong = s.library.find((song) => song.id === songId)
+        const removedPaths = removedSong && !s.removedPaths.includes(removedSong.path)
+          ? [...s.removedPaths, removedSong.path]
+          : s.removedPaths
         return {
           library: s.library.filter((song) => song.id !== songId),
           playlists: s.playlists.map((p) => ({ ...p, songIds: p.songIds.filter((id) => id !== songId) })),
@@ -171,6 +205,10 @@ export const usePlayerStore = create<PlayerState>()(
           naturalQueue: s.naturalQueue.filter((song) => song.id !== songId),
           currentSong: wasCurrentSong ? null : s.currentSong,
           isPlaying: wasCurrentSong ? false : s.isPlaying,
+          // A removed playing song must not leave stale seek/time UI behind.
+          progress: wasCurrentSong ? 0 : s.progress,
+          duration: wasCurrentSong ? 0 : s.duration,
+          removedPaths,
         }
       }),
       removeSongsFromLibrary: (songIds) => set((s) => {
@@ -186,6 +224,10 @@ export const usePlayerStore = create<PlayerState>()(
           naturalQueue: s.naturalQueue.filter((song) => !idSet.has(song.id)),
           currentSong: wasCurrentSong ? null : s.currentSong,
           isPlaying: wasCurrentSong ? false : s.isPlaying,
+          // Same stale-UI guard as removeFromLibrary (no tombstones here —
+          // the FILES are gone; see interface note).
+          progress: wasCurrentSong ? 0 : s.progress,
+          duration: wasCurrentSong ? 0 : s.duration,
         }
       }),
       updateSongs: (songs) => set((s) => {
@@ -208,6 +250,18 @@ export const usePlayerStore = create<PlayerState>()(
         library: [], playlists: [], favorites: [], queue: [], naturalQueue: [],
         currentSong: null, isPlaying: false, queueIndex: 0,
         importedFolders: [],
+        // Folder tracking is wiped too, so sync can never run again against
+        // anything — tombstones would be dead weight. A future re-import is
+        // explicit intent and never hits a tombstone path anyway.
+        removedPaths: [],
+      }),
+
+      removedPaths: [],
+      restoreImportedPaths: (paths) => set((s) => {
+        if (!s.removedPaths.length) return s
+        const drop = new Set(paths)
+        const next = s.removedPaths.filter((p) => !drop.has(p))
+        return next.length === s.removedPaths.length ? s : { removedPaths: next }
       }),
 
       importedFolders: [],
@@ -441,6 +495,13 @@ export const usePlayerStore = create<PlayerState>()(
       setActiveView: (v) => set({ activeView: v }),
       selectedPlaylistId: null,
       setSelectedPlaylistId: (id) => set({ selectedPlaylistId: id }),
+
+      librarySortKey: 'added',
+      librarySortDir: 'asc',
+      libraryViewMode: 'list',
+      setLibrarySortKey: (k) => set({ librarySortKey: k }),
+      setLibrarySortDir: (d) => set({ librarySortDir: d }),
+      setLibraryViewMode: (m) => set({ libraryViewMode: m }),
     }),
     {
       name: 'aura-player',
@@ -469,6 +530,12 @@ export const usePlayerStore = create<PlayerState>()(
         eqPreset: s.eqPreset,
         appearance: s.appearance,
         watchFolders: s.watchFolders,
+        // Wave 0 — persistence stability: tombstones keep deleted songs
+        // deleted; library sort/view preferences survive restarts.
+        removedPaths: s.removedPaths,
+        librarySortKey: s.librarySortKey,
+        librarySortDir: s.librarySortDir,
+        libraryViewMode: s.libraryViewMode,
       }),
     }
   )
