@@ -17,6 +17,15 @@ export interface Song {
   // "Recently Added" sort. Optional because every song imported before
   // v2.1.0 lacks it; those fall back to mtimeMs at sort time (see lib/sort).
   addedAt?: number
+  // Phase 4 — online tracks are NOT library entries: `path` holds a stream
+  // URL (passed through untouched by the playback engine — no aura:// wrap),
+  // and they are excluded from favorites/playlists/health. Local songs
+  // simply omit this field.
+  source?: 'local' | 'online'
+  // Phase 5 — radio streams usually DON'T send CORS headers; the engine must
+  // drop its crossOrigin mode for them or they fail to load entirely (the
+  // analyser then reads silence — an honest, invisible trade for playback).
+  streamCors?: boolean
 }
 
 export interface Playlist {
@@ -28,7 +37,7 @@ export interface Playlist {
 
 export type RepeatMode = 'none' | 'one' | 'all'
 // 'rewind' = Aura Rewind (Wave 4) — the monthly listening-story destination.
-export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind'
+export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind' | 'explore' | 'smart' | 'artist' | 'album' | 'history'
 
 // ── Folder watching (Wave 4) ─────────────────────────────────────────────
 // One change event per watched folder, already debounced in the main
@@ -114,10 +123,40 @@ export type FindMetadataQuery = {
   duration: number
 }
 
+// One row of the batch existence check behind Library Health (Phase 1).
+export interface PathCheck {
+  path: string
+  exists: boolean
+  sizeBytes: number
+  mtimeMs: number
+}
+
+// The failure shape the provider core returns over IPC (Phase 3).
+export interface ProviderErrorLike {
+  kind: string
+  message: string
+  status?: number
+}
+
 export interface ElectronAPI {
   openFolder:    () => Promise<string | null>
   openFiles:     () => Promise<string[]>
   scanFolder:    (path: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>
+  // Batch filesystem existence check for the Library Health feature (Phase 1).
+  // Returns one row per requested path; missing/unreadable paths come back
+  // with exists:false instead of throwing — health checks must not be able
+  // to fail just because one path vanished mid-scan.
+  checkPaths:    (paths: string[]) => Promise<PathCheck[]>
+  // ── Provider Core (Phase 3) ──────────────────────────────────────────────
+  // One channel for every online music provider: the renderer names a
+  // provider id + op (both allowlisted in the main process) and never a URL.
+  // Resolves with the op's raw result, or a ProviderErrorLike object
+  // ({ kind, message }) on failure — normalized by the client layer.
+  providerRequest: (requestId: string, providerId: string, op: string, params: Record<string, unknown>) =>
+    Promise<unknown>
+  providerCancel: (requestId: string) => void
+  // Real connectivity probe (HEAD, 4s cap) — navigator.onLine is only a hint.
+  probeOnline:    () => Promise<boolean>
   resolveDroppedPaths: (paths: string[]) => Promise<{
     files: { path: string; name: string; mtimeMs: number }[]
     folders: string[]
@@ -173,6 +212,33 @@ export interface ElectronAPI {
   close:         () => void
   isMaximized:   () => Promise<boolean>
   onMaximized:   (cb: (v: boolean) => void) => void
+  // ── Desktop mini player (v2.1.2) ────────────────────────────────────────
+  // The mini player is an independent frameless BrowserWindow. The main
+  // renderer pushes flat state snapshots over pushMiniState; the widget's
+  // transport/window actions arrive via onMediaCommand-style funnels. Both
+  // windows share one preload, so every method here is optional-guarded at
+  // call sites that may run in a plain browser.
+  pushMiniState: (state: {
+    hasSong: boolean
+    title: string
+    artist: string
+    coverArt: string | null
+    isPlaying: boolean
+    progress: number
+    appearance: 'dark' | 'light'
+  }) => void
+  setMiniVisible: (visible: boolean) => void
+  miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'restore' | 'close') => void
+  onMiniState: (cb: (state: {
+    hasSong: boolean
+    title: string
+    artist: string
+    coverArt: string | null
+    isPlaying: boolean
+    progress: number
+    appearance: 'dark' | 'light'
+  }) => void) => () => void
+  onMiniVisibility: (cb: (visible: boolean) => void) => () => void
 }
 
 declare global {

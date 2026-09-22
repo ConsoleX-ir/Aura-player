@@ -110,6 +110,12 @@ button:disabled,
 [role='menuitemradio'] {
   transition: background-color var(--dur-instant) var(--ease-smooth),
               color var(--dur-instant) var(--ease-smooth);
+  /* Base voice for every dropdown item. Owned here (not inline styles) so
+     the hover/highlight lift below always wins — inline `style` would
+     outrank these rules and freeze the item's color forever. Components
+     with a persistent special color (e.g. the active sort key's accent)
+     keep their inline style deliberately. */
+  color: var(--text-secondary);
 }
 [role='menuitem']:hover,
 [role='menuitem'][data-highlighted],
@@ -118,6 +124,41 @@ button:disabled,
   background-color: var(--glass-2);
   color: var(--text-primary);
   outline: none;
+}
+
+/* ── Dangerous menu items (v2.1.2) ─────────────────────────────────────────
+   Remove-from-library keeps its danger voice in BOTH hover states. A class,
+   not inline handlers: inline styles would fight the [data-highlighted]
+   rule above (see the menu-glitch note in the v2.1.2 changelog). */
+[role='menuitem'].menuitem-danger {
+  color: color-mix(in srgb, var(--danger) 80%, transparent);
+}
+[role='menuitem'].menuitem-danger:hover,
+[role='menuitem'].menuitem-danger[data-highlighted] {
+  background-color: var(--danger-veil);
+  color: var(--danger);
+}
+
+/* ── Playlist picker rows (v2.1.2) ─────────────────────────────────────────
+   Keyboard-driven highlight for the picker's list; mouse hover sets the
+   same data-highlighted attribute via React state, so mouse and arrows
+   share one visual path. */
+.playlist-picker-row[data-highlighted='true'] {
+  background-color: var(--glass-2);
+}
+.playlist-picker-row[data-highlighted='true'] .text-ink {
+  color: var(--text-primary);
+}
+
+/* ── Song rows with an open menu (v2.1.2 glitch fix) ───────────────────────
+   The row's hover background is set inline by JS mouseenter/leave. When the
+   row's `...` menu is open, the pointer lives on the PORTALED menu and the
+   mouseleave already reset the background — the open menu looked orphaned.
+   !important is required to beat the inline style attribute. The ACTIVE row
+   keeps its accent background instead. */
+.song-row:not(.song-row-active):has([role='menu'][data-state='open']),
+.song-row:not(.song-row-active):has(button[data-state='open']) {
+  background: var(--surface-inset) !important;
 }
 
 html, body, #root {
@@ -198,6 +239,20 @@ body {
 }
 :root[data-performance="on"] .dynamic-bg::after {
   background: radial-gradient(circle closest-side, var(--aura-b), transparent 72%);
+}
+
+/* Phase 14 — OPTIONAL ambient layer: data-ambient="off" removes the artwork
+   orbs, the Aura Pulse pool, and all ambient motion. Nothing else changes —
+   controls, layouts and themes are unaffected. Performance Mode already
+   downgrades this layer; this switch removes it entirely. */
+:root[data-ambient="off"] .dynamic-bg::before,
+:root[data-ambient="off"] .dynamic-bg::after {
+  display: none;
+}
+:root[data-ambient="off"] .aura-pulse-pool,
+:root[data-ambient="off"] .aura-pulse-orbit,
+:root[data-ambient="off"] .aura-orb {
+  display: none;
 }
 
 /* ── Glass utilities ─────────────────────────────────────────────────────── */

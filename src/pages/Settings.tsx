@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { setAppearanceAnimated } from '@/lib/appearance'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { EqualizerCard } from '@/components/Settings/EqualizerCard'
+import { LibraryHealthCard } from '@/components/Settings/LibraryHealthCard'
+import { formatRuntime } from '@/lib/utils'
 import { useLibrarySync } from '@/hooks/useLibrarySync'
 import { THEME_PRESETS } from '@/lib/themePresets'
 
@@ -28,6 +30,10 @@ export function Settings() {
   const setCustomAccentColor = usePlayerStore((s) => s.setCustomAccentColor)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
   const setPerformanceMode = usePlayerStore((s) => s.setPerformanceMode)
+  const smartQueue = usePlayerStore((s) => s.smartQueue)
+  const setSmartQueue = usePlayerStore((s) => s.setSmartQueue)
+  const ambientEffects = usePlayerStore((s) => s.ambientEffects)
+  const setAmbientEffects = usePlayerStore((s) => s.setAmbientEffects)
   const appearance = usePlayerStore((s) => s.appearance)
   const watchFolders = usePlayerStore((s) => s.watchFolders)
   const setWatchFolders = usePlayerStore((s) => s.setWatchFolders)
@@ -35,9 +41,28 @@ export function Settings() {
   const crossfade = usePlayerStore((s) => s.crossfade)
   const setCrossfade = usePlayerStore((s) => s.setCrossfade)
   const libraryCount = usePlayerStore((s) => s.library.length)
+  const library = usePlayerStore((s) => s.library)
   const playlistsCount = usePlayerStore((s) => s.playlists.length)
   const favoritesCount = usePlayerStore((s) => s.favorites.length)
   const clearLibrary = usePlayerStore((s) => s.clearLibrary)
+
+  // Library overview stats (Phase 1) — all derived locally from the library
+  // array itself: distinct artists / albums / genres and the total runtime.
+  // One pass, memoized on library identity — free for a page that isn't
+  // subscribed to the progress tick.
+  const libStats = useMemo(() => {
+    const artists = new Set<string>()
+    const albums = new Set<string>()
+    const genres = new Set<string>()
+    let totalSec = 0
+    for (const s of library) {
+      if (s.artist) artists.add(s.artist)
+      albums.add(`${s.album}|||${s.artist}`)
+      if (s.genre && s.genre.trim()) genres.add(s.genre.trim())
+      totalSec += s.duration || 0
+    }
+    return { artists: artists.size, albums: albums.size, genres: genres.size, totalSec }
+  }, [library])
 
   const { syncAll, syncing, progress, lastResult, folderCount } = useLibrarySync()
 
@@ -126,6 +151,13 @@ export function Settings() {
           >
             <Toggle checked={performanceMode} onChange={setPerformanceMode} />
           </SettingRow>
+
+          <SettingRow
+            label="Ambient Visuals"
+            description="The artwork-tinted background glow and the Aura Pulse ring. Turn off for a completely still interface — your theme and accent stay exactly as chosen."
+          >
+            <Toggle checked={ambientEffects} onChange={setAmbientEffects} ariaLabel="Toggle Ambient Visuals" />
+          </SettingRow>
         </Section>
 
         {/* ── Playback ──────────────────────────────────────────────────── */}
@@ -156,6 +188,14 @@ export function Settings() {
 
           {/* Wave 3: the reserved EQ bands get their face */}
           <EqualizerCard />
+
+          {/* Phase 8 — Smart Queue */}
+          <SettingRow
+            label="Smart Queue"
+            description="When the queue is about to run dry, Aura quietly appends a few on-device recommendations, seeded by what is playing. Your queue is never reordered, and anything you remove stays removed."
+          >
+            <Toggle checked={smartQueue} onChange={setSmartQueue} />
+          </SettingRow>
         </Section>
 
         {/* ── Online Services ─────────────────────────────────────────── */}
@@ -178,9 +218,31 @@ export function Settings() {
         <Section title="Library">
           <div className="grid grid-cols-3 gap-3 mb-5">
             <StatCard icon={Music2} value={libraryCount} label="Songs" />
+            <StatCard icon={User} value={libStats.artists} label="Artists" />
+            <StatCard icon={Disc3} value={libStats.albums} label="Albums" />
+            <StatCard icon={AudioLines} value={libStats.genres} label="Genres" />
             <StatCard icon={ListMusic} value={playlistsCount} label="Playlists" />
             <StatCard icon={Heart} value={favoritesCount} label="Favorites" />
           </div>
+          {libStats.totalSec > 0 && (
+            <div
+              className="flex items-center gap-2 px-4 py-3 mb-5 rounded-xl text-xs"
+              style={{ background: 'var(--glass-1)', border: '1px solid var(--border-default)', color: 'var(--text-tertiary)' }}
+            >
+              <Timer size={13} style={{ color: 'var(--accent)' }} />
+              <span>
+                Total runtime&nbsp;
+                <span className="font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                  {formatRuntime(libStats.totalSec)}
+                </span>
+                &nbsp;of music
+              </span>
+            </div>
+          )}
+
+          <LibraryHealthCard />
+
+          <div className="h-3" />
 
           <SettingRow
             label="Sync Library"
@@ -262,7 +324,7 @@ export function Settings() {
                   className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums"
                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
                 >
-                  v2.1.1
+                  v2.16.0
                 </span>
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
@@ -351,12 +413,13 @@ function SettingRow({ label, description, children }: { label: string; descripti
   )
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ checked, onChange, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; ariaLabel?: string }) {
   return (
     <button
       onClick={() => onChange(!checked)}
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       /* v2.1.0 hover: unchecked toggles lift their track + glow faintly on
          hover so the control reads as interactive; checked state already
          wears the accent, so it gets the press feedback only. */
@@ -395,3 +458,5 @@ function StatCard({ icon: Icon, value, label }: { icon: typeof Music2; value: nu
     </div>
   )
 }
+
+/** Human library runtime: 5400s → "1.5 hours", 45s → "45 minutes". */

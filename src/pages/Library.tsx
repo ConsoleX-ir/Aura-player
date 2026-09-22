@@ -1,14 +1,17 @@
 import { useState, useMemo, useDeferredValue } from 'react'
 import { motion } from 'framer-motion'
-import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUpDown, ArrowUp, ArrowDown, Check } from 'lucide-react'
+import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUpDown, ArrowUp, ArrowDown, Check, AudioLines, Sparkles } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
+import { useUiStore } from '@/store/uiStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
+import { useListenAggregates } from '@/hooks/useListenAggregates'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { AlbumCard } from '@/components/Library/AlbumCard'
 import { EmptyState, SongListSkeleton } from '@/components/States/EmptyState'
 import { useStoreHydration } from '@/hooks/useStoreHydration'
-import { sortSongs, SORT_KEYS } from '@/lib/sort'
+import { sortSongs, SORT_KEYS, defaultDirFor } from '@/lib/sort'
+import { searchLibrary } from '@/lib/search'
 
 // Above this many albums, skip the framer-motion entrance animation on grid
 // cards entirely (see AlbumCard's animateIn prop) — same threshold VirtualSongList
@@ -25,7 +28,6 @@ export function Library() {
   const activeView = usePlayerStore((s) => s.activeView)
   const favorites = usePlayerStore((s) => s.favorites)
   const { importFolder, importing } = useLibraryImport()
-  const [search, setSearch] = useState('')
   // Wave 0 persistence: sort key/direction and view mode live in the
   // persisted store (they used to be session-local useState, resetting on
   // every launch — flagged by the Wave 0 persistence audit). Search stays
@@ -36,7 +38,28 @@ export function Library() {
   const setSortKey = usePlayerStore((s) => s.setLibrarySortKey)
   const sortDir = usePlayerStore((s) => s.librarySortDir)
   const setSortDir = usePlayerStore((s) => s.setLibrarySortDir)
+  // Phase 2: search text lives in uiStore (ephemeral) so the command palette
+  // can pre-fill it and jump here — one shared search state, one shared
+  // search engine (lib/search).
+  const search = useUiStore((s) => s.librarySearch)
+  const setSearch = useUiStore((s) => s.setLibrarySearch)
   const hydrated = useStoreHydration()
+  // Phase 1 — Library 2.0: whole-history listening aggregates power the
+  // Recently Played / Most Played / Most Skipped sorts. Empty map (fresh
+  // install, history still loading) = stable ties, by design.
+  const listen = useListenAggregates()
+
+  // Genre filter (Phase 1). Session-local like search — a browsing moment,
+  // not a preference. `null` = no filter. Derived from the full library so
+  // the picker always offers every genre you actually have.
+  const [genreFilter, setGenreFilter] = useState<string | null>(null)
+  const genres = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of library) {
+      if (s.genre && s.genre.trim()) set.add(s.genre.trim())
+    }
+    return Array.from(set).sort(new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }).compare)
+  }, [library])
 
   // The input itself stays bound to `search` so typing is always instant —
   // only the expensive part (filtering the whole library + regrouping into
@@ -44,19 +67,22 @@ export function Library() {
   // which React computes without blocking the next keystroke.
   const deferredSearch = useDeferredValue(search)
 
-  const songs = useMemo(() => {
+  const searchResult = useMemo(() => {
     let src = activeView === 'favorites' ? library.filter((s) => favorites.includes(s.id)) : library
-    if (deferredSearch.trim()) {
-      const q = deferredSearch.toLowerCase()
-      src = src.filter((s) =>
-        s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) || s.album.toLowerCase().includes(q)
-      )
-    }
+    // Filter order: genre → search → sort. Each stage shrinks the set the
+    // next one walks, and the sort only ever runs on what's visible.
+    if (genreFilter) src = src.filter((s) => (s.genre ?? '').trim() === genreFilter)
+    // Phase 2: one shared search entry point — exact operators/substring
+    // first, fuzzy close-matches only when exact finds nothing.
+    return searchLibrary(src, deferredSearch)
+  }, [library, activeView, favorites, genreFilter, deferredSearch])
+
+  const songs = useMemo(() =>
     // Sort last, on the filtered set only. sortSongs copies once — the
     // unsorted filtered array is still reused by the album grouping below
     // (grid order follows the same sort, so both views agree).
-    return sortSongs(src, sortKey, sortDir)
-  }, [library, activeView, favorites, deferredSearch, sortKey, sortDir])
+    sortSongs(searchResult.matches, sortKey, sortDir, listen)
+  , [searchResult.matches, sortKey, sortDir, listen])
 
   const albums = useMemo(() => {
     if (viewMode !== 'grid') return []
@@ -94,8 +120,74 @@ export function Library() {
             </p>
           </div>
 
-          {/* Sort (v2.1.0) + segmented view toggle */}
+          {/* Genre filter (Phase 1) + Sort + segmented view toggle */}
           <div className="flex items-center gap-2">
+            {genres.length > 0 && (
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    className="flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-xl text-xs font-medium transition-all"
+                    style={{
+                      background: genreFilter ? 'var(--accent-dim)' : 'var(--glass-1)',
+                      border: `1px solid ${genreFilter ? 'var(--accent-border)' : 'var(--border-default)'}`,
+                      color: genreFilter ? 'var(--accent)' : 'var(--text-secondary)',
+                      transitionDuration: 'var(--dur-fast)',
+                    }}
+                    title="Filter by genre"
+                    aria-label="Filter by genre"
+                  >
+                    <AudioLines size={12} />
+                    <span className="hidden sm:inline max-w-28 truncate">
+                      {genreFilter ?? 'Genre'}
+                    </span>
+                    {genreFilter && (
+                      <span
+                        role="button"
+                        aria-label="Clear genre filter"
+                        onClick={(e) => { e.stopPropagation(); setGenreFilter(null) }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="p-0.5 rounded-md hover:bg-black/20 transition-colors"
+                      >
+                        <X size={10} />
+                      </span>
+                    )}
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="z-[200] min-w-44 p-1 rounded-xl text-sm max-h-72 overflow-y-auto"
+                    style={{
+                      zIndex: 'var(--z-dropdown)',
+                      background: 'var(--surface-chrome)',
+                      border: '1px solid var(--border-strong)',
+                      backdropFilter: 'blur(var(--blur-glass))',
+                      boxShadow: 'var(--shadow-overlay)',
+                    }}
+                    sideOffset={6} align="end">
+                    <DropdownMenu.Item
+                      onClick={() => setGenreFilter(null)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] outline-none"
+                      style={!genreFilter ? { color: 'var(--accent)' } : undefined}
+                    >
+                      <span className="w-3.5 shrink-0">{!genreFilter && <Check size={12} />}</span>
+                      All genres
+                    </DropdownMenu.Item>
+                    {genres.map((g) => (
+                      <DropdownMenu.Item
+                        key={g}
+                        onClick={() => setGenreFilter(g)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] outline-none"
+                        style={genreFilter === g ? { color: 'var(--accent)' } : undefined}
+                      >
+                        <span className="w-3.5 shrink-0">{genreFilter === g && <Check size={12} />}</span>
+                        <span className="truncate">{g}</span>
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            )}
+
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button
@@ -130,12 +222,15 @@ export function Library() {
                       key={key}
                       onClick={() => {
                         setSortKey(key)
-                        // Sensible default direction per key: name-ish fields
-                        // read naturally A→Z; time-ish fields newest-first.
-                        setSortDir(key === 'added' || key === 'duration' ? 'desc' : 'asc')
+                        // Sensible default direction per key (time/count-ish
+                        // keys read naturally most/newest-first) — flipping
+                        // is one click away in the direction row below.
+                        if (key !== sortKey) setSortDir(defaultDirFor(key))
                       }}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] outline-none"
-                      style={{ color: sortKey === key ? 'var(--accent)' : 'var(--text-secondary)' }}
+                      // Active key keeps its accent inline on purpose (persistent
+                      // state, not hover) — CSS owns hover/highlight for the rest.
+                      style={sortKey === key ? { color: 'var(--accent)' } : undefined}
                     >
                       <span className="w-3.5 shrink-0">
                         {sortKey === key && <Check size={12} />}
@@ -146,7 +241,7 @@ export function Library() {
                   <DropdownMenu.Item
                     onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] outline-none"
-                    style={{ color: 'var(--text-secondary)', borderTop: '1px solid var(--border-subtle)', borderRadius: 0, marginTop: 4, paddingTop: 8 }}
+                    style={{ borderTop: '1px solid var(--border-subtle)', borderRadius: 0, marginTop: 4, paddingTop: 8 }}
                   >
                     <span className="w-3.5 shrink-0">
                       {sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
@@ -176,7 +271,7 @@ export function Library() {
         {/* Search */}
         <div className="relative group-search">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
-          <input type="text" placeholder="Search songs, artists, albums..."
+          <input type="text" placeholder="Search, or try artist: album: genre: year:…"
             value={search} onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-all"
             style={{
@@ -199,6 +294,17 @@ export function Library() {
             </button>
           )}
         </div>
+
+        {/* Phase 2 — fuzzy fallback notice: when exact matching found nothing
+            and these are close matches, SAY so (honest result presentation). */}
+        {searchResult.fuzzy && songs.length > 0 && (
+          <div className="flex items-center gap-2 mt-2 px-1" data-fuzzy-hint>
+            <Sparkles size={11} style={{ color: 'var(--accent)' }} />
+            <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              No exact matches — showing {songs.length} close {songs.length === 1 ? 'match' : 'matches'} for “{search}”
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Content — flex-1 min-h-0 gives this a bounded height without scrolling itself;
@@ -264,23 +370,27 @@ export function Library() {
           </div>
         )}
 
-        {/* No search results */}
-        {hydrated && library.length > 0 && songs.length === 0 && !!search && (
+        {/* No results — covers both a failed search and an over-narrow
+            genre filter (the two ways this list can legitimately empty out). */}
+        {hydrated && library.length > 0 && songs.length === 0 && (!!search || !!genreFilter) && (
           <div className="overflow-y-auto pb-6">
             <EmptyState
               compact
               icon={<ListX size={22} />}
-              title={`No results for "${search}"`}
-              hint="Check the spelling, or clear the search to browse everything"
+              title={search ? `No results for "${search}"` : `No ${genreFilter} songs`}
+              hint={search
+                ? (genreFilter ? `Nothing matches in the ${genreFilter} genre — clear the search or the genre filter`
+                   : 'Check the spelling, or clear the search to browse everything')
+                : `Try another genre, or clear the filter to browse everything`}
               action={
                 <button
-                  onClick={() => setSearch('')}
+                  onClick={() => { setSearch(''); setGenreFilter(null) }}
                   className="text-xs underline underline-offset-2 transition-colors"
                   style={{ color: 'var(--text-secondary)' }}
                   onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
                 >
-                  Clear search
+                  Clear filters
                 </button>
               }
             />

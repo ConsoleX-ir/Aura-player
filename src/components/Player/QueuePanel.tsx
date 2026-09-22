@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
-import { X, ListMusic, Music2 } from 'lucide-react'
+import { X, ListMusic, Music2, Sparkles } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useMemo } from 'react'
+import { useVirtualWindow } from '@/hooks/useVirtualWindow'
 
 // Matches PlayerBar's panel width constant — w-72.
 const PANEL_WIDTH = 288
@@ -17,6 +18,16 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
   const currentSong = usePlayerStore((s) => s.currentSong)
   const playSong = usePlayerStore((s) => s.playSong)
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue)
+  // Phase 8 — Smart Queue: which upcoming rows were engine-appended, and why.
+  const smartAddedIds = usePlayerStore((s) => s.smartAddedIds)
+  const smartReasons = usePlayerStore((s) => s.smartReasons)
+  const smartQueueOn = usePlayerStore((s) => s.smartQueue)
+  const setSmartQueue = usePlayerStore((s) => s.setSmartQueue)
+  const smartSet = useMemo(() => new Set(smartAddedIds), [smartAddedIds])
+  const smartCount = useMemo(
+    () => queue.filter((s) => smartSet.has(s.id)).length,
+    [queue, smartSet],
+  )
 
   // The store's `queue` IS the real play order (Wave 1 engine). Rotate it so
   // the playing song leads — identical semantics to the Now Playing panel.
@@ -24,6 +35,13 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
     const idx = queueIndex >= 0 && queueIndex < queue.length ? queueIndex : 0
     return [...queue.slice(idx), ...queue.slice(0, idx)]
   }, [queue, queueIndex])
+
+  // Phase 15 — virtualized like the Library and Now Playing lists: the
+  // popover stays light even with a huge queue.
+  const ROW_HEIGHT = 40
+  const vw = useVirtualWindow(upNext.length, ROW_HEIGHT)
+  const virtualized = upNext.length >= 60
+  const visibleRows = virtualized ? upNext.slice(vw.start, vw.end) : upNext
 
   // Anchor to the trigger icon: center the panel on the icon's x position,
   // clamped so it never spills off either edge of the window.
@@ -70,6 +88,26 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
           <span className="text-xs font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>Up Next</span>
         </div>
         <div className="flex items-center gap-2">
+          {smartCount > 0 && (
+            <span
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase"
+              style={{ background: 'var(--accent-dim)', color: 'var(--accent)', letterSpacing: '0.06em' }}
+              title="Tracks the Smart Queue added as the queue ran dry — remove any you don't want"
+            >
+              <Sparkles size={8} />
+              {smartCount}
+            </span>
+          )}
+          <button
+            onClick={() => setSmartQueue(!smartQueueOn)}
+            aria-pressed={smartQueueOn}
+            aria-label="Toggle Smart Queue"
+            title={smartQueueOn ? 'Smart Queue is on — Aura keeps the music going when the queue runs dry. Click to turn off.' : 'Smart Queue is off. Click to let Aura keep the music going.'}
+            className="w-5 h-5 rounded flex items-center justify-center transition-all"
+            style={{ color: smartQueueOn ? 'var(--accent)' : 'var(--text-faint)' }}
+          >
+            <Sparkles size={11} />
+          </button>
           <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-faint)' }}>{queue.length}</span>
           <button onClick={onClose} className="w-5 h-5 rounded flex items-center justify-center hover:bg-ink/5 transition-all" style={{ color: 'var(--text-faint)' }}>
             <X size={11} />
@@ -77,21 +115,27 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1.5">
+      <div ref={vw.containerRef} className="flex-1 overflow-y-auto py-1.5">
         {upNext.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8" style={{ color: 'var(--text-faint)' }}>
             <ListMusic size={20} />
             <p className="text-xs">Queue is empty</p>
           </div>
         )}
-        {upNext.map((song, i) => {
+        <div style={virtualized ? { position: 'relative', height: upNext.length * ROW_HEIGHT } : undefined}>
+        {(virtualized ? visibleRows : upNext).map((song, vi) => {
+          const i = virtualized ? vw.start + vi : vi
           const isActive = song.id === currentSong?.id
           const realIdx = queue.findIndex((s) => s.id === song.id)
           return (
             <div
               key={`${song.id}-${i}`}
               className={`group flex items-center gap-2.5 px-3 py-1.5 cursor-pointer transition-colors ${isActive ? '' : 'hover-surface'}`}
-              style={{ background: isActive ? 'var(--surface-inset)' : undefined }}
+              style={{
+                ...(virtualized ? { position: 'absolute', top: i * ROW_HEIGHT, left: 0, right: 0 } : {}),
+                background: isActive ? 'var(--surface-inset)' : undefined,
+                height: ROW_HEIGHT,
+              }}
               onClick={() => playSong(song, queue)}
               title={isActive ? 'Now playing' : `Play ${song.title}`}
             >
@@ -101,10 +145,20 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
                   : <div className="w-full h-full flex items-center justify-center"><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs truncate" style={{ color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 500 : 400 }}>
-                  {song.title}
+                <p className="text-xs truncate flex items-center gap-1" style={{ color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 500 : 400 }}>
+                  <span className="truncate">{song.title}</span>
+                  {!isActive && smartSet.has(song.id) && (
+                    <Sparkles
+                      size={8}
+                      className="shrink-0"
+                      style={{ color: 'var(--accent)' }}
+                      aria-label="Added by Smart Queue"
+                    />
+                  )}
                 </p>
-                <p className="text-[10px] truncate" style={{ color: 'var(--text-faint)' }}>{song.artist}</p>
+                <p className="text-[10px] truncate" style={{ color: 'var(--text-faint)' }}>
+                  {smartSet.has(song.id) && smartReasons[song.id] ? smartReasons[song.id] : song.artist}
+                </p>
               </div>
               {!isActive && realIdx !== -1 && (
                 <button
@@ -119,6 +173,7 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
             </div>
           )
         })}
+        </div>
       </div>
     </motion.div>
   )

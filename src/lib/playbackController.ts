@@ -32,6 +32,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { safeAppendScrobble } from '@/lib/scrobbleStore'
 import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
+import { toast } from '@/store/toastStore'
 
 // ── Module state (singleton — the app has exactly one audio engine) ─────────
 let audio: HTMLAudioElement | null = null
@@ -53,6 +54,13 @@ export const audioAnalyserRef: { current: AnalyserNode | null } = { current: nul
 let loadGeneration = 0
 // The song the engine believes is loaded (store-side id, for change detection).
 let currentSongId: string | null = null
+
+// ── Consecutive playback-error guard (Phase 1) ─────────────────────────────
+// The error handler auto-skips past bad files, but only this many times in a
+// row — after that it stops trying, so a fully broken selection can't turn
+// into an endless skip storm. Reset by any successful play/timeupdate.
+const MAX_CONSECUTIVE_ERRORS = 5
+let consecutiveAudioErrors = 0
 
 // ── Listening session accounting ────────────────────────────────────────────
 let sessionStart = 0          // ms epoch when the current session began
@@ -162,6 +170,12 @@ export function initPlayback() {
     if (d && isFinite(d)) usePlayerStore.getState().setProgress(audio.currentTime / d)
     accumulateListenTime()
     applyFadeEnvelope()
+    // Reset the error guard ONLY on real audible progress (currentTime > 0).
+    // A load reset ALSO fires timeupdate — with currentTime back at 0 — so
+    // an unconditional reset here would re-arm the guard on every failed
+    // load and the skip-storm cap below could never trip (observed directly
+    // with event tracing: emptied → timeupdate(0) → play → error per cycle).
+    if (audio.currentTime > 0) consecutiveAudioErrors = 0
   })
 
   audio.addEventListener('loadedmetadata', () => {
@@ -170,6 +184,42 @@ export function initPlayback() {
 
   audio.addEventListener('play', () => { lastTickAt = performance.now() })
   audio.addEventListener('pause', () => { accumulateListenTime(); lastTickAt = 0 })
+
+  // ── Playback errors (Phase 1 — Library 2.0) ──────────────────────────────
+  // A missing/corrupt/unsupported file used to die silently: isPlaying went
+  // false and the user got nothing. Now: a toast names the song, and a
+  // GUARDED auto-advance keeps a queue alive across isolated bad files.
+  // Guards, in order:
+  //   • MEDIA_ERR_ABORTED is benign (a superseded load from rapid switching)
+  //     and must never toast or advance;
+//   • the auto-advance stops after MAX_CONSECUTIVE_ERRORS failures — a
+//     library of broken files can never become an infinite skip storm.
+//     The counter resets ONLY in the timeupdate handler (real audible
+//     progress): the 'play' event fires on play() INVOCATION even when the
+//     media then fails to decode, so resetting there would let every
+//     error-advance re-arm itself and defeat the guard entirely (found by
+//     the Phase 2 functional suite — the storm ran unbounded).
+  audio.addEventListener('error', () => {
+    const err = audio?.error
+    if (!err || err.code === MediaError.MEDIA_ERR_ABORTED) {
+      if (err) console.warn('Audio load aborted (superseded) — ignoring')
+      return
+    }
+    console.error('Audio error — code:', err.code, '| src:', audio?.src)
+    const store = usePlayerStore.getState()
+    const failed = store.currentSong
+    store.setIsPlaying(false)
+    if (failed) {
+      toast({
+        kind: 'playback-error',
+        title: `Can't play "${failed.title}"`,
+        subtitle: 'The file may be missing, corrupt, or in an unsupported format',
+      })
+    }
+    if (consecutiveAudioErrors >= MAX_CONSECUTIVE_ERRORS || store.queue.length <= 1) return
+    consecutiveAudioErrors++
+    store.nextSong() // manual-skip semantics — always lands on a playable candidate
+  })
 
   audio.addEventListener('ended', () => {
     const store = usePlayerStore.getState()
@@ -192,11 +242,8 @@ export function initPlayback() {
     }
   })
 
-  audio.addEventListener('error', () => {
-    const err = audio?.error
-    console.error('Audio error — code:', err?.code, '| src:', audio?.src)
-    usePlayerStore.getState().setIsPlaying(false)
-  })
+  // (The old minimal error handler was replaced by the guarded handler
+  // above — toast + loop-safe auto-advance. Only one 'error' listener.)
 
   // Best-effort flush of the in-flight session when the window closes.
   window.addEventListener('beforeunload', () => {
@@ -245,8 +292,20 @@ export function initPlayback() {
       lastTickAt = 0
 
       const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+      // Phase 4 — online tracks carry an http(s) stream URL in `path` and it
+      // passes through untouched (the aura:// protocol handler only serves
+      // local files). Local files keep the aura:// wrap in Electron.
+      const isRemote = /^https?:\/\//i.test(state.currentSong.path)
+      // Phase 5 — CORS mode per stream. The analyser chain needs
+      // crossOrigin='anonymous' (aura:// sends ACAO; Audius sends ACAO:* —
+      // verified), but most RADIO streams send none: loading them with
+      // crossOrigin set fails outright, so it's dropped for those (the
+      // analyser reads silence — playback keeps working).
+      audio.crossOrigin = (state.currentSong.source === 'online' && state.currentSong.streamCors === false)
+        ? null
+        : 'anonymous'
       const params = new URLSearchParams({ path: state.currentSong.path })
-      audio.src = isElectron ? `aura://local?${params.toString()}` : state.currentSong.path
+      audio.src = isElectron && !isRemote ? `aura://local?${params.toString()}` : state.currentSong.path
       audio.load()
       audio.currentTime = 0
 

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Play } from 'lucide-react'
+import { Play, Disc3 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import type { Song } from '@/types'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
@@ -16,6 +16,15 @@ interface AlbumCardProps {
 
 export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = true }: AlbumCardProps) {
   const playSong = usePlayerStore((s) => s.playSong)
+  // Phase 9 — the card's own Open affordance: card click still plays (v1
+  // behavior, unchanged), this jumps to the album page.
+  const setSelectedAlbum = usePlayerStore((s) => s.setSelectedAlbum)
+  const setActiveView = usePlayerStore((s) => s.setActiveView)
+  const openAlbum = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedAlbum({ artist, album })
+    setActiveView('album')
+  }
 
   const content = (
     <>
@@ -39,6 +48,17 @@ export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = t
             <Play size={16} style={{ color: 'var(--text-on-accent)' }} className="ml-0.5" fill="currentColor" />
           </motion.div>
         </div>
+
+        {/* Phase 9 — Open album affordance (top-left, next to the play overlay) */}
+        <button
+          onClick={openAlbum}
+          aria-label={`Open album ${album}`}
+          title="Open album page"
+          className="absolute top-2 left-2 w-7 h-7 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(4px)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+        >
+          <Disc3 size={12} />
+        </button>
 
         <div
           className="absolute bottom-2 right-2 px-2 py-0.5 rounded-pill text-[10px]"

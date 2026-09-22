@@ -23,8 +23,12 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
     // a fresh 2048-byte Uint8Array every frame) and the accent colors are
     // cached and refreshed ~1.5×/s (was: getComputedStyle every frame — one
     // of the most expensive DOM reads to put in a rAF loop).
+    // Phase 15: the WAVE mode's time-domain buffer gets the same treatment —
+    // it was still allocating a fresh 2048-byte array every frame (~60/s of
+    // GC churn while the panel was open). One allocation per effect, reused.
     const analyser0 = audioAnalyserRef.current
     const freq = new Uint8Array(analyser0 ? analyser0.frequencyBinCount : 2048)
+    const time = new Uint8Array(analyser0 ? analyser0.fftSize : 2048)
     let colors = getColors()
     let colorAge = 0
 
@@ -52,7 +56,7 @@ export function VisualizerPanel({ anchorX, onClose }: { anchorX: number; onClose
 
       if (mode === 'bars') drawBars(ctx, c, freq, c1, c2)
       else if (mode === 'circle') drawCircle(ctx, c, freq, c1)
-      else drawWave(ctx, c, analyser, c1)
+      else drawWave(ctx, c, analyser, time, c1)
     }
 
     draw()
@@ -168,8 +172,7 @@ function drawCircle(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, da
   ctx.fill()
 }
 
-function drawWave(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, analyser: AnalyserNode, c1: string) {
-  const td = new Uint8Array(analyser.fftSize)
+function drawWave(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, analyser: AnalyserNode, td: Uint8Array<ArrayBuffer>, c1: string) {
   analyser.getByteTimeDomainData(td)
   ctx.strokeStyle = c1 + 'cc'
   ctx.lineWidth = 1.5

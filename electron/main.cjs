@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol, globalShortcut, nativeImage, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
+// Phase 3 — the one networking layer all online providers go through.
+const providerCore = require('./providers/core.cjs')
 
 const isDev = process.env.NODE_ENV === 'development'
 let mainWindow
@@ -153,6 +155,137 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
+// ── Desktop Mini Player (v2.1.2) ─────────────────────────────────────────────
+// A real, independent frameless BrowserWindow — not a component of the main
+// window. It appears automatically when Aura is minimized, floats above other
+// windows, is draggable anywhere on the desktop, and its close button hides
+// ONLY the widget (the main window is untouched). Playback keeps living in
+// the main renderer — the widget is a pure display/transport surface:
+//   main window --(mini:state snapshots)--> main process --relay--> mini window
+//   mini window --(mini:action)----------> main process --media:command--> main renderer
+// Security posture is identical to the main window: same preload,
+// contextIsolation: true, nodeIntegration: false.
+let miniWindow = null
+let miniVisible = false
+// Distinguishes "auto-shown because Aura was minimized" from "user opened it
+// with P" — only the auto flavor is auto-hidden on restore. An explicitly
+// opened mini player survives minimize/restore cycles.
+let miniAutoShown = false
+// Phase 13 — position memory now SURVIVES RESTARTS: bounds persist to a tiny
+// JSON file in userData, and are sanity-checked against the connected
+// displays at show time (a saved position on an unplugged monitor falls back
+// to the default anchor instead of appearing off-screen).
+let miniLastBounds = loadMiniBounds()
+
+function miniBoundsFile() {
+  try { return path.join(app.getPath('userData'), 'mini-bounds.json') } catch { return null }
+}
+
+function loadMiniBounds() {
+  try {
+    const file = miniBoundsFile()
+    if (!file || !fs.existsSync(file)) return null
+    const b = JSON.parse(fs.readFileSync(file, 'utf8'))
+    if (b && Number.isFinite(b.x) && Number.isFinite(b.y)) return { x: Math.round(b.x), y: Math.round(b.y) }
+  } catch { /* corrupt file → default anchor */ }
+  return null
+}
+
+function saveMiniBounds(bounds) {
+  try {
+    const file = miniBoundsFile()
+    if (!file) return
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(bounds))
+  } catch { /* best effort */ }
+}
+
+/** Is (x, y) plausibly visible on one of the connected displays? */
+function isPointOnAnyDisplay(x, y) {
+  const { screen } = require('electron')
+  return screen.getAllDisplays().some((d) =>
+    x >= d.bounds.x - 40 &&
+    x < d.bounds.x + d.bounds.width - 40 &&
+    y >= d.bounds.y - 40 &&
+    y < d.bounds.y + d.bounds.height - 40)
+}
+
+function miniTargetBounds() {
+  const { screen } = require('electron')
+  const width = 384
+  const height = 100
+  if (miniLastBounds && isPointOnAnyDisplay(miniLastBounds.x, miniLastBounds.y)) {
+    return { ...miniLastBounds, width, height }
+  }
+  // Default anchor: bottom-right of the work area, with a small margin.
+  const wa = screen.getPrimaryDisplay().workArea
+  return { width, height, x: wa.x + wa.width - width - 24, y: wa.y + wa.height - height - 24 }
+}
+
+function createMiniWindow() {
+  if (miniWindow && !miniWindow.isDestroyed()) return miniWindow
+  miniWindow = new BrowserWindow({
+    ...miniTargetBounds(),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    focusable: false, // a widget, not a workspace — clicks work, focus never stolen
+    hasShadow: false, // the card paints its own CSS shadow inside the bounds
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: !isDev,
+    },
+  })
+  miniWindow.setAlwaysOnTop(true, 'floating')
+  if (isDev) {
+    miniWindow.loadURL('http://localhost:5173/mini.html')
+  } else {
+    miniWindow.loadFile(path.join(__dirname, '../dist/mini.html'))
+  }
+  // Remember where the user dragged it — within this session AND across
+  // restarts (Phase 13).
+  miniWindow.on('moved', () => {
+    if (!miniWindow || miniWindow.isDestroyed()) return
+    const [x, y] = miniWindow.getPosition()
+    miniLastBounds = { x, y }
+    saveMiniBounds(miniLastBounds)
+  })
+  return miniWindow
+}
+
+function showMiniPlayer({ auto = false } = {}) {
+  const mini = createMiniWindow()
+  if (!mini.isVisible()) {
+    mini.setBounds(miniTargetBounds())
+    mini.showInactive() // never steal focus from whatever the user is doing
+  }
+  miniVisible = true
+  if (auto) miniAutoShown = true
+  broadcastMiniVisibility()
+}
+
+function hideMiniPlayer() {
+  if (miniWindow && !miniWindow.isDestroyed() && miniWindow.isVisible()) miniWindow.hide()
+  miniVisible = false
+  miniAutoShown = false
+  broadcastMiniVisibility()
+}
+
+// Keep the MAIN window's UI (P key label, command palette, pill button) in
+// sync with reality — sent only on actual changes by the callers above.
+function broadcastMiniVisibility() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('mini:visibility', miniVisible)
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -227,6 +360,27 @@ function createWindow() {
 
   mainWindow.on('maximize',   () => mainWindow.webContents.send('window:maximized', true))
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized', false))
+
+  // ── Mini player coupling (v2.1.2) ────────────────────────────────────────
+  // Minimizing Aura surfaces the desktop mini player; restoring hides it —
+  // but ONLY if the widget was auto-shown by THIS minimize (an explicitly
+  // opened mini player survives the cycle). Closing/hiding the widget never
+  // touches the main window.
+  mainWindow.on('minimize', () => {
+    if (!miniVisible) showMiniPlayer({ auto: true })
+  })
+  mainWindow.on('restore', () => {
+    if (miniAutoShown) hideMiniPlayer()
+  })
+  // The widget cannot outlive the app's main window — otherwise Aura would
+  // linger as a floating card after quit (and window-all-closed would never
+  // fire, hanging the process).
+  mainWindow.on('closed', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) miniWindow.destroy()
+    miniWindow = null
+    miniVisible = false
+    miniAutoShown = false
+  })
 }
 
 // Mime type map for audio files — and now cover art images too, since both
@@ -364,7 +518,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
+// macOS: the dock icon should re-create the MAIN window — the count check
+// alone would miss the case where only the (hidden) mini widget survives.
+app.on('activate', () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow() })
 // Global shortcuts are a system-wide hook — leaving them registered after
 // Aura quits would mean physical media keys silently do nothing (since
 // they'd still be "claimed" by a process that's no longer listening) until
@@ -645,19 +801,18 @@ ipcMain.handle('fs:fileStats', async (_e, filePath) => {
 // failing the whole lookup. Only when EVERY source errors does the renderer
 // see a network error.
 
-const FIND_USER_AGENT = 'AuraPlayer/2.1.1 (desktop music player)'
+const FIND_USER_AGENT = 'AuraPlayer/2.16.0 (desktop music player)'
 
-// shared fetch with timeout — returns parsed JSON or throws
+// Shared fetch — now routed through the Provider Core (Phase 3), which adds
+// retry with backoff, typed errors, and a shared UA on top of the timeout it
+// already had. Same call signature; every caller's fail-soft catch blocks
+// keep working unchanged.
 async function fetchJson(url, options = {}, timeoutMs = 9000) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal })
-    if (!res.ok) throw new Error(`http_${res.status}`)
-    return await res.json()
-  } finally {
-    clearTimeout(timer)
-  }
+  return providerCore.providerFetch(url, {
+    timeoutMs,
+    retries: 1,
+    headers: options.headers,
+  })
 }
 
 // Normalize for comparison: lowercase, strip diacritics, collapse whitespace.
@@ -836,6 +991,49 @@ async function findCandidates(q) {
   return { ok: true, candidates }
 }
 
+// ── Provider Core IPC (Phase 3) ─────────────────────────────────────────────
+// The renderer asks for (providerId, op, params) — never URLs. Ops are an
+// allowlist registered below; params must be a plain object; responses are
+// either the op's raw result or a { kind, message } error payload the
+// renderer normalizes into a ProviderError.
+
+// Phase 4 — Audius (every op verified against the live API before shipping).
+providerCore.registerProvider(require('./providers/audius.cjs'))
+// Phase 5 — Radio Browser (community station directory, verified live).
+providerCore.registerProvider(require('./providers/radiobrowser.cjs'))
+
+providerCore.registerProvider({
+  id: 'findinfo',
+  description: 'Song metadata lookup across Deezer, Apple Music, and MusicBrainz (keyless).',
+  ops: {
+    search: async (params) => findCandidates({
+      title: (params.title || '').toString(),
+      artist: (params.artist || '').toString(),
+      album: (params.album || '').toString(),
+      duration: Number(params.duration) || 0,
+    }),
+  },
+})
+
+ipcMain.handle('net:providerRequest', async (_e, requestId, providerId, op, params) => {
+  try {
+    return await providerCore.callProvider({ requestId, providerId, op, params })
+  } catch (err) {
+    // Typed failures ride back as a payload the renderer recognizes.
+    return {
+      kind: err?.kind || 'network',
+      message: err?.message || 'Provider request failed',
+      ...(err?.status !== undefined ? { status: err.status } : {}),
+    }
+  }
+})
+
+ipcMain.on('net:providerCancel', (_e, requestId) => {
+  providerCore.cancelRequest(typeof requestId === 'string' ? requestId : '')
+})
+
+ipcMain.handle('net:probeOnline', () => providerCore.probeOnline())
+
 ipcMain.handle('net:findMetadata', async (_e, query) => {
   try {
     return await findCandidates({
@@ -858,14 +1056,16 @@ ipcMain.handle('net:cacheArtwork', async (_e, url) => {
     const timeout = setTimeout(() => controller.abort(), 20_000)
     let res
     try {
-      res = await fetch(url, { signal: controller.signal })
+      // Phase 3: same deterministic transport as every other provider call
+      // (manual DNS resolution — robust on IPv6-black-holed networks).
+      res = await providerCore.rawRequest(url, { signal: controller.signal, timeoutMs: 20_000, headers: { Accept: 'image/*' } })
     } finally {
       clearTimeout(timeout)
     }
-    if (!res.ok) return null
-    const type = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim()
+    if (res.status < 200 || res.status >= 300) return null
+    const type = (res.headers['content-type'] || 'image/jpeg').split(';')[0].trim()
     if (!type.startsWith('image/')) return null
-    const buf = Buffer.from(await res.arrayBuffer())
+    const buf = res.body
     if (buf.length === 0) return null
     const ext = COVER_EXT_BY_MIME[type] || '.jpg'
     const cachedPath = path.join(coversDir, hashStr(url) + ext)
@@ -911,10 +1111,100 @@ ipcMain.handle('fs:parseMetadataBatch', async (event, filePaths) => {
   return results
 })
 
+// ── Library Health (Phase 1): batch path existence check ────────────────────
+// One IPC round-trip per health scan — the renderer sends every library
+// path at once and gets back one row per path. Never throws per-path: a
+// stat failure (vanished file, permission error, path too long) simply
+// means "not a healthy file". Chunked so a 10k-path scan can't hold the
+// event loop or thousands of simultaneous file handles hostage.
+ipcMain.handle('fs:checkPaths', async (_e, paths) => {
+  if (!Array.isArray(paths)) return []
+  const MAX_PATHS = 50_000
+  const list = paths
+    .filter((p) => typeof p === 'string' && p.length > 0)
+    .slice(0, MAX_PATHS)
+
+  const out = new Array(list.length)
+  const CHUNK = 250
+  for (let i = 0; i < list.length; i += CHUNK) {
+    const chunk = list.slice(i, i + CHUNK)
+    const rows = await Promise.all(chunk.map(async (p) => {
+      try {
+        const st = await fs.promises.stat(p)
+        return { path: p, exists: st.isFile(), sizeBytes: st.size, mtimeMs: st.mtimeMs }
+      } catch {
+        return { path: p, exists: false, sizeBytes: 0, mtimeMs: 0 }
+      }
+    }))
+    rows.forEach((row, j) => { out[i + j] = row })
+    // Yield between chunks — keeps the main process responsive to window
+    // and audio IPC while a large scan is in flight.
+    await new Promise((r) => setImmediate(r))
+  }
+  return out
+})
+
 ipcMain.on('window:minimize', () => mainWindow.minimize())
 ipcMain.on('window:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize())
 ipcMain.on('window:close',    () => mainWindow.close())
 ipcMain.handle('window:isMaximized', () => mainWindow.isMaximized())
+
+// ── Desktop mini player IPC (v2.1.2) ────────────────────────────────────────
+
+// Test-mode-only (AURA_USER_DATA_DIR, same isolation hook as Wave 0): CI
+// environments run Xvfb WITHOUT a window manager, so the OS never completes
+// an iconify request and the real 'minimize' event never fires. These hooks
+// emit the SAME BrowserWindow events through the SAME handlers the OS path
+// uses, so the coupling itself is still verifiable in CI. Never registered
+// in normal use.
+if (process.env.AURA_USER_DATA_DIR) {
+  ipcMain.on('test:emitMinimize', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.emit('minimize') })
+  ipcMain.on('test:emitRestore',  () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.emit('restore') })
+}
+
+// State snapshots flow main-renderer → mini window. Only trust snapshots
+// from the MAIN window's webContents — the mini window itself also carries
+// pushMiniState in its preload (shared preload), and letting it relay to
+// itself would create an echo loop.
+ipcMain.on('mini:state', (event, state) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.webContents.send('mini:state', state)
+  }
+})
+
+// Renderer-initiated visibility (P key / command palette / pill button).
+ipcMain.on('mini:setVisible', (_e, visible) => {
+  if (visible) showMiniPlayer()
+  else hideMiniPlayer()
+})
+
+// Transport + window actions from the mini widget. Transport remaps onto the
+// SAME 'media:command' channel the global media keys and thumbar buttons use
+// — one playback funnel, no duplicate command logic in the renderer.
+ipcMain.on('mini:action', (_e, action) => {
+  switch (action) {
+    case 'togglePlay':
+    case 'next':
+    case 'previous':
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const cmd = action === 'togglePlay' ? 'toggle' : action === 'next' ? 'next' : 'previous'
+        mainWindow.webContents.send('media:command', cmd)
+      }
+      break
+    case 'restore':
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
+        mainWindow.focus()
+      }
+      hideMiniPlayer()
+      break
+    case 'close':
+      hideMiniPlayer() // hides the widget only — the main window is untouched
+      break
+  }
+})
 
 // Renderer pushes isPlaying here whenever it changes (in-app toggle, a song
 // ending and auto-advancing, etc.) so the taskbar thumbnail's Play/Pause

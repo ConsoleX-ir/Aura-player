@@ -126,3 +126,50 @@ export function removeByIds<T extends QueueItem>(
 export function indexOfId<T extends QueueItem>(items: readonly T[], id: string): number {
   return items.findIndex((x) => x.id === id)
 }
+
+/**
+ * Phase 11 — Queue 2.0 ordering primitives (pure).
+ *
+ * Policy (predictability first):
+ *  • "Play next" / "Add to end" / reorder operate on the CURRENT PLAY ORDER
+ *    (the queue). With shuffle ON that is what you will hear — edits win.
+ *  • The playing item never moves because of an edit: every function returns
+ *    the corrected playhead alongside the new array.
+ */
+
+/** Move the item at `from` so it ends up at `to` (both clamped). */
+export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
+  const n = items.length
+  if (n === 0) return [...items]
+  const f = Math.max(0, Math.min(n - 1, from))
+  const t = Math.max(0, Math.min(n - 1, to))
+  if (f === t) return [...items]
+  const next = [...items]
+  const [item] = next.splice(f, 1)
+  next.splice(t, 0, item)
+  return next
+}
+
+/** Where does the playhead point after a move? (Playing item never jumps.) */
+export function indexAfterMove(currentIndex: number, from: number, to: number): number {
+  // The playing item itself moved → it now plays from its new position.
+  if (currentIndex === from) return Math.max(0, to)
+  if (from < currentIndex && to >= currentIndex) return currentIndex - 1
+  if (from > currentIndex && to <= currentIndex) return currentIndex + 1
+  return currentIndex
+}
+
+/** Insert `item` immediately after `index` (clamped inside the array). */
+export function insertAfter<T>(items: readonly T[], index: number, item: T): T[] {
+  const i = Math.max(-1, Math.min(items.length - 1, index))
+  const next = [...items]
+  next.splice(i + 1, 0, item)
+  return next
+}
+
+/** Ids of everything AFTER the playhead — the "clear upcoming" victim set. */
+export function upcomingIds<T extends QueueItem>(items: readonly T[], currentIndex: number): Set<string> {
+  const ids = new Set<string>()
+  for (let i = currentIndex + 1; i < items.length; i++) ids.add(items[i].id)
+  return ids
+}

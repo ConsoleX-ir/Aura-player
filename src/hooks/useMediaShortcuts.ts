@@ -37,8 +37,6 @@ export function useMediaShortcuts() {
     if (!currentSongId) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      (window as any).__mediaKeys = ((window as any).__mediaKeys || 0) + 1;
-      if (e.code === "KeyQ") (window as any).__qHits = ((window as any).__qHits || 0) + 1;
       const target = e.target as HTMLElement;
 
       if (
@@ -46,8 +44,50 @@ export function useMediaShortcuts() {
         target.tagName === "TEXTAREA" ||
         target.isContentEditable
       ) {
-        (window as any).__inputBlocked = ((window as any).__inputBlocked || 0) + 1;
         return;
+      }
+
+      // ── Keyboard routing: focused controls own their keys ─────────────────
+      // (Phase 12 audit — supersedes the v2.1.2 slider-only guard.)
+      //
+      // 1. Radix portals (dropdown menus, popovers, select lists) own the
+      //    keyboard while open: arrows navigate items, Space/Enter activate,
+      //    letters typeahead. Without this, ArrowRight inside an open ⋯ menu
+      //    ALSO skipped the track — one keypress, two meanings.
+      // 2. Focused sliders own the arrow keys (volume, seek, EQ bands): the
+      //    component adjusts its own value; the global handler stands down
+      //    (the v2.1.2 volume-vs-seek conflict fix, kept and broadened).
+      // 3. Space on a Space-activating control (button, link, tab, …)
+      //    activates THAT control natively — a global play/pause on the same
+      //    keypress would be a double action. Every non-Space shortcut still
+      //    works while a button holds focus.
+      // Non-conflicting keys on non-conflicting focus keep global meaning:
+      // L/S/R/M/N/Q/P work wherever typing isn't happening.
+      if (typeof target.closest === "function") {
+        if (
+          target.closest(
+            '[data-radix-popper-content-wrapper], [role="menu"], [role="listbox"], [role="dialog"][aria-modal="true"]'
+          )
+        ) {
+          return;
+        }
+        if (target.closest('[role="slider"]')) {
+          switch (e.code) {
+            case "ArrowLeft":
+            case "ArrowRight":
+            case "ArrowUp":
+            case "ArrowDown":
+              return;
+          }
+        }
+        if (
+          e.code === "Space" &&
+          target.closest(
+            'button, [role="button"], a[href], select, summary, [role="option"], [role="menuitem"], [role="tab"]'
+          )
+        ) {
+          return;
+        }
       }
 
       const s = usePlayerStore.getState();

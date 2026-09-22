@@ -4,7 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- CSP: img-src CDNs cover suggestion artwork — Deezer (*.dzcdn.net), Apple Music (*.mzstatic.com) -->
+    <!-- CSP: artwork/stream hosts are provider-controlled and DYNAMIC —
+         Audius serves art from rotating content nodes (audius-creator-*.theblueprint.xyz,
+         creatornode.*, …) and Radio Browser station favicons/streams live on the
+         stations' own domains — so img-src / media-src allow https:/http: as
+         schemes instead of an untenable host whitelist. Script execution stays
+         locked to 'self'; images and media are passive content (no script exec). -->
     <meta
   http-equiv="Content-Security-Policy"
   content="
@@ -12,8 +17,8 @@
     script-src 'self';
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com data:;
-    img-src 'self' data: blob: aura: https://*.dzcdn.net https://*.mzstatic.com;
-    media-src 'self' aura: blob:;
+    img-src 'self' data: blob: aura: https: http:;
+    media-src 'self' aura: blob: https: http:;
     connect-src 'self' http://localhost:5173 ws://localhost:5173 https://lrclib.net;
   "
 />

@@ -12,6 +12,7 @@
 
 import { usePlayerStore } from '@/store/playerStore'
 import { hashStr } from '@/lib/utils'
+import { analyzeLibraryHealth, type LibraryHealthReport, type PathCheck } from '@/lib/libraryHealth'
 import type { Song } from '@/types'
 
 export interface ImportProgress { done: number; total: number }
@@ -220,4 +221,33 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
   }
 
   return result
+}
+
+/**
+ * Library Health (Phase 1 — Library 2.0): verifies every library entry
+ * against the filesystem and analyzes the whole collection for duplicate
+ * recordings. Pure judgment lives in lib/libraryHealth (unit-tested); this
+ * wrapper only gathers the filesystem facts and shapes the report.
+ *
+ * Without an electronAPI (plain browser / tests without a mock) the scan
+ * degrades honestly: every entry counts as checked-and-present, duplicates
+ * are still analyzed, and nothing is flagged missing.
+ */
+export async function runLibraryHealthCheck(): Promise<LibraryHealthReport> {
+  const songs = usePlayerStore.getState().library
+
+  if (!window.electronAPI?.checkPaths || songs.length === 0) {
+    return analyzeLibraryHealth(songs, new Map())
+  }
+
+  let checks: PathCheck[]
+  try {
+    checks = await window.electronAPI.checkPaths(songs.map((s) => s.path))
+  } catch {
+    // IPC itself failed — report what we know (nothing about the disk)
+    // rather than fabricating a sea of "missing" flags.
+    return analyzeLibraryHealth(songs, new Map())
+  }
+  const byPath = new Map(checks.map((c) => [c.path, c]))
+  return analyzeLibraryHealth(songs, byPath)
 }

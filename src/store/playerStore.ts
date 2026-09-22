@@ -5,9 +5,10 @@ import { DEFAULT_THEME_ID, type ThemePresetId } from '@/lib/themePresets'
 import { idbStorage } from '@/lib/idbStorage'
 import type { SortKey, SortDir } from '@/lib/sort'
 import {
-  shuffledAround, nextIndex, prevIndex, removeByIds,
+  shuffledAround, nextIndex, prevIndex, removeByIds, moveItem, indexAfterMove, insertAfter, upcomingIds,
 } from '@/lib/queueEngine'
 import { eqPresetById, clampDb, isFlat, sanitizeGains } from '@/lib/eq'
+import { appendSmartPicks, pruneSmartIds } from '@/lib/smartQueue'
 
 interface PlayerState {
   library: Song[]
@@ -85,6 +86,13 @@ interface PlayerState {
   // that edge case (skip to next? stop? something else?) by keeping the
   // remove button hidden for the active row instead, in the UI.
   removeFromQueue: (index: number) => void
+  // Phase 11 — Queue 2.0: full manual control. Manual actions always beat
+  // Smart Queue (which only ever appends and never re-adds removed tracks).
+  reorderQueueItem: (from: number, to: number) => void
+  playNextInQueue: (song: Song) => void
+  addToQueueEnd: (song: Song) => void
+  clearUpcomingQueue: () => void
+  jumpToQueueIndex: (index: number) => void
   togglePlay: () => void
   setIsPlaying: (v: boolean) => void
   nextSong: () => void
@@ -95,8 +103,21 @@ interface PlayerState {
   setProgress: (v: number) => void
   setDuration: (v: number) => void
 
+  // Phase 8 — Smart Queue session state. NOT persisted (the queue itself
+  // is session-only by design); badges derive from the live queue anyway.
+  smartAddedIds: string[]
+  smartReasons: Record<string, string>
+  smartRemovedIds: string[]
+  /** Appends engine picks to the end of the queue (never reorders, never
+   *  touches playback — the user's queue keeps priority). */
+  extendWithSmartPicks: (picks: { song: Song; reason: string }[]) => void
+
   shuffle: boolean
   repeat: RepeatMode
+  // Phase 8 — Smart Queue: when on, the engine quietly appends marked
+  // recommendations as the queue runs dry (repeat=off only). Persisted.
+  smartQueue: boolean
+  setSmartQueue: (v: boolean) => void
   toggleShuffle: () => void
   cycleRepeat: () => void
   // Auto-advance when a track finishes naturally (audio 'ended'). Unlike
@@ -115,6 +136,11 @@ interface PlayerState {
   // 'dark' is the true Aura form; 'light' is the designed glow-first
   // foundation from tokens.css now given a toggle. Persisted.
   appearance: 'dark' | 'light'
+  // Phase 14 — the ambient layer (artwork orbs + Aura Pulse motion) is
+  // OPTIONAL: off removes the animated atmosphere entirely while everything
+  // else keeps working. Persisted.
+  ambientEffects: boolean
+  setAmbientEffects: (v: boolean) => void
   setAppearance: (v: 'dark' | 'light') => void
 
   // ── Folder watching (Wave 4) ──────────────────────────────────────────
@@ -156,8 +182,19 @@ interface PlayerState {
 
   activeView: AppView
   setActiveView: (v: AppView) => void
+  /** The view the user came FROM — Back targets for the full-screen
+   *  Rewind / Explore surfaces. Session-only (never persisted); null until
+   *  the first navigation, where Back falls back to the Library. */
+  previousView: AppView | null
+  goBack: () => void
   selectedPlaylistId: string | null
   setSelectedPlaylistId: (id: string | null) => void
+  // Phase 9 — Artist & Album pages. `selectedArtist` holds the artist's
+  // DISPLAY name as clicked; the pages re-resolve all case variants.
+  selectedArtist: string | null
+  setSelectedArtist: (name: string | null) => void
+  selectedAlbum: { artist: string; album: string } | null
+  setSelectedAlbum: (key: { artist: string; album: string } | null) => void
 
   // ── Library view state (Wave 0 — persisted) ───────────────────────────
   // v2.1.0 kept these session-local; the Wave 0 persistence gate overrides
@@ -363,16 +400,71 @@ export const usePlayerStore = create<PlayerState>()(
         if (index === s.queueIndex || index < 0 || index >= s.queue.length) return s
         const removedId = s.queue[index].id
         const next = removeByIds(s.queue, new Set([removedId]), s.queueIndex)
+        // Phase 8 — user priority: a smart-recommended track the user removed
+        // is NEVER silently re-added by continuation this session.
+        const wasSmart = s.smartAddedIds.includes(removedId)
         return {
           queue: next.items,
           queueIndex: next.currentIndex ?? s.queueIndex,
           // Keep the natural-order snapshot in sync so shuffle OFF restores
           // the context minus the song you just removed.
           naturalQueue: s.naturalQueue.filter((song) => song.id !== removedId),
+          smartAddedIds: s.smartAddedIds.filter((id) => id !== removedId),
+          smartRemovedIds: wasSmart ? [...s.smartRemovedIds, removedId] : s.smartRemovedIds,
         }
       }),
       togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
+      // LATENT CRASH FIX (Phase 11): declared + consumed by useSleepTimer and
+      // useMediaKeys (SMTC pause/play) but never implemented — the sleep
+      // timer firing and the SMTC pause/play handlers would throw
+      // "undefined is not a function" at runtime.
       setIsPlaying: (v) => set({ isPlaying: v }),
+
+      // ── Phase 11 — Queue 2.0 manual controls ──────────────────────
+      // The playing item NEVER moves as a side effect of an edit; every
+      // action corrects the playhead via the engine's index math. With
+      // shuffle OFF the natural snapshot is edited in lockstep so "shuffle
+      // off restores what you arranged"; with shuffle ON the natural
+      // snapshot is left alone (toggling shuffle off reveals the original
+      // context — the documented, predictable trade).
+      reorderQueueItem: (from, to) => set((s) => {
+        if (from === to || from < 0 || to < 0 || from >= s.queue.length || to >= s.queue.length) return s
+        const nextQueue = moveItem(s.queue, from, to)
+        return {
+          queue: nextQueue,
+          queueIndex: indexAfterMove(s.queueIndex, from, to),
+          naturalQueue: s.shuffle ? s.naturalQueue : moveItem(s.naturalQueue, from, to),
+        }
+      }),
+      playNextInQueue: (song) => set((s) => {
+        // Idempotent: "already next" is a no-op.
+        if (s.queue[s.queueIndex + 1]?.id === song.id) return s
+        const nextQueue = insertAfter(s.queue, s.queueIndex, song)
+        // Natural snapshot: right after the current song's natural position.
+        const natIdx = s.naturalQueue.findIndex((x) => x.id === s.queue[s.queueIndex]?.id)
+        return {
+          queue: nextQueue,
+          naturalQueue: s.shuffle ? insertAfter(s.naturalQueue, natIdx, song) : nextQueue,
+        }
+      }),
+      addToQueueEnd: (song) => set((s) => ({
+        queue: [...s.queue, song],
+        naturalQueue: [...s.naturalQueue, song],
+      })),
+      clearUpcomingQueue: () => set((s) => {
+        const doomed = upcomingIds(s.queue, s.queueIndex)
+        if (doomed.size === 0) return s
+        const nextQueue = s.queue.slice(0, s.queueIndex + 1)
+        return {
+          queue: nextQueue,
+          naturalQueue: s.shuffle ? s.naturalQueue.filter((x) => !doomed.has(x.id)) : nextQueue,
+          smartAddedIds: s.smartAddedIds.filter((id) => !doomed.has(id)),
+        }
+      }),
+      jumpToQueueIndex: (index) => set((s) => {
+        if (index < 0 || index >= s.queue.length || index === s.queueIndex) return s
+        return { currentSong: s.queue[index], queueIndex: index, isPlaying: true, progress: 0 }
+      }),
 
       // Manual skip: always advances (wraps at the end) so navigation is
       // never stuck. The queue is the real play order, so "next" is simply
@@ -427,6 +519,21 @@ export const usePlayerStore = create<PlayerState>()(
 
       shuffle: false,
       repeat: 'none',
+      smartQueue: true,
+      smartAddedIds: [],
+      smartReasons: {},
+      smartRemovedIds: [],
+      setSmartQueue: (v) => set({ smartQueue: v }),
+      extendWithSmartPicks: (picks) => set((s) => {
+        const r = appendSmartPicks(s.queue, s.naturalQueue, picks)
+        if (!r) return s
+        return {
+          queue: r.queue,
+          naturalQueue: r.naturalQueue,
+          smartAddedIds: pruneSmartIds([...s.smartAddedIds, ...r.addedIds], r.queue),
+          smartReasons: { ...s.smartReasons, ...r.reasons },
+        }
+      }),
       // Shuffle becomes a REAL reorder of the queue (the play order), not a
       // per-skip dice roll. Turning it on permutes the queue around the
       // current song (its index is preserved — playback state untouched) and
@@ -455,6 +562,8 @@ export const usePlayerStore = create<PlayerState>()(
       setPerformanceMode: (v) => set({ performanceMode: v }),
 
       appearance: 'dark',
+      ambientEffects: true,
+      setAmbientEffects: (v) => set({ ambientEffects: v }),
       setAppearance: (v) => set({ appearance: v }),
 
       watchFolders: true,
@@ -492,9 +601,20 @@ export const usePlayerStore = create<PlayerState>()(
       }),
 
       activeView: 'library',
-      setActiveView: (v) => set({ activeView: v }),
+      // previousView tracking: skip no-op sets so repeated clicks on the same
+      // nav target never poison the Back history.
+      previousView: null,
+      setActiveView: (v) => set((s) => (s.activeView === v ? s : { previousView: s.activeView, activeView: v })),
+      goBack: () => {
+        const { previousView, activeView } = get()
+        get().setActiveView(previousView && previousView !== activeView ? previousView : 'library')
+      },
       selectedPlaylistId: null,
       setSelectedPlaylistId: (id) => set({ selectedPlaylistId: id }),
+      selectedArtist: null,
+      setSelectedArtist: (name) => set({ selectedArtist: name }),
+      selectedAlbum: null,
+      setSelectedAlbum: (key) => set({ selectedAlbum: key }),
 
       librarySortKey: 'added',
       librarySortDir: 'asc',
@@ -536,7 +656,52 @@ export const usePlayerStore = create<PlayerState>()(
         librarySortKey: s.librarySortKey,
         librarySortDir: s.librarySortDir,
         libraryViewMode: s.libraryViewMode,
+        // Phase 8 — Smart Queue opt-out survives restarts.
+        smartQueue: s.smartQueue,
+        // Phase 14 — ambient visuals opt-out survives restarts.
+        ambientEffects: s.ambientEffects,
+        // Phase 11 — Queue 2.0: the queue persists as ID REFERENCES (not Song
+        // objects) and is rebuilt against the library at hydrate time by the
+        // custom merge below — deleted/moved files drop out honestly, and a
+        // stale snapshot can never resurrect a removed song.
+        queueIds: s.queue.map((x) => x.id),
+        naturalQueueIds: s.naturalQueue.map((x) => x.id),
+        queueIndex: s.queueIndex,
+        currentSongId: s.currentSong?.id ?? null,
       }),
+
+      // Custom merge: map persisted queue ids back onto the freshly
+      // rehydrated library. Restored queues NEVER autoplay (isPlaying stays
+      // false) — the user resumes explicitly. Missing ids are dropped; the
+      // index is clamped; currentSong only survives if still resolvable.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<PlayerState> & {
+          queueIds?: string[]; naturalQueueIds?: string[]
+          queueIndex?: number; currentSongId?: string | null
+        }
+        const library: Song[] = Array.isArray(p.library) ? p.library : []
+        const byId = new Map(library.map((x) => [x.id, x]))
+        const resolve = (ids?: string[]): Song[] =>
+          Array.isArray(ids) ? ids.map((id) => byId.get(id)).filter((x): x is Song => !!x) : []
+        const queue = resolve(p.queueIds)
+        const naturalQueue = resolve(p.naturalQueueIds)
+        const currentSong = (p.currentSongId ? byId.get(p.currentSongId) : undefined) ?? null
+        const base = { ...current, ...p } as PlayerState
+        return {
+          ...base,
+          queue,
+          naturalQueue,
+          currentSong,
+          queueIndex: currentSong && queue.length
+            ? Math.max(0, Math.min(queue.findIndex((x) => x.id === currentSong.id), queue.length - 1))
+            : 0,
+          isPlaying: false,
+          // Session-only smart-queue bookkeeping always starts fresh.
+          smartAddedIds: [],
+          smartReasons: {},
+          smartRemovedIds: [],
+        }
+      },
     }
   )
 )

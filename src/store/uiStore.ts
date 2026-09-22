@@ -15,8 +15,13 @@ interface UiState {
   setCommandOpen: (v: boolean) => void
   toggleCommand: () => void
 
-  // Mini-player (Wave 4): in-app compact mode. When on, the pill Play Bar
-  // steps aside and a small artwork-driven widget takes over bottom-right.
+  // Mini-player (v2.1.2): now the DESKTOP mini player — an independent,
+  // freely draggable frameless BrowserWindow (see electron/main.cjs). This
+  // flag mirrors the widget's real visibility: the P key / command palette /
+  // pill button flip it through here, and main process events (minimize
+  // auto-show, restore auto-hide, widget's own close button) sync it back
+  // via onMiniVisibility in useMiniPlayerBridge. In non-Electron contexts
+  // (plain browser, tests) toggling is a harmless local no-op.
   miniPlayer: boolean
   setMiniPlayer: (v: boolean) => void
 
@@ -39,6 +44,14 @@ interface UiState {
   propertiesReturnView: AppView
   openProperties: (songId: string, opts?: { initialFind?: boolean }) => void
   closeProperties: () => void
+
+  // ── Library search text (Phase 2 — Search & Navigation 2.0) ──────────
+  // Lives here instead of Library-local useState so OTHER surfaces can drive
+  // it: the command palette's "Search library for …" row pre-fills it and
+  // jumps to the Library. Still ephemeral (uiStore is not persisted) — a
+  // search is a moment, not a preference.
+  librarySearch: string
+  setLibrarySearch: (q: string) => void
 }
 
 export const useUiStore = create<UiState>()((set, get) => ({
@@ -50,7 +63,13 @@ export const useUiStore = create<UiState>()((set, get) => ({
   toggleCommand: () => set((s) => ({ commandOpen: !s.commandOpen })),
 
   miniPlayer: false,
-  setMiniPlayer: (v) => set({ miniPlayer: v }),
+  setMiniPlayer: (v) => {
+    set({ miniPlayer: v })
+    // Show/hide the real desktop window. Main broadcasts the authoritative
+    // visibility back on every actual change (see useMiniPlayerBridge), so a
+    // missed IPC or a double-toggle self-corrects instead of desyncing.
+    try { window.electronAPI?.setMiniVisible?.(v) } catch { /* non-Electron */ }
+  },
 
   openPanel: null,
   panelAnchorX: 0,
@@ -80,4 +99,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
     // longer makes sense — favorites/playlist are always valid AppViews.
     usePlayerStore.getState().setActiveView(back === 'properties' ? 'library' : back)
   },
+
+  librarySearch: '',
+  setLibrarySearch: (q) => set({ librarySearch: q }),
 }))

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Same CSP posture as the main window. img-src follows it to https:/http:
+        so ONLINE tracks' cover art (Audius content-node hosts) renders in the
+        widget; aura: keeps cached local cover art working. style-src
+        'unsafe-inline' covers the inline boot style below. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com data:;
+        img-src 'self' data: blob: aura: https: http:;
+        connect-src 'self' http://localhost:5173 ws://localhost:5173;
+      "
+    />
+    <title>Aura Mini</title>
+    <!-- Transparent frameless window: the page stays clear so the card can
+        paint its own rounded corners + shadow inside the window bounds. -->
+    <style>html, body { background: transparent; margin: 0; }</style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/mini/main.tsx"></script>
+  </body>
+</html>

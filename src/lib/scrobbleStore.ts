@@ -17,6 +17,11 @@
 
 import type { SongListenStats } from '@/types'
 
+// Event dispatched on window whenever a scrobble lands, so reactive surfaces
+// (useListenAggregates → Library sort, future history views) can refresh
+// without the engine knowing about them. Debounced by consumers.
+export const SCROBBLE_APPENDED_EVENT = 'aura:scrobble-appended'
+
 export interface Scrobble {
   // Auto-incremented by IndexedDB — undefined on the draft we append.
   id?: number
@@ -75,7 +80,10 @@ export async function appendScrobble(entry: Omit<Scrobble, 'id'>): Promise<numbe
   return new Promise((resolve, reject) => {
     const tx = db.transaction(SCROBBLES, 'readwrite')
     const req = tx.objectStore(SCROBBLES).add(entry)
-    req.onsuccess = () => resolve(req.result as number)
+    req.onsuccess = () => {
+      writeSeq++
+      resolve(req.result as number)
+    }
     req.onerror = () => reject(req.error)
   })
 }
@@ -86,7 +94,11 @@ export async function appendScrobble(entry: Omit<Scrobble, 'id'>): Promise<numbe
  * local stats row is infinitely preferable to glitching audio over it.
  */
 export function safeAppendScrobble(entry: Omit<Scrobble, 'id'>): void {
-  appendScrobble(entry).catch((e) => console.warn('Scrobble append failed (ignored):', e))
+  appendScrobble(entry)
+    .then(() => {
+      try { window.dispatchEvent(new CustomEvent(SCROBBLE_APPENDED_EVENT)) } catch { /* non-window */ }
+    })
+    .catch((e) => console.warn('Scrobble append failed (ignored):', e))
 }
 
 // Aggregate listening stats for one song — computed by walking the song's
@@ -157,5 +169,116 @@ export async function ensureStatsSchemaMeta(): Promise<void> {
     if (!existing) store.put({ key: 'schemaVersion', version: DB_VERSION })
   } catch {
     // Stats are a nice-to-have at runtime; a meta write failure is harmless.
+  }
+}
+
+// ── Whole-history aggregates (Phase 1 — Library 2.0) ──────────────────────
+// One cursor walk over every scrobble, folded into per-song totals. This is
+// what powers the Library's Recently Played / Most Played / Most Skipped
+// sorts and (later) the Smart Music Engine's familiarity signals.
+
+export interface ListenAggregate {
+  plays: number
+  completed: number
+  skipped: number
+  totalPlayedMs: number
+  lastPlayedAt: number | null
+}
+
+export type ListenAggregates = Map<string, ListenAggregate>
+
+// Cache: a full cursor walk of years of history costs tens of ms — fine on
+// mount, wasteful on every sort click. The cache busts whenever the store's
+// write sequence advances, so fresh scrobbles are always reflected.
+let aggregateCache: { seq: number; map: ListenAggregates } | null = null
+let writeSeq = 0
+
+function emptyAggregate(): ListenAggregate {
+  return { plays: 0, completed: 0, skipped: 0, totalPlayedMs: 0, lastPlayedAt: null }
+}
+
+/**
+ * Per-song aggregates over the ENTIRE history. Fails soft to an empty map —
+ * stats decorate the library, they never break it.
+ */
+export async function getListenAggregates(): Promise<ListenAggregates> {
+  if (aggregateCache && aggregateCache.seq === writeSeq) return aggregateCache.map
+  const map: ListenAggregates = new Map()
+  try {
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(SCROBBLES, 'readonly')
+      const req = tx.objectStore(SCROBBLES).openCursor()
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (!cursor) {
+          resolve()
+          return
+        }
+        const row = cursor.value as Scrobble
+        const agg = map.get(row.songId) ?? emptyAggregate()
+        agg.plays++
+        if (row.completed) agg.completed++
+        if (row.skipped) agg.skipped++
+        agg.totalPlayedMs += row.playedMs || 0
+        if (row.startedAt && (agg.lastPlayedAt === null || row.startedAt > agg.lastPlayedAt)) {
+          agg.lastPlayedAt = row.startedAt
+        }
+        map.set(row.songId, agg)
+        cursor.continue()
+      }
+      req.onerror = () => reject(req.error)
+    })
+  } catch {
+    // A broken/blocked stats DB just means "no listening data" — the empty
+    // map degrades every stats-backed feature to a stable tie, by design.
+    return map
+  }
+  aggregateCache = { seq: writeSeq, map }
+  return map
+}
+
+/** Forces the next getListenAggregates() call to re-walk the store. */
+export function invalidateListenAggregates(): void {
+  writeSeq++
+}
+
+/**
+ * Distinct artists/albums/tracks listened to inside [startMs, endMs) —
+ * exported for the Listening History phase; cheap because it reuses the
+ * aggregate walk's scrobble shape over a bounded index range.
+ */
+export async function getHistorySummary(startMs: number, endMs: number): Promise<{
+  sessions: number
+  uniqueSongs: number
+  uniqueArtists: number
+  uniqueAlbums: number
+  totalPlayedMs: number
+  completed: number
+  skipped: number
+}> {
+  const rows = await getScrobblesInRange(startMs, endMs)
+  const songs = new Set<string>()
+  const artists = new Set<string>()
+  const albums = new Set<string>()
+  let totalPlayedMs = 0
+  let completed = 0
+  let skipped = 0
+  for (const r of rows) {
+    songs.add(r.songId)
+    if (r.artist) artists.add(r.artist)
+    if (r.album) albums.add(r.album)
+    totalPlayedMs += r.playedMs || 0
+    if (r.completed) completed++
+    if (r.skipped) skipped++
+  }
+  return {
+    sessions: rows.length,
+    uniqueSongs: songs.size,
+    uniqueArtists: artists.size,
+    uniqueAlbums: albums.size,
+    totalPlayedMs,
+    completed,
+    skipped,
   }
 }

@@ -17,8 +17,9 @@ import { flushAllPending } from '@/lib/idbStorage'
 import { Toaster } from '@/components/Toast/Toaster'
 import { HelpModal } from '@/components/Modals/HelpModal'
 import { CommandPalette } from '@/components/CommandPalette'
-import { MiniPlayer } from '@/components/Player/MiniPlayer'
+import { useMiniPlayerBridge } from '@/hooks/useMiniPlayerBridge'
 import { useFolderWatcher } from '@/hooks/useFolderWatcher'
+import { useSmartQueueContinuation } from '@/hooks/useSmartQueue'
 import { useUiStore } from '@/store/uiStore'
 import { UploadCloud, Loader2 } from 'lucide-react'
 
@@ -33,6 +34,11 @@ const NowPlaying = lazy(() => import('@/pages/NowPlaying').then((m) => ({ defaul
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })))
 const PropertiesPage = lazy(() => import('@/pages/PropertiesPage').then((m) => ({ default: m.PropertiesPage })))
 const RewindPage = lazy(() => import('@/pages/RewindPage').then((m) => ({ default: m.default })))
+const Explore = lazy(() => import('@/pages/Explore').then((m) => ({ default: m.Explore })))
+const SmartPlaylists = lazy(() => import('@/pages/SmartPlaylists').then((m) => ({ default: m.SmartPlaylists })))
+const ArtistPage = lazy(() => import('@/pages/ArtistPage').then((m) => ({ default: m.ArtistPage })))
+const AlbumPage = lazy(() => import('@/pages/AlbumPage').then((m) => ({ default: m.AlbumPage })))
+const HistoryPage = lazy(() => import('@/pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)
@@ -41,7 +47,6 @@ export default function App() {
   const customAccentColor = usePlayerStore((s) => s.customAccentColor)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
   const appearance = usePlayerStore((s) => s.appearance)
-  const miniPlayer = useUiStore((s) => s.miniPlayer)
 
   // Mount audio engine once — never unmounts
   useAudio()
@@ -50,6 +55,7 @@ export default function App() {
   const isPlaylistView = activeView === 'playlist'
   const isPropertiesView = activeView === 'properties'
   const isRewindView = activeView === 'rewind'
+  const isExploreView = activeView === 'explore'
 
   // Playlist view: derive the playlist's cover the same way the playlist hero
   // does — the first song in the playlist that has embedded artwork — so the
@@ -84,6 +90,13 @@ export default function App() {
   useSleepTimer()
   useMediaKeys()
   useFolderWatcher()
+  // Phase 8 — Smart Queue: quiet append-only continuation when the queue
+  // runs dry (respects the user's queue as sovereign — see the hook).
+  useSmartQueueContinuation()
+  // Desktop mini player: pushes playback snapshots to the widget window and
+  // keeps uiStore.miniPlayer synced with its real visibility. (The widget is
+  // a separate BrowserWindow — see electron/main.cjs — not an in-app UI mode.)
+  useMiniPlayerBridge()
   const { isDraggingFiles, dragHandlers } = useDragDropImport()
 
   // Hold the shell on the boot screen until the persisted store (IndexedDB,
@@ -108,6 +121,14 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-performance', performanceMode ? 'on' : 'off')
   }, [performanceMode])
+
+  // Phase 14 — the ambient layer is OPTIONAL: data-ambient=off removes the
+  // artwork orbs + Aura Pulse motion entirely (CSS stillness rules), while
+  // every control keeps working.
+  const ambientEffects = usePlayerStore((s) => s.ambientEffects)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-ambient', ambientEffects ? 'on' : 'off')
+  }, [ambientEffects])
 
   // ── Appearance (v2.0.0) ─────────────────────────────────────────────────
   // data-theme drives the whole token layer, so switching is one attribute.
@@ -151,11 +172,15 @@ export default function App() {
 
       <div
         className="flex flex-1 overflow-hidden"
-        style={{ paddingBottom: 'var(--spacing-player)' }}
+        // In Now Playing the immersive artwork backdrop must flow BEHIND the
+        // floating player pill (the page reserves its own clearance below) —
+        // a hard 90px shell padding here used to shear the backdrop off above
+        // the bar and leave a bare strip of root background around the pill.
+        style={{ paddingBottom: isNowPlaying ? 0 : 'var(--spacing-player)' }}
       >
         {/* Sidebar hidden in Now Playing view */}
         <AnimatePresence>
-          {!isNowPlaying && !isPropertiesView && !isRewindView && (
+          {!isNowPlaying && !isPropertiesView && !isRewindView && !isExploreView && (
             <motion.div
               key="sidebar"
               initial={{ x: -20, opacity: 0 }}
@@ -227,6 +252,61 @@ export default function App() {
               >
                 <RewindPage />
               </motion.div>
+            ) : isExploreView ? (
+              <motion.div
+                key="explore"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <Explore />
+              </motion.div>
+            ) : activeView === 'artist' ? (
+              <motion.div
+                key="artist"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <ArtistPage />
+              </motion.div>
+            ) : activeView === 'album' ? (
+              <motion.div
+                key="album"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <AlbumPage />
+              </motion.div>
+            ) : activeView === 'history' ? (
+              <motion.div
+                key="history"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <HistoryPage />
+              </motion.div>
+            ) : activeView === 'smart' ? (
+              <motion.div
+                key="smart"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <SmartPlaylists />
+              </motion.div>
             ) : (
               <motion.div
                 key="library"
@@ -244,15 +324,12 @@ export default function App() {
         </main>
       </div>
 
-      {/* Player: pill bar or mini-player — the two never show together, and
-          the crossfade keeps the handoff continuous. Panels (lyrics/queue/
-          visualizer) stay mounted with the pill they anchor to. */}
-      <AnimatePresence mode="wait">
-        {miniPlayer
-          ? <MiniPlayer key="mini" />
-          : <PlayerBar key="pill" />}
-      </AnimatePresence>
-      {!miniPlayer && <PlayerBarPanels />}
+      {/* Player pill — always the main window's bottom bar now. The mini
+          player is a separate desktop window (toggled with P / the pill
+          button / the command palette, or auto-shown on minimize) and no
+          longer replaces anything in here. */}
+      <PlayerBar />
+      <PlayerBarPanels />
 
       {/* Global overlays — feedback toasts, the keyboard shortcuts guide,
           and the Ctrl+K command palette. Rendered last so they layer above

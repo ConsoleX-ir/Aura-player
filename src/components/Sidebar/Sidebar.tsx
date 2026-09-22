@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, ChevronRight, Settings as SettingsIcon, History } from 'lucide-react'
+import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, ChevronRight, Settings as SettingsIcon, History, Clock, Globe, Sparkles } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
@@ -201,6 +201,63 @@ export function Sidebar() {
       {/* Now playing mini */}
       <SidebarNowPlaying />
 
+      {/* Explore — online discovery (Phase 4): another different kind of destination */}
+      <div className="px-2.5 pt-3">
+        <button
+          onClick={() => setActiveView('explore')}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all"
+          style={{
+            transitionDuration: 'var(--dur-fast)',
+            color: activeView === 'explore' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            background: activeView === 'explore' ? 'var(--glass-2)' : 'transparent',
+          }}
+          onMouseEnter={(e) => { if (activeView !== 'explore') e.currentTarget.style.background = 'var(--glass-1)' }}
+          onMouseLeave={(e) => { if (activeView !== 'explore') e.currentTarget.style.background = 'transparent' }}
+          title="Stream free music from Audius"
+        >
+          <Globe size={15} style={activeView === 'explore' ? { color: 'var(--accent)' } : undefined} />
+          <span className="flex-1 text-left">Explore</span>
+        </button>
+      </div>
+
+      {/* Smart Playlists — engine-built lists from the local listening history */}
+      <div className="px-2.5 pt-3">
+        <button
+          onClick={() => setActiveView('smart')}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all group/rewind"
+          style={{
+            transitionDuration: 'var(--dur-fast)',
+            color: activeView === 'smart' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            background: activeView === 'smart' ? 'var(--glass-2)' : 'transparent',
+          }}
+          onMouseEnter={(e) => { if (activeView !== 'smart') e.currentTarget.style.background = 'var(--glass-1)' }}
+          onMouseLeave={(e) => { if (activeView !== 'smart') e.currentTarget.style.background = 'transparent' }}
+          title="Engine-built lists from your listening history — made on-device"
+        >
+          <Sparkles size={15} style={activeView === 'smart' ? { color: 'var(--accent)' } : undefined} />
+          <span className="flex-1 text-left">Smart Playlists</span>
+        </button>
+      </div>
+
+      {/* Listening History — the full chronological record */}
+      <div className="px-2.5 pt-3">
+        <button
+          onClick={() => setActiveView('history')}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all group/rewind"
+          style={{
+            transitionDuration: 'var(--dur-fast)',
+            color: activeView === 'history' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            background: activeView === 'history' ? 'var(--glass-2)' : 'transparent',
+          }}
+          onMouseEnter={(e) => { if (activeView !== 'history') e.currentTarget.style.background = 'var(--glass-1)' }}
+          onMouseLeave={(e) => { if (activeView !== 'history') e.currentTarget.style.background = 'transparent' }}
+          title="Every session recorded on this device"
+        >
+          <Clock size={15} style={activeView === 'history' ? { color: 'var(--accent)' } : undefined} />
+          <span className="flex-1 text-left">Listening History</span>
+        </button>
+      </div>
+
       {/* Rewind — the monthly story, a different *kind* of destination */}
       <div className="px-2.5 pt-3">
         <button
@@ -257,9 +314,6 @@ function SidebarMenuItem({ icon: Icon, label, onClick }: {
     <DropdownMenu.Item
       onClick={onClick}
       className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-      style={{ color: 'var(--text-secondary)' }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'transparent' }}
     >
       <Icon size={13} />
       {label}

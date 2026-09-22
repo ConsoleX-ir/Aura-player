@@ -22,6 +22,10 @@ export type ToastKind =
   | 'metadata-updated'
   | 'library-synced'   // Wave 4 folder watcher: silent scans stay silent, real changes speak
   | 'rewind-saved'     // Rewind share card written to disk
+  | 'added-to-playlist' // v2.1.2 playlist picker: song landed in a playlist
+  | 'playback-error'   // Phase 1: a file couldn't be opened/decoded
+  | 'library-health'   // Phase 1: Library Health scan finished
+  | 'smart-radio'      // Phase 7: Smart Music Engine started a radio/mix
 
 export interface ToastItem {
   id: number

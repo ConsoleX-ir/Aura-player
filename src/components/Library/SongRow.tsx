@@ -1,11 +1,13 @@
 import { memo, useState } from 'react'
-import { Play, Heart, MoreHorizontal, ListX, Trash2, FolderOpen, Info, Sparkles } from 'lucide-react'
+import { Play, Heart, MoreHorizontal, ListPlus, ListX, Trash2, FolderOpen, Info, Sparkles, Radio, Mic2, Disc3, ListEnd, ArrowRightToLine } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
 import { formatTime, cn } from '@/lib/utils'
+import { startSmartRadio } from '@/lib/smartRadioActions'
 import type { Song } from '@/types'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
+import { PlaylistPickerModal } from '@/components/Modals/PlaylistPickerModal'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
 
 interface SongRowProps {
@@ -31,14 +33,23 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const isFav = usePlayerStore((s) => s.favorites.includes(song.id))
-  const playlists = usePlayerStore((s) => s.playlists)
   const playSong = usePlayerStore((s) => s.playSong)
   const toggleFavorite = usePlayerStore((s) => s.toggleFavorite)
-  const addToPlaylist = usePlayerStore((s) => s.addToPlaylist)
   const removeFromPlaylist = usePlayerStore((s) => s.removeFromPlaylist)
   const removeFromLibrary = usePlayerStore((s) => s.removeFromLibrary)
+  const setSelectedArtist = usePlayerStore((s) => s.setSelectedArtist)
+  const setSelectedAlbum = usePlayerStore((s) => s.setSelectedAlbum)
+  const setActiveView = usePlayerStore((s) => s.setActiveView)
+  const playNextInQueue = usePlayerStore((s) => s.playNextInQueue)
+  const addToQueueEnd = usePlayerStore((s) => s.addToQueueEnd)
   const isActive = currentSongId === song.id
   const [confirmRemoveLibrary, setConfirmRemoveLibrary] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  // v2.1.2: "Add to Playlist" opens the searchable picker modal instead of
+  // inlining every playlist into this menu (a 100-playlist library made the
+  // menu taller than the screen). The picker reads the store itself, so this
+  // row no longer subscribes to `playlists` at all — one less re-render
+  // trigger for every visible row whenever any playlist changes.
   // Properties — Wave 3 UX upgrade: a full page (Windows-Media-Player style)
   // instead of the old modal. 'find' jumps straight to the keyless online
   // lookup section of the same page.
@@ -47,8 +58,23 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
   return (
     <div
       onDoubleClick={() => playSong(song, queue)}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        // Phase 2 — keyboard navigation: Enter plays the focused row.
+        // Deliberately NOT handled here: arrow keys (global transport skip)
+        // and Space (global play/pause) keep their app-wide meaning even
+        // while a row is focused — library focus never steals the
+        // transport keys, so no key does two things at once.
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          playSong(song, queue)
+        }
+      }}
+      aria-label={`Play ${song.title} by ${song.artist}`}
       className={cn(
-        'group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors'
+        'song-row group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors',
+        'focus:outline-none',
+        isActive && 'song-row-active'
       )}
       style={{
         transitionDuration: 'var(--dur-instant)',
@@ -123,7 +149,11 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
       </span>
 
       {/* Actions */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+      {/* v2.1.2 glitch fix: while this row's `...` menu is open the pointer
+          is over the PORTALED menu — outside this row's DOM — so group-hover
+          would fade the controls and reset the background, making the open
+          menu look orphaned. :has() keeps both anchored while data-state=open. */}
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 has-[button[data-state='open']]:opacity-100 transition-opacity shrink-0">
         <button onClick={(e) => { e.stopPropagation(); toggleFavorite(song.id) }}
           aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
           className="p-1.5 rounded-lg transition-all"
@@ -137,6 +167,7 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
+              aria-label={`More actions for ${song.title}`}
               className="p-1.5 rounded-lg transition-all"
               style={{ color: 'var(--text-faint)' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
@@ -157,15 +188,61 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               }}
               sideOffset={4} align="end">
 
-              {playlists.map((pl) => (
-                <DropdownMenu.Item key={pl.id} onClick={() => addToPlaylist(pl.id, song.id)} className="px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                  style={{ color: 'var(--text-secondary)' }}
-                  onMouseEnter={menuItemHoverIn} onMouseLeave={menuItemHoverOut}>
-                  Add to {pl.name}
+              {/* v2.1.2: opens the searchable playlist picker — every playlist
+                  stays reachable, the menu itself stays one row tall. */}
+              <DropdownMenu.Item
+                onClick={() => setPickerOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+              >
+                <ListPlus size={13} />
+                Add to Playlist…
+              </DropdownMenu.Item>
+
+              {/* Phase 7 — Smart Music Engine: a deterministic local radio
+                  seeded by THIS track (artist/genre/era similarity, listening
+                  history, favorites, skips, hour-of-day context). */}
+              <DropdownMenu.Item
+                onClick={() => { void startSmartRadio(song) }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+              >
+                <Radio size={13} />
+                Start Radio
+              </DropdownMenu.Item>
+
+              {/* Phase 11 — queueing: manual actions always beat Smart Queue. */}
+              <DropdownMenu.Item
+                onClick={() => playNextInQueue(song)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+              >
+                <ArrowRightToLine size={13} />
+                Play Next
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onClick={() => addToQueueEnd(song)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+              >
+                <ListEnd size={13} />
+                Add to Queue
+              </DropdownMenu.Item>
+
+              {/* Phase 9 — drill into the artist / album pages. */}
+              {!isUnknown(song.artist) && (
+                <DropdownMenu.Item
+                  onClick={() => { setSelectedArtist(song.artist); setActiveView('artist') }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+                >
+                  <Mic2 size={13} />
+                  Go to Artist
                 </DropdownMenu.Item>
-              ))}
-              {playlists.length === 0 && (
-                <div className="px-3 py-2 text-xs" style={{ color: 'var(--text-faint)' }}>No playlists yet</div>
+              )}
+              {!isUnknown(song.album) && (
+                <DropdownMenu.Item
+                  onClick={() => { setSelectedAlbum({ artist: song.artist, album: song.album }); setActiveView('album') }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+                >
+                  <Disc3 size={13} />
+                  Go to Album
+                </DropdownMenu.Item>
               )}
 
               <DropdownMenu.Separator className="my-1" style={{ height: 1, background: 'var(--border-default)' }} />
@@ -173,8 +250,6 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               <DropdownMenu.Item
                 onClick={() => openProperties(song.id)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={menuItemHoverIn} onMouseLeave={menuItemHoverOut}
               >
                 <Info size={13} />
                 Properties
@@ -183,8 +258,6 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               <DropdownMenu.Item
                 onClick={() => openProperties(song.id, { initialFind: true })}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={menuItemHoverIn} onMouseLeave={menuItemHoverOut}
               >
                 <Sparkles size={13} />
                 Find Info Online
@@ -193,8 +266,6 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               <DropdownMenu.Item
                 onClick={() => window.electronAPI?.showItemInFolder(song.path)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={menuItemHoverIn} onMouseLeave={menuItemHoverOut}
               >
                 <FolderOpen size={13} />
                 Show in Folder
@@ -204,8 +275,6 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
                 <DropdownMenu.Item
                   onClick={() => removeFromPlaylist(playlistId, song.id)}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                  style={{ color: 'var(--text-secondary)' }}
-                  onMouseEnter={menuItemHoverIn} onMouseLeave={menuItemHoverOut}
                 >
                   <ListX size={13} />
                   Remove from Playlist
@@ -214,10 +283,7 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
 
               <DropdownMenu.Item
                 onClick={() => setConfirmRemoveLibrary(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                style={{ color: 'color-mix(in srgb, var(--danger) 80%, transparent)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'var(--danger-veil)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = 'color-mix(in srgb, var(--danger) 80%, transparent)'; e.currentTarget.style.background = 'transparent' }}
+                className="menuitem-danger flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
               >
                 <Trash2 size={13} />
                 Remove from Library
@@ -235,6 +301,13 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
         onConfirm={() => removeFromLibrary(song.id)}
         onClose={() => setConfirmRemoveLibrary(false)}
       />
+
+      <PlaylistPickerModal
+        open={pickerOpen}
+        songTitle={song.title}
+        songId={song.id}
+        onClose={() => setPickerOpen(false)}
+      />
     </div>
   )
 })
@@ -244,16 +317,6 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
 const UNKNOWN_RE = /^(unknown (artist|album)|unknown)$/i
 function isUnknown(value: string): boolean {
   return !value.trim() || UNKNOWN_RE.test(value.trim())
-}
-
-// Shared dropdown-item hover handlers (tokenized hover state)
-function menuItemHoverIn(e: React.MouseEvent<HTMLElement>) {
-  e.currentTarget.style.color = 'var(--text-primary)'
-  e.currentTarget.style.background = 'var(--glass-1)'
-}
-function menuItemHoverOut(e: React.MouseEvent<HTMLElement>) {
-  e.currentTarget.style.color = 'var(--text-secondary)'
-  e.currentTarget.style.background = 'transparent'
 }
 
 // CSS-only animation (see .animate-playing-bar in index.css) — avoids a

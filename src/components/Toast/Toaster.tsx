@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Heart, Shuffle, Repeat, Repeat1, VolumeX, Volume2, MoonStar, Music2, BadgeCheck, RefreshCw, ImageDown } from 'lucide-react'
+import { Heart, Shuffle, Repeat, Repeat1, VolumeX, Volume2, MoonStar, Music2, BadgeCheck, RefreshCw, ImageDown, ListPlus, TriangleAlert, ShieldCheck, Radio } from 'lucide-react'
 import { useToastStore, type ToastKind } from '@/store/toastStore'
 
 // Maps each toast kind to its icon + accent color. Kept as a plain record so
@@ -20,6 +20,10 @@ const TOAST_STYLE: Record<ToastKind, { icon: typeof Music2; color: string; bg: s
   'metadata-updated':  { icon: BadgeCheck, color: 'var(--accent)', bg: 'var(--glass-3)' },
   'library-synced':    { icon: RefreshCw, color: 'var(--success)', bg: 'var(--success-veil)' },
   'rewind-saved':      { icon: ImageDown, color: 'var(--accent)', bg: 'var(--glass-3)' },
+  'added-to-playlist': { icon: ListPlus,  color: 'var(--accent)', bg: 'var(--glass-3)' },
+  'playback-error':    { icon: TriangleAlert, color: 'var(--danger)', bg: 'var(--danger-veil)' },
+  'library-health':    { icon: ShieldCheck, color: 'var(--success)', bg: 'var(--success-veil)' },
+  'smart-radio':       { icon: Radio,     color: 'var(--accent)', bg: 'var(--accent-veil)' },
 }
 
 // Purely presentational — auto-dismiss timers live in toastStore, so this

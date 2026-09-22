@@ -12,6 +12,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showItemInFolder: (filePath) => ipcRenderer.send('shell:showItemInFolder', filePath),
   parseMetadata: (p)      => ipcRenderer.invoke('fs:parseMetadata', p),
   parseMetadataBatch: (paths) => ipcRenderer.invoke('fs:parseMetadataBatch', paths),
+  // Library Health (Phase 1): batch existence check for every library entry.
+  // Per-path exists:false results instead of throws, so one vanished file
+  // can't fail a whole health scan.
+  checkPaths: (paths)    => ipcRenderer.invoke('fs:checkPaths', paths),
+  // ── Provider Core (Phase 3) ──────────────────────────────────────────────
+  // One channel for every online music provider. The renderer names a
+  // provider id + op (both allowlisted in the main process) and never a URL.
+  // Resolves with the op's result, or a { kind, message } payload the
+  // renderer turns into a typed ProviderError.
+  providerRequest: (requestId, providerId, op, params) =>
+    ipcRenderer.invoke('net:providerRequest', String(requestId), String(providerId), String(op), params),
+  // Cancels an in-flight provider request by requestId (best-effort).
+  providerCancel: (requestId) => ipcRenderer.send('net:providerCancel', String(requestId)),
+  // True when the machine can actually reach the internet right now
+  // (HEAD request with a 4s cap) — navigator.onLine is only the first hint.
+  probeOnline: () => ipcRenderer.invoke('net:probeOnline'),
   // Technical file properties for the Properties dialog (size, codec, bitrate...).
   getFileStats: (p)       => ipcRenderer.invoke('fs:fileStats', p),
   // Keyless "Find Info Online" — searches Deezer, iTunes, and MusicBrainz
@@ -68,4 +84,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('app:shutdown', listener)
   },
   notifyShutdownComplete: () => ipcRenderer.send('app:shutdown-complete'),
+  // ── Desktop mini player (v2.1.2) ──────────────────────────────────────────
+  // The mini player is its own frameless BrowserWindow, NOT a component of
+  // the main window. The main renderer pushes tiny state snapshots through
+  // pushMiniState; main relays them to the mini window. Actions travel the
+  // other way via miniAction (main remaps them onto the existing
+  // 'media:command' channel). Both windows share THIS preload — same
+  // contextIsolation posture, no new privileged surface.
+  pushMiniState: (state) => ipcRenderer.send('mini:state', state),
+  setMiniVisible: (visible) => ipcRenderer.send('mini:setVisible', !!visible),
+  miniAction: (action) => ipcRenderer.send('mini:action', String(action)),
+  onMiniState: (cb) => {
+    const listener = (_e, state) => cb(state)
+    ipcRenderer.on('mini:state', listener)
+    return () => ipcRenderer.removeListener('mini:state', listener)
+  },
+  // Main → main-window sync so the P key / command palette / pill button
+  // reflect the real widget visibility (minimize auto-shows, X hides).
+  onMiniVisibility: (cb) => {
+    const listener = (_e, visible) => cb(visible)
+    ipcRenderer.on('mini:visibility', listener)
+    return () => ipcRenderer.removeListener('mini:visibility', listener)
+  },
+  // Test-mode hooks — main only registers these channels when
+  // AURA_USER_DATA_DIR is set (CI/Xvfb has no window manager, so real
+  // OS minimize events never fire there). Silent no-op in normal use.
+  testEmitWindowEvent: (ev) => ipcRenderer.send(`test:emit${String(ev)}`),
 })

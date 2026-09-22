@@ -3,23 +3,29 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Music2, Heart, Settings as SettingsIcon, ListMusic, Play, Pause, SkipForward, SkipBack,
   Shuffle, Repeat, Volume2, VolumeX, Mic2, BarChart2, PictureInPicture2, History,
-  Gauge, SunMoon, Search, CornerDownLeft, Disc3,
+  Gauge, SunMoon, Search, CornerDownLeft, Disc3, Radio, Clock,
 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
+import { startSmartRadio } from '@/lib/smartRadioActions'
 import { usePlayerStore } from '@/store/playerStore'
 import { setAppearanceAnimated } from '@/lib/appearance'
+import { fuzzyScore, searchLibrary } from '@/lib/search'
 import { cn } from '@/lib/utils'
 
-// ── Command Palette (Wave 4) ─────────────────────────────────────────────────
+// ── Command Palette (Wave 4, Phase 2 refresh) ───────────────────────────────
 // One surface that can drive the whole app: navigation, playback, queue and
 // panel toggles, settings switches, and a live library search that plays what
 // you find. Opened with Ctrl+K (⌘K) from anywhere — including inside text
 // inputs, which is what makes it feel native.
 //
 // Implementation notes:
-//   • Zero new dependencies. The matcher is a small subsequence scorer with
-//     substring boosts — tuned for library-scale (a few thousand songs), not
-//     corpus-scale, so plain O(n) is the right answer.
+//   • Zero new dependencies. The fuzzy scorer and the library search engine
+//     live in lib/search (Phase 2 — shared with the Library view: one parser,
+//     one matcher, one scorer, so search behaves identically everywhere).
+//     Song results understand the Library's field operators, exact-miss
+//     queries fall back to the same fuzzy close-matches (shown as a
+//     "Close Matches" group), and a "Search library for …" row hands the
+//     query to the Library view prefilled — navigation, not a dead end.
 //   • Results are grouped but navigated FLAT (↑/↓ walks one combined list,
 //     group headers are skipped) — the behavior every palette trains into
 //     users. Active item scrolls into view, Enter runs it, Esc backs out.
@@ -37,24 +43,6 @@ interface Command {
   icon: typeof Music2
   keywords?: string
   run: () => void
-}
-
-/** Subsequence match with a substring boost — returns score or -1. */
-function scoreMatch(query: string, text: string): number {
-  if (!query) return 0
-  const q = query.toLowerCase()
-  const t = text.toLowerCase()
-  const idx = t.indexOf(q)
-  if (idx === 0) return 100        // prefix match — what you typed starts the name
-  if (idx > 0) return 80 - Math.min(idx, 20)
-  // Subsequence: every query char appears in order somewhere.
-  let ti = 0
-  for (let qi = 0; qi < q.length; qi++) {
-    ti = t.indexOf(q[qi], ti)
-    if (ti === -1) return -1
-    ti++
-  }
-  return 40
 }
 
 export function CommandPalette() {
@@ -144,6 +132,9 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
       { id: 'nav.favorites', group: 'Navigate', label: 'Go to Favorites', icon: Heart, run: () => s.setActiveView('favorites') },
       { id: 'nav.nowplaying', group: 'Navigate', label: 'Go to Now Playing', icon: Disc3, run: () => { if (s.currentSong) s.setActiveView('nowplaying') } },
       { id: 'nav.rewind', group: 'Navigate', label: 'Open Aura Rewind', hint: 'listening story', icon: History, run: () => s.setActiveView('rewind') },
+      { id: 'nav.explore', group: 'Navigate', label: 'Go to Explore', hint: 'online music', icon: Search, run: () => s.setActiveView('explore') },
+      { id: 'nav.smart', group: 'Navigate', label: 'Open Smart Playlists', hint: 'on-device picks', icon: Radio, run: () => s.setActiveView('smart') },
+      { id: 'nav.history', group: 'Navigate', label: 'Open Listening History', hint: 'everything you played', icon: Clock, run: () => s.setActiveView('history') },
       { id: 'nav.settings', group: 'Navigate', label: 'Go to Settings', icon: SettingsIcon, run: () => s.setActiveView('settings') },
       ...s.playlists.map<Command>((pl) => ({
         id: `nav.pl.${pl.id}`, group: 'Navigate', label: `Open playlist — ${pl.name}`,
@@ -161,6 +152,11 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
       { id: 'pb.shuffle', group: 'Playback', label: s.shuffle ? 'Shuffle — turn off' : 'Shuffle — turn on', hint: 'S', icon: Shuffle, keywords: 'shuffle random', run: () => usePlayerStore.getState().toggleShuffle() },
       { id: 'pb.repeat', group: 'Playback', label: `Repeat — cycle (now: ${s.repeat})`, hint: 'R', icon: Repeat, keywords: 'repeat loop', run: () => usePlayerStore.getState().cycleRepeat() },
       { id: 'pb.mute', group: 'Playback', label: s.muted ? 'Unmute' : 'Mute', hint: 'M', icon: s.muted ? Volume2 : VolumeX, keywords: 'mute sound volume', run: () => usePlayerStore.getState().toggleMute() },
+      // Phase 7 — Smart Music Engine surfaces.
+      { id: 'pb.smartmix', group: 'Playback', label: 'Play something for me', hint: 'smart mix', icon: Radio, keywords: 'smart radio mix recommend discover', run: () => { void startSmartRadio(null) } },
+      ...(s.currentSong && !s.currentSong.source
+        ? [{ id: 'pb.smartradio', group: 'Playback', label: `Start Radio from “${s.currentSong.title}”`, hint: 'smart radio', icon: Radio, keywords: 'smart radio seed similar', run: () => { void startSmartRadio(s.currentSong!) } }]
+        : []),
     ]
 
     const panels: Command[] = [
@@ -178,26 +174,34 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
     return [...nav, ...playback, ...panels, ...toggles]
   }, [])
 
-  // Library song results — searched separately, capped, and sorted by score.
+  // Library song results — the SHARED search engine (operators + fuzzy
+  // fallback), capped, fuzzy hits labeled as their own group.
   const songResults = useMemo(() => {
     if (query.trim().length < 1) return []
     const s = usePlayerStore.getState()
-    return s.library
-      .map((song) => {
-        const titleScore = scoreMatch(query, song.title)
-        const artistScore = scoreMatch(query, song.artist) * 0.6
-        const albumScore = scoreMatch(query, song.album) * 0.4
-        const best = Math.max(titleScore, artistScore, albumScore)
-        return { song, score: best }
-      })
-      .filter((r) => r.score >= 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-      .map<Command>((r) => ({
-        id: `song.${r.song.id}`, group: 'Songs', label: r.song.title,
-        hint: r.song.artist, icon: Play, keywords: r.song.album,
-        run: () => playSong(r.song.id),
-      }))
+    const { matches, fuzzy } = searchLibrary(s.library, query, 8)
+    return matches.slice(0, 8).map<Command>((song) => ({
+      id: `song.${song.id}`,
+      group: fuzzy ? 'Close Matches' : 'Songs',
+      label: song.title,
+      hint: song.artist, icon: Play, keywords: song.album,
+      run: () => playSong(song.id),
+    }))
+  }, [query])
+
+  // Phase 2: hand the query off to the Library — prefilled search + jump.
+  // Always offered last (keyboard: keep ArrowDown-ing to reach it).
+  const searchInLibrary = useMemo<Command[]>(() => {
+    const q = query.trim()
+    if (!q) return []
+    return [{
+      id: 'nav.search-library', group: 'Search', label: `Search library for “${q}”`,
+      hint: 'open in Library', icon: Search, keywords: 'find filter open',
+      run: () => {
+        useUiStore.getState().setLibrarySearch(q)
+        usePlayerStore.getState().setActiveView('library')
+      },
+    }]
   }, [query])
 
   const staticResults = useMemo(() => {
@@ -207,13 +211,16 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
       return commands
     }
     return commands
-      .map((c) => ({ c, score: Math.max(scoreMatch(query, c.label), scoreMatch(query, c.keywords ?? '') * 0.5) }))
+      .map((c) => ({ c, score: Math.max(fuzzyScore(query, c.label), fuzzyScore(query, c.keywords ?? '') * 0.5) }))
       .filter((r) => r.score >= 0)
       .sort((a, b) => b.score - a.score)
       .map((r) => r.c)
   }, [commands, query])
 
-  const results = useMemo(() => [...staticResults, ...songResults], [staticResults, songResults])
+  const results = useMemo(
+    () => [...staticResults, ...songResults, ...searchInLibrary],
+    [staticResults, songResults, searchInLibrary],
+  )
 
   // Keep the active index inside bounds as the result set shrinks/grows.
   useEffect(() => { setActive((a) => Math.min(a, Math.max(results.length - 1, 0))) }, [results.length])

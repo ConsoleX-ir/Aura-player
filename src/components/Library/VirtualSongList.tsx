@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { SongRow } from './SongRow'
+import { useVirtualWindow, VIRTUALIZE_THRESHOLD } from '@/hooks/useVirtualWindow'
 import type { Song } from '@/types'
+import type { ReactNode } from 'react'
 
 // Must match SongRow's actual rendered height (px-3 py-2 padding + 36px cover art).
 // If SongRow's padding or art size ever changes, update this to match or rows
 // will visually overlap/gap.
 const ROW_HEIGHT = 52
-const OVERSCAN = 6
-const VIRTUALIZE_THRESHOLD = 60
 
 interface VirtualSongListProps {
   songs: Song[]
@@ -22,55 +21,22 @@ interface VirtualSongListProps {
 }
 
 export function VirtualSongList({ songs, queue, playlistId, className, header }: VirtualSongListProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [viewportHeight, setViewportHeight] = useState(0)
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    const onScroll = () => setScrollTop(el.scrollTop)
-    const ro = new ResizeObserver(() => setViewportHeight(el.clientHeight))
-
-    el.addEventListener('scroll', onScroll, { passive: true })
-    ro.observe(el)
-    setViewportHeight(el.clientHeight)
-
-    return () => {
-      el.removeEventListener('scroll', onScroll)
-      ro.disconnect()
-    }
-  }, [])
-
-  // Small lists: skip windowing entirely, render exactly like before.
-  // Most playlists fall here — this keeps the common case simple and risk-free.
-  //
-  // Both branches below share ONE containerRef, attached in a single return
-  // (rather than two separate early-returns each with their own JSX). This
-  // matters: the scroll/resize effect above only runs once on mount (empty
-  // deps). If the ref were only attached in the virtualized branch, a
-  // library that starts under VIRTUALIZE_THRESHOLD and later grows past it
-  // (e.g. importing more songs while this page is open) would cross into
-  // virtualized rendering with no scroll/resize listeners ever bound to it —
-  // the list would appear frozen when scrolled, since scrollTop/viewportHeight
-  // would still be stuck at their initial 0 values.
+  // Windowing math lives in the SHARED hook (Phase 10) — the Listening
+  // History page uses the same implementation, so a fix here fixes both.
+  // The hook binds scroll/resize listeners once on mount and always attaches
+  // the same ref (regardless of branch below), so a list that grows past the
+  // virtualize threshold while mounted still measures correctly.
+  const vw = useVirtualWindow(songs.length, ROW_HEIGHT)
   const isVirtualized = songs.length >= VIRTUALIZE_THRESHOLD
-
-  const totalHeight = songs.length * ROW_HEIGHT
-  const startIndex = isVirtualized ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN) : 0
-  const endIndex = isVirtualized
-    ? Math.min(songs.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
-    : songs.length
-  const visible = songs.slice(startIndex, endIndex)
+  const visible = isVirtualized ? songs.slice(vw.start, vw.end) : songs
 
   return (
-    <div ref={containerRef} className={className}>
+    <div ref={vw.containerRef} className={className}>
       {header}
       {isVirtualized ? (
-        <div style={{ position: 'relative', height: totalHeight }}>
+        <div style={{ position: 'relative', height: vw.totalHeight }}>
           {visible.map((song, i) => {
-            const realIndex = startIndex + i
+            const realIndex = vw.start + i
             return (
               <div
                 key={song.id}

@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  ChevronDown, Play, Pause, SkipBack, SkipForward,
-  Shuffle, Repeat, Repeat1, Heart, ListMusic, Music2, Mic2, Moon, X
+  ChevronDown, ChevronUp, Play, Pause, SkipBack, SkipForward,
+  Shuffle, Repeat, Repeat1, Heart, ListMusic, ListX, Music2, Mic2, Moon, X
 } from 'lucide-react'
 import * as Slider from '@radix-ui/react-slider'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLyrics } from '@/hooks/useLyrics'
+import { useVirtualWindow } from '@/hooks/useVirtualWindow'
 import { formatTime } from '@/lib/utils'
 
 // ── Now Playing (Wave 3 redesign) ───────────────────────────────────────────
@@ -47,6 +48,10 @@ export function NowPlaying() {
   const queue = usePlayerStore((s) => s.queue)
   const queueIndex = usePlayerStore((s) => s.queueIndex)
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue)
+  // Phase 11 — Queue 2.0 manual controls.
+  const reorderQueueItem = usePlayerStore((s) => s.reorderQueueItem)
+  const clearUpcomingQueue = usePlayerStore((s) => s.clearUpcomingQueue)
+  const jumpToQueueIndex = usePlayerStore((s) => s.jumpToQueueIndex)
 
   // v2 engine: `queue` in the store IS the real playback order (shuffle
   // physically reorders it), so the panel simply reads it in true play
@@ -58,6 +63,12 @@ export function NowPlaying() {
   }, [queue, queueIndex])
 
   const displayQueue = upNextQueue
+  // Phase 15 — the queue is virtualized: a 10,000-song queue renders ~10 DOM
+  // rows, not 10,000. Same windowing implementation as the Library list.
+  const QUEUE_ROW_HEIGHT = 40
+  const vw = useVirtualWindow(displayQueue.length, QUEUE_ROW_HEIGHT)
+  const queueVirtualized = displayQueue.length >= 60
+  const visibleQueue = queueVirtualized ? displayQueue.slice(vw.start, vw.end) : displayQueue
 
   const { lines, plain, loading } = useLyrics(currentSong)
   const isFav = currentSong ? favorites.includes(currentSong.id) : false
@@ -139,10 +150,7 @@ export function NowPlaying() {
                 sideOffset={6} align="end">
                 {[15, 30, 45, 60].map((min) => (
                   <DropdownMenu.Item key={min} onClick={() => setSleepTimer(min)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                    style={{ color: 'var(--text-secondary)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'transparent' }}>
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors">
                     <Moon size={13} />
                     {min} minutes
                   </DropdownMenu.Item>
@@ -151,10 +159,7 @@ export function NowPlaying() {
                   <>
                     <DropdownMenu.Separator className="my-1" style={{ height: 1, background: 'var(--border-default)' }} />
                     <DropdownMenu.Item onClick={() => setSleepTimer(null)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
-                      style={{ color: 'var(--text-secondary)' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'transparent' }}>
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors">
                       Turn Off
                     </DropdownMenu.Item>
                   </>
@@ -176,8 +181,10 @@ export function NowPlaying() {
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="relative flex-1 flex gap-8 px-8 pb-4 overflow-hidden">
+      {/* Main content — pb clears the floating player pill (72px bar + 10px
+          bottom offset + breathing room): the shell no longer pads this view,
+          so the artwork backdrop runs behind the pill to the window edge. */}
+      <div className="relative flex-1 flex gap-8 px-8 pb-24 overflow-hidden">
 
         {/* Left: Album art + controls */}
         <div className="flex flex-col items-center justify-center gap-5 w-72 shrink-0">
@@ -340,22 +347,46 @@ export function NowPlaying() {
               located via it), and the height is right anyway. */}
           <motion.div
             variants={panelVariants}
+            data-queue-panel
             className="h-52 flex flex-col rounded-2xl overflow-hidden shrink-0"
             style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}
           >
             <div className="flex items-center gap-2 px-5 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <ListMusic size={13} style={{ color: 'var(--accent)' }} />
               <span className="text-xs font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>Queue</span>
+              {/* Phase 11 — clear everything after the playing track. */}
+              {queue.length - queueIndex > 1 && (
+                <button
+                  onClick={() => clearUpcomingQueue()}
+                  title="Clear upcoming — keep what's playing"
+                  aria-label="Clear upcoming"
+                  className="p-1 rounded-md transition-colors hover:bg-ink/5"
+                  style={{ color: 'var(--text-faint)' }}
+                >
+                  <ListX size={12} />
+                </button>
+              )}
               <span className="text-xs ml-auto tabular-nums" style={{ color: 'var(--text-faint)' }}>{queue.length} songs</span>
             </div>
-            <div className="flex-1 overflow-y-auto py-1">
-              {displayQueue.map((song, i) => {
+            <div ref={vw.containerRef} className="flex-1 overflow-y-auto">
+              <div style={queueVirtualized ? { position: 'relative', height: displayQueue.length * QUEUE_ROW_HEIGHT } : undefined}>
+              {(queueVirtualized ? visibleQueue : displayQueue).map((song, vi) => {
+                const i = queueVirtualized ? vw.start + vi : vi
                 const isActive = song.id === currentSong.id
+                const realIdx = queue.findIndex((s) => s.id === song.id)
+                // Reorder guards: upcoming rows only; the playing row and
+                // everything above it is fixed (predictable edits).
+                const canMoveUp = !isActive && realIdx > queueIndex + 1
+                const canMoveDown = !isActive && realIdx < queue.length - 1
                 return (
                   <div
                     key={`${song.id}-${i}`}
                     className={`group relative flex items-center gap-3 px-4 py-1.5 cursor-pointer transition-all ${isActive ? '' : 'hover:bg-ink/300'}`}
-                    style={{ background: isActive ? 'var(--surface-inset)' : undefined }}
+                    style={{
+                      ...(queueVirtualized ? { position: 'absolute', top: i * QUEUE_ROW_HEIGHT, left: 0, right: 0 } : {}),
+                      background: isActive ? 'var(--surface-inset)' : undefined,
+                      height: QUEUE_ROW_HEIGHT,
+                    }}
                     onDoubleClick={() => usePlayerStore.getState().playSong(song, queue)}
                   >
                     {/* Active-row accent edge */}
@@ -366,25 +397,57 @@ export function NowPlaying() {
                         style={{ background: 'var(--accent)' }}
                       />
                     )}
+                    {queueVirtualized ? null : null}
                     {song.coverArt
                       ? <img src={song.coverArt} alt="" className="w-7 h-7 rounded-md object-cover shrink-0" />
                       : <div className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>
                     }
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs truncate" style={{ color: isActive ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: isActive ? 500 : 400 }}>
+                      <p data-queue-title={song.title} className="text-xs truncate" style={{ color: isActive ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: isActive ? 500 : 400 }}>
                         {song.title}
                       </p>
                       <p className="text-[10px] truncate" style={{ color: 'var(--text-faint)' }}>{song.artist}</p>
                     </div>
                     {!isActive && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); const realIdx = queue.findIndex(s => s.id === song.id); if (realIdx !== -1) removeFromQueue(realIdx) }}
-                        title="Remove from queue"
-                        className="p-1 rounded-md shrink-0 transition-colors opacity-0 group-hover:opacity-100 hover:bg-ink/5"
-                        style={{ color: 'var(--text-faint)' }}
-                      >
-                        <X size={11} />
-                      </button>
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (canMoveUp) reorderQueueItem(realIdx, realIdx - 1) }}
+                          disabled={!canMoveUp}
+                          aria-label={`Move ${song.title} up in queue`}
+                          title="Move up"
+                          className="p-1 rounded-md transition-colors hover:bg-ink/5 disabled:opacity-25"
+                          style={{ color: 'var(--text-faint)' }}
+                        >
+                          <ChevronUp size={11} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (canMoveDown) reorderQueueItem(realIdx, realIdx + 1) }}
+                          disabled={!canMoveDown}
+                          aria-label={`Move ${song.title} down in queue`}
+                          title="Move down"
+                          className="p-1 rounded-md transition-colors hover:bg-ink/5 disabled:opacity-25"
+                          style={{ color: 'var(--text-faint)' }}
+                        >
+                          <ChevronDown size={11} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); jumpToQueueIndex(realIdx) }}
+                          aria-label={`Play ${song.title} now`}
+                          title="Play now"
+                          className="p-1 rounded-md transition-colors hover:bg-ink/5"
+                          style={{ color: 'var(--text-faint)' }}
+                        >
+                          <Play size={10} fill="currentColor" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (realIdx !== -1) removeFromQueue(realIdx) }}
+                          title="Remove from queue"
+                          className="p-1 rounded-md transition-colors hover:bg-ink/5"
+                          style={{ color: 'var(--text-faint)' }}
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
                     )}
                     {isActive && (
                       <div className="flex items-end gap-0.5 h-3 shrink-0">
@@ -400,6 +463,7 @@ export function NowPlaying() {
                   </div>
                 )
               })}
+              </div>
             </div>
           </motion.div>
         </motion.div>

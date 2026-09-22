@@ -30,3 +30,14 @@ export function hashStr(str: string): string {
 export function cn(...classes: (string | undefined | false | null)[]) {
   return classes.filter(Boolean).join(' ')
 }
+
+/** Human runtime for stats/hero rows ("3.5 hours", "42 minutes"). */
+export function formatRuntime(totalSec: number): string {
+  const hours = totalSec / 3600
+  if (hours >= 1) {
+    const h = hours >= 100 ? Math.round(hours) : Math.round(hours * 10) / 10
+    return `${h} ${h === 1 ? 'hour' : 'hours'}`
+  }
+  const m = Math.max(1, Math.round(totalSec / 60))
+  return `${m} minutes`
+}

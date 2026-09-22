@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ChevronLeft, ChevronRight, History, Play, Download, Loader2,
-  CalendarDays, Flame, MoonStar, Sun, Headphones, Disc3, Mic2, Trophy,
+  CalendarDays, Flame, MoonStar, Sun, Headphones, Disc3, Mic2, Trophy, ArrowLeft,
 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { toast } from '@/store/toastStore'
@@ -45,7 +45,7 @@ export default function RewindPage() {
   const [cardBusy, setCardBusy] = useState(false)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
   const library = usePlayerStore((s) => s.library)
-  const setActiveView = usePlayerStore((s) => s.setActiveView)
+  const goBack = usePlayerStore((s) => s.goBack)
   const nowWindow = currentMonthWindow()
   const isCurrentMonth = anchor.year === nowWindow.year && anchor.month0 === nowWindow.month0
 
@@ -62,7 +62,7 @@ export default function RewindPage() {
         const t = e.target as HTMLElement
         if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
         e.preventDefault()
-        usePlayerStore.getState().setActiveView('library')
+        usePlayerStore.getState().goBack()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -89,8 +89,21 @@ export default function RewindPage() {
   return (
     <div className="h-full overflow-y-auto" data-rewind-page>
       <div className="max-w-2xl mx-auto px-6 pb-24">
+        {/* ── Back to wherever the user came from ───────────────────── */}
+        <button
+          onClick={goBack}
+          className="mt-5 flex items-center gap-1.5 transition-colors active:scale-95"
+          style={{ color: 'var(--text-tertiary)', transitionDuration: 'var(--dur-fast)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
+          title="Go back"
+          aria-label="Go back to the previous page"
+        >
+          <ArrowLeft size={14} />
+          <span className="text-xs font-medium">Back</span>
+        </button>
         {/* ── Header: title + month stepper ─────────────────────────────── */}
-        <header className="pt-10 pb-2 flex items-end justify-between">
+        <header className="pt-3 pb-2 flex items-end justify-between">
           <div className="flex items-center gap-3.5">
             <div
               className="w-11 h-11 rounded-2xl flex items-center justify-center"
@@ -144,7 +157,7 @@ export default function RewindPage() {
             <span className="text-sm">Reading your month…</span>
           </div>
         ) : !data?.hasData ? (
-          <EmptyMonth onPlay={() => setActiveView('library')} />
+          <EmptyMonth onPlay={() => goBack()} />
         ) : (
           <div className={performanceMode ? '' : 'rewind-story'}>
             <HeroScene data={data} monthText={monthLabel(anchor.year, anchor.month0)} perf={performanceMode} />

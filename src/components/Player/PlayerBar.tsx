@@ -298,9 +298,14 @@ export function PlayerBar() {
 
             <span className="inline-flex pb-extra">
               <IconBtn
-                onClick={() => useUiStore.getState().setMiniPlayer(true)}
+                onClick={() => {
+                  // v2.1.2: toggles the DESKTOP mini player window (an
+                  // independent frameless BrowserWindow), not an in-app mode.
+                  const ui = useUiStore.getState()
+                  ui.setMiniPlayer(!ui.miniPlayer)
+                }}
                 title="Mini player (P)"
-                ariaLabel="Mini player"
+                ariaLabel="Toggle mini player"
               >
                 <PictureInPicture2 size={14} />
               </IconBtn>
