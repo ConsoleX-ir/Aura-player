@@ -138,7 +138,7 @@ function rawRequest(urlStr, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, sign
       port,
       path: url.pathname + url.search,
       method,
-      headers: { 'User-Agent': 'AuraPlayer/2.16.0 (desktop music player)', Accept: 'application/json', ...headers },
+      headers: { 'User-Agent': 'AuraPlayer/2.16.1 (desktop music player)', Accept: 'application/json', ...headers },
       // Manual happy-eyeballs: resolve up-front, v4 first (see file header).
       // NOTE: with autoSelectFamily the caller passes all:true and expects
       // an array of { address, family } — honor opts.all or node throws

@@ -801,7 +801,7 @@ ipcMain.handle('fs:fileStats', async (_e, filePath) => {
 // failing the whole lookup. Only when EVERY source errors does the renderer
 // see a network error.
 
-const FIND_USER_AGENT = 'AuraPlayer/2.16.0 (desktop music player)'
+const FIND_USER_AGENT = 'AuraPlayer/2.16.1 (desktop music player)'
 
 // Shared fetch — now routed through the Provider Core (Phase 3), which adds
 // retry with backoff, typed errors, and a shared UA on top of the timeout it

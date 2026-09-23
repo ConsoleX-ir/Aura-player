@@ -575,3 +575,36 @@ body {
 [data-theme='light'] ::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--accent) 55%, rgba(16, 16, 24, 0.14));
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v2.16.1 LIQUID / GEL SYSTEM — CSS layer
+   JS half lives in lib/liquid.ts + components/Explore/LiquidTabs.tsx (the
+   travelling selection pill — compositor-only WAAPI, zero deps). This block
+   owns the CSS-only half: the gel press feedback and the stillness rules.
+
+   Gel press: squash while the pointer is down (fast, damped), spring settle
+   on release (the house spring's bezier cousin — --ease-spring). Transform
+   only, so it can never shift layout.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.gel-press {
+  transition: transform 260ms var(--ease-spring);
+}
+.gel-press:active {
+  transform: scale(0.955);
+  transition-duration: 70ms;
+  transition-timing-function: var(--ease-smooth);
+}
+
+/* Stillness: Performance Mode and reduced-motion flatten the gel to instant
+   (the pill travel collapses in JS via liquidMotionAllowed(); these rules
+   flatten the CSS press and harden the pill against any transition). */
+:root[data-performance='on'] .gel-press:active {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gel-press,
+  .gel-press:active {
+    transition: none;
+    transform: none;
+  }
+}

@@ -3,7 +3,7 @@ import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, Chevron
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
-import { cn } from '@/lib/utils'
+import { LiquidTabs } from '@/components/Explore/LiquidTabs'
 import { useState } from 'react'
 import { PlaylistModal } from '../Modals/PlaylistModal'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
@@ -116,34 +116,32 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Nav */}
+      {/* Nav — the selection is a shared gel pill that travels between the
+          two rows (v2.16.1 liquid system, lib/liquid.ts). The accent bar
+          keeps its framer layoutId; the pill adds the squash-and-settle
+          body. Both collapse to instant placement under Performance Mode
+          and prefers-reduced-motion. */}
       <nav className="px-2.5 space-y-0.5">
-        {nav.map(({ id, label, icon: Icon, count }) => (
-          <button key={id} onClick={() => setActiveView(id)}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm relative overflow-hidden transition-all'
-            )}
-            style={{
-              transitionDuration: 'var(--dur-fast)',
-              color: activeView === id ? 'var(--text-primary)' : 'var(--text-tertiary)',
-              background: activeView === id ? 'var(--glass-2)' : 'transparent',
-            }}
-            onMouseEnter={(e) => { if (activeView !== id) e.currentTarget.style.background = 'var(--glass-1)' }}
-            onMouseLeave={(e) => { if (activeView !== id) e.currentTarget.style.background = 'transparent' }}
-          >
-            {activeView === id && (
+        <LiquidTabs<string>
+          variant="row"
+          items={nav.map(({ id, label, icon: Icon, count }) => ({
+            id,
+            label,
+            icon: <Icon size={15} style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
+            trailing: count > 0 ? (
+              <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{count}</span>
+            ) : undefined,
+            leading: (active: boolean) => active ? (
               <motion.div layoutId="nav-indicator"
                 className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full"
                 style={{ background: 'var(--accent)' }}
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }} />
-            )}
-            <Icon size={15} style={activeView === id ? { color: 'var(--accent)' } : undefined} />
-            <span className="flex-1 text-left">{label}</span>
-            {count > 0 && (
-              <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{count}</span>
-            )}
-          </button>
-        ))}
+            ) : null,
+          }))}
+          value={activeView}
+          onChange={(id) => { if (id === 'library' || id === 'favorites') setActiveView(id) }}
+          ariaLabel="Library navigation"
+        />
       </nav>
 
       {/* Playlists */}
