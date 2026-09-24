@@ -33,7 +33,11 @@ export function useOnlineStatus(): OnlineStatus {
     inFlight.current = controller
     setProbing(true)
     api.probeOnline()
-      .then((ok) => { if (!controller.signal.aborted) setProbedOnline(!!ok) })
+      .then((v) => {
+        // probeOnline returns a diagnostic object { ok, kind, detail?, latencyMs }
+        // (network investigation fix); legacy test mocks return a bare boolean.
+        if (!controller.signal.aborted) setProbedOnline(typeof v === 'object' && v !== null ? !!v.ok : !!v)
+      })
       .catch(() => { if (!controller.signal.aborted) setProbedOnline(false) })
       .finally(() => { if (!controller.signal.aborted) setProbing(false) })
   }, [])

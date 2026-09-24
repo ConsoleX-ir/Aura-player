@@ -1,7 +1,7 @@
 {
   "name": "aura-player",
   "private": true,
-  "version": "2.16.1",
+  "version": "2.16.2",
   "description": "Aura",
   "author": "ConsoleX",
   "main": "electron/main.cjs",

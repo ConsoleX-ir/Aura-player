@@ -156,7 +156,10 @@ export interface ElectronAPI {
     Promise<unknown>
   providerCancel: (requestId: string) => void
   // Real connectivity probe (HEAD, 4s cap) — navigator.onLine is only a hint.
-  probeOnline:    () => Promise<boolean>
+  // Resolves a diagnostic { ok, kind, detail?, latencyMs } (the bare boolean
+  // hid WHY a probe failed — network investigation fix). Legacy mocks that
+  // return a plain boolean are still handled.
+  probeOnline:    () => Promise<boolean | { ok: boolean; kind: string; detail?: string; latencyMs: number }>
   resolveDroppedPaths: (paths: string[]) => Promise<{
     files: { path: string; name: string; mtimeMs: number }[]
     folders: string[]

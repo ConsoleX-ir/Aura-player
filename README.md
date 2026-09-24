@@ -284,7 +284,11 @@ electron/
 
 # 📸 Screenshots
 
-Coming soon
+![Home](./docs/sc2.png)
+![Preview](./docs/sc5.png)
+![PlayList](./docs/sc1.png)
+![Setting](./docs/sc3.png)
+![Setting](./docs/sc4.png)
 
 ---
 

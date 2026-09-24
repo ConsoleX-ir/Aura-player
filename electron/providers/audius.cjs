@@ -23,7 +23,7 @@
 
 'use strict'
 
-const { providerFetch, cachedJson } = require('./core.cjs')
+const { providerFetch, cachedJson, ProviderFetchError } = require('./core.cjs')
 
 const APP_NAME = 'AuraPlayer'
 const HOST_LIST_TTL = 10 * 60_000
@@ -55,8 +55,16 @@ async function getHosts(signal) {
     if (discovered.length > 0) {
       hosts = Array.from(new Set(['https://api.audius.co', ...discovered])).slice(0, 6)
     }
-  } catch {
+  } catch (err) {
     // Host list is an optimization — the primary host is a fine constant.
+    // Dev diagnostics: a degraded host list shrinks failover to one host,
+    // so say WHY instead of failing over silently (network investigation).
+    // Cancellations (component unmounts, superseded requests) are normal
+    // control flow, not degradation — stay quiet for those.
+    const cancelled = err?.message === 'cancelled' || err?.message === 'cancelled during backoff'
+    if (process.env.NODE_ENV === 'development' && !cancelled) {
+      console.log(`[Provider] audius host-list unavailable (kind=${err?.kind ?? 'network'}: ${err?.message ?? 'no response'}) — failover reduced to the primary host`)
+    }
   }
   hostsCache = { at: Date.now(), hosts }
   return hosts
@@ -67,6 +75,31 @@ function invalidateHosts() {
 }
 
 /**
+ * Runs `fn(host)` against candidate hosts in order until one succeeds.
+ * Cancellation propagates immediately; any other failure tries the next
+ * host; when EVERY host failed, the LAST typed error is thrown.
+ *
+ * History (network investigation, pre-2.17): the previous inline loops
+ * re-threw only when `host === hosts[MAX_HOSTS_TO_TRY - 1]` — with the live
+ * discovery list advertising a single host, that condition could never fire,
+ * so a failing request resolved `undefined` (discovery ops) or silently
+ * empty (search ops) instead of a typed error. Runtime-proven via IPC:
+ * providerRequest('audius','artistTracks',{artistId:<bad>}) → UNDEFINED.
+ */
+async function withHostFailover(hosts, signal, fn) {
+  let lastErr = null
+  for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
+    try {
+      return await fn(host)
+    } catch (err) {
+      if (signal?.aborted) throw err
+      lastErr = err
+    }
+  }
+  throw lastErr ?? new ProviderFetchError('network', 'All Audius hosts failed')
+}
+
+/**
  * Calls the Audius API with host failover. Validation errors (a host talking
  * nonsense) fail over to the next host; real HTTP errors (404s etc.) do too
  * — a specific discovery node may be missing data a sibling has.
@@ -74,21 +107,12 @@ function invalidateHosts() {
 async function apiGet(path, params, signal, validate) {
   const hosts = await getHosts(signal)
   const qs = new URLSearchParams({ app_name: APP_NAME, ...(params ?? {}) }).toString()
-  let lastErr = null
-  for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-    try {
-      return await providerFetch(`${host}${path}?${qs}`, {
-        signal,
-        timeoutMs: API_TIMEOUT_MS,
-        validate,
-      })
-    } catch (err) {
-      lastErr = err
-      if (signal?.aborted) throw err
-      // try the next host
-    }
-  }
-  throw lastErr ?? new (require('./core.cjs').ProviderFetchError)('network', 'All Audius hosts failed')
+  return withHostFailover(hosts, signal, (host) =>
+    providerFetch(`${host}${path}?${qs}`, {
+      signal,
+      timeoutMs: API_TIMEOUT_MS,
+      validate,
+    }))
 }
 
 // ── Mapping (pure — unit-tested) ────────────────────────────────────────────
@@ -200,22 +224,12 @@ const ops = {
     if (!q) return { tracks: [] }
     const limit = clampLimit(params.limit, 20)
     const hosts = await getHosts(signal)
-    let mapped = []
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await providerFetch(`${host}/v1/tracks/search?app_name=${APP_NAME}&query=${encodeURIComponent(q)}&limit=${limit}`, {
-          signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
-        })
-        mapped = json.data
-          .filter((t) => t && t.id != null)
-          .map((t) => mapTrack(t, host))
-        break
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
-    return { tracks: mapped }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await providerFetch(`${host}/v1/tracks/search?app_name=${APP_NAME}&query=${encodeURIComponent(q)}&limit=${limit}`, {
+        signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
+      })
+      return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
+    })
   },
 
   async searchArtists(params, { signal }) {
@@ -223,54 +237,36 @@ const ops = {
     if (!q) return { artists: [] }
     const limit = clampLimit(params.limit, 12)
     const hosts = await getHosts(signal)
-    let mapped = []
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await providerFetch(`${host}/v1/users/search?app_name=${APP_NAME}&query=${encodeURIComponent(q)}&limit=${limit}`, {
-          signal, timeoutMs: API_TIMEOUT_MS, validate: USERS_SHAPE,
-        })
-        mapped = json.data.filter((u) => u && u.id != null).map(mapUser)
-        break
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
-    return { artists: mapped }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await providerFetch(`${host}/v1/users/search?app_name=${APP_NAME}&query=${encodeURIComponent(q)}&limit=${limit}`, {
+        signal, timeoutMs: API_TIMEOUT_MS, validate: USERS_SHAPE,
+      })
+      return { artists: json.data.filter((u) => u && u.id != null).map(mapUser) }
+    })
   },
 
   async trending(params, { signal }) {
     const limit = clampLimit(params.limit, 24)
     const hosts = await getHosts(signal)
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await cachedJson(`audius:trending:${limit}:${host}`, 5 * 60_000, () =>
-          providerFetch(`${host}/v1/tracks/trending?app_name=${APP_NAME}&limit=${limit}`, {
-            signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
-          }))
-        return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await cachedJson(`audius:trending:${limit}:${host}`, 5 * 60_000, () =>
+        providerFetch(`${host}/v1/tracks/trending?app_name=${APP_NAME}&limit=${limit}`, {
+          signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
+        }))
+      return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
+    })
   },
 
   async underground(params, { signal }) {
     const limit = clampLimit(params.limit, 24)
     const hosts = await getHosts(signal)
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await cachedJson(`audius:underground:${limit}:${host}`, 5 * 60_000, () =>
-          providerFetch(`${host}/v1/tracks/trending/underground?app_name=${APP_NAME}&limit=${limit}`, {
-            signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
-          }))
-        return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await cachedJson(`audius:underground:${limit}:${host}`, 5 * 60_000, () =>
+        providerFetch(`${host}/v1/tracks/trending/underground?app_name=${APP_NAME}&limit=${limit}`, {
+          signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
+        }))
+      return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
+    })
   },
 
   async artistTracks(params, { signal }) {
@@ -278,40 +274,30 @@ const ops = {
     if (!id) return { artist: null, tracks: [] }
     const limit = clampLimit(params.limit, 24)
     const hosts = await getHosts(signal)
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await providerFetch(`${host}/v1/users/${encodeURIComponent(id)}/tracks?app_name=${APP_NAME}&limit=${limit}&sort=plays`, {
-          signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
-        })
-        const tracks = json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host))
-        // The first track's user carries the artist display data.
-        const artist = json.data[0]?.user ? mapUser(json.data[0].user) : null
-        return { artist, tracks }
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await providerFetch(`${host}/v1/users/${encodeURIComponent(id)}/tracks?app_name=${APP_NAME}&limit=${limit}&sort=plays`, {
+        signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
+      })
+      const tracks = json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host))
+      // The first track's user carries the artist display data.
+      const artist = json.data[0]?.user ? mapUser(json.data[0].user) : null
+      return { artist, tracks }
+    })
   },
 
   async fresh(params, { signal }) {
     const limit = clampLimit(params.limit, 24)
     const hosts = await getHosts(signal)
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await cachedJson(`audius:fresh:${limit}:${host}`, 5 * 60_000, () =>
-          providerFetch(`${host}/v1/tracks/trending?app_name=${APP_NAME}&time=week&limit=100`, {
-            signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
-          }))
-        const fresh = sortByReleaseDateDesc(json.data.filter((t) => t && t.id != null))
-          .slice(0, limit)
-          .map((t) => mapTrack(t, host))
-        return { tracks: fresh }
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await cachedJson(`audius:fresh:${limit}:${host}`, 5 * 60_000, () =>
+        providerFetch(`${host}/v1/tracks/trending?app_name=${APP_NAME}&time=week&limit=100`, {
+          signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
+        }))
+      const fresh = sortByReleaseDateDesc(json.data.filter((t) => t && t.id != null))
+        .slice(0, limit)
+        .map((t) => mapTrack(t, host))
+      return { tracks: fresh }
+    })
   },
 
   async searchPlaylists(params, { signal }) {
@@ -319,57 +305,39 @@ const ops = {
     if (!q) return { playlists: [] }
     const limit = clampLimit(params.limit, 12)
     const hosts = await getHosts(signal)
-    let mapped = []
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await providerFetch(`${host}/v1/playlists/search?app_name=${APP_NAME}&query=${encodeURIComponent(q)}&limit=${limit}`, {
-          signal, timeoutMs: API_TIMEOUT_MS,
-          validate: (j) => { if (!j || !Array.isArray(j.data)) throw new Error('audius: data[] required') },
-        })
-        mapped = json.data.filter((p) => p && p.id != null).map((p) => mapPlaylist(p, host))
-        break
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
-    return { playlists: mapped }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await providerFetch(`${host}/v1/playlists/search?app_name=${APP_NAME}&query=${encodeURIComponent(q)}&limit=${limit}`, {
+        signal, timeoutMs: API_TIMEOUT_MS,
+        validate: (j) => { if (!j || !Array.isArray(j.data)) throw new Error('audius: data[] required') },
+      })
+      return { playlists: json.data.filter((p) => p && p.id != null).map((p) => mapPlaylist(p, host)) }
+    })
   },
 
   async trendingPlaylists(params, { signal }) {
     const limit = clampLimit(params.limit, 12)
     const hosts = await getHosts(signal)
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        const json = await cachedJson(`audius:playlists:${limit}:${host}`, 10 * 60_000, () =>
-          providerFetch(`${host}/v1/playlists/trending?app_name=${APP_NAME}&limit=${limit}`, {
-            signal, timeoutMs: API_TIMEOUT_MS,
-            validate: (j) => { if (!j || !Array.isArray(j.data)) throw new Error('audius: data[] required') },
-          }))
-        return { playlists: json.data.filter((p) => p && p.id != null).map((p) => mapPlaylist(p, host)) }
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
+    return withHostFailover(hosts, signal, async (host) => {
+      const json = await cachedJson(`audius:playlists:${limit}:${host}`, 10 * 60_000, () =>
+        providerFetch(`${host}/v1/playlists/trending?app_name=${APP_NAME}&limit=${limit}`, {
+          signal, timeoutMs: API_TIMEOUT_MS,
+          validate: (j) => { if (!j || !Array.isArray(j.data)) throw new Error('audius: data[] required') },
+        }))
+      return { playlists: json.data.filter((p) => p && p.id != null).map((p) => mapPlaylist(p, host)) }
+    })
   },
 
   async playlistTracks(params, { signal }) {
     const id = (params.playlistId ?? '').toString().trim()
     if (!id) return { playlist: null, tracks: [] }
     const hosts = await getHosts(signal)
-    for (const host of hosts.slice(0, MAX_HOSTS_TO_TRY)) {
-      try {
-        // The playlist tracks endpoint returns full track objects.
-        const json = await providerFetch(`${host}/v1/playlists/${encodeURIComponent(id)}/tracks?app_name=${APP_NAME}`, {
-          signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
-        })
-        return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
-      } catch (err) {
-        if (signal?.aborted) throw err
-        if (host === hosts[MAX_HOSTS_TO_TRY - 1]) throw err
-      }
-    }
+    return withHostFailover(hosts, signal, async (host) => {
+      // The playlist tracks endpoint returns full track objects.
+      const json = await providerFetch(`${host}/v1/playlists/${encodeURIComponent(id)}/tracks?app_name=${APP_NAME}`, {
+        signal, timeoutMs: API_TIMEOUT_MS, validate: TRACKS_SHAPE,
+      })
+      return { tracks: json.data.filter((t) => t && t.id != null).map((t) => mapTrack(t, host)) }
+    })
   },
 }
 

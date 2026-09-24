@@ -419,20 +419,48 @@ async function callProvider(req) {
   }
 }
 
-/** Health check for the whole online layer: cheap, always HEADs one host. */
+/**
+ * Health check for the whole online layer: cheap, always HEADs one host.
+ *
+ * Returns a DIAGNOSTIC RESULT, not a bare boolean: { ok, kind, detail?,
+ * latencyMs }. The historical `catch { return false }` hid WHY the probe
+ * failed — DNS vs TLS vs an HTTP status vs timeout — which made every
+ * "offline" UI state unexplainable (runtime-verified during the network
+ * investigation: the probe reported `true` while sibling requests to the
+ * same host were being refused, and reported `false` with no reason at
+ * all when blocked). `ok` is still the field the UI needs; callers written
+ * for the legacy boolean stay compatible via a typeof check.
+ *
+ *   ok:true    → kind 'online'                       (HTTP 2xx/3xx)
+ *   ok:false   → kind 'http'    detail "HTTP 403 …"  (edge blocks, 4xx/5xx)
+ *              → kind 'timeout' detail "Timed out…"  (host unreachable-slow)
+ *              → kind 'network' detail (DNS/refused/cancelled)
+ */
 async function probeOnline(signal) {
+  const startedAt = Date.now()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(new Error('timeout')), 4000)
   const onAbort = () => controller.abort(new Error('cancelled'))
   if (signal) {
-    if (signal.aborted) return false
+    if (signal.aborted) return { ok: false, kind: 'network', detail: 'cancelled', latencyMs: 0 }
     signal.addEventListener('abort', onAbort, { once: true })
   }
   try {
     const res = await rawRequest('https://api.audius.co', { method: 'HEAD', signal: controller.signal, timeoutMs: 3500 })
-    return res.status > 0 && res.status < 500
-  } catch {
-    return false
+    const ok = res.status >= 200 && res.status < 400
+    return {
+      ok,
+      kind: ok ? 'online' : 'http',
+      ...(ok ? {} : { detail: `api.audius.co answered HTTP ${res.status}` }),
+      latencyMs: Date.now() - startedAt,
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      kind: err instanceof ProviderFetchError ? err.kind : 'network',
+      detail: err instanceof Error ? err.message : 'no response',
+      latencyMs: Date.now() - startedAt,
+    }
   } finally {
     clearTimeout(timeout)
   }

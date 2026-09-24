@@ -1015,10 +1015,20 @@ providerCore.registerProvider({
   },
 })
 
+// Development-only structured diagnostics (network investigation): every
+// provider round-trip reports op, outcome kind, HTTP status and latency in
+// the main-process console. Gated behind isDev so production builds do zero
+// extra work and never log. Payloads are never printed — only op names,
+// error kinds and statuses; the provider layer is keyless (app_name is a
+// public attribution string), so no secret can leak through here.
 ipcMain.handle('net:providerRequest', async (_e, requestId, providerId, op, params) => {
+  const t0 = isDev ? Date.now() : 0
   try {
-    return await providerCore.callProvider({ requestId, providerId, op, params })
+    const result = await providerCore.callProvider({ requestId, providerId, op, params })
+    if (isDev) console.log(`[Provider] ${providerId}.${op} ok ${Date.now() - t0}ms (req ${requestId})`)
+    return result
   } catch (err) {
+    if (isDev) console.log(`[Provider] ${providerId}.${op} FAILED kind=${err?.kind || 'network'}${err?.status !== undefined ? ` status=${err.status}` : ''} ${Date.now() - t0}ms: ${err?.message || 'Provider request failed'} (req ${requestId})`)
     // Typed failures ride back as a payload the renderer recognizes.
     return {
       kind: err?.kind || 'network',
@@ -1032,7 +1042,20 @@ ipcMain.on('net:providerCancel', (_e, requestId) => {
   providerCore.cancelRequest(typeof requestId === 'string' ? requestId : '')
 })
 
-ipcMain.handle('net:probeOnline', () => providerCore.probeOnline())
+ipcMain.handle('net:probeOnline', () => {
+  const probe = providerCore.probeOnline()
+  if (isDev) {
+    probe.then((r) => {
+      if (r && typeof r === 'object') {
+        if (r.ok) console.log(`[Network] probe online ${r.latencyMs}ms`)
+        else console.log(`[Network] probe FAILED kind=${r.kind} ${r.detail ?? ''} (${r.latencyMs}ms)`)
+      } else {
+        console.log(`[Network] probe legacy-boolean result: ${r}`)
+      }
+    }).catch(() => {})
+  }
+  return probe
+})
 
 ipcMain.handle('net:findMetadata', async (_e, query) => {
   try {
