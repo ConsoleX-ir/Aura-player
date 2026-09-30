@@ -1,8 +1,10 @@
 import { Flame, Sparkles, Gem, ListMusic, Globe, Mic2, BadgeCheck } from 'lucide-react'
 import type { OnlineTrack, AudiusArtist, AudiusPlaylist } from '@/services/providers/audius'
+import { toSong } from '@/services/providers/audius'
 import { Section, TrackListSkeleton, ErrorBlock, EmptyBlock, type SectionState } from './ExploreStates'
 import { TrackList } from './ExploreTrackList'
-import { PlaylistCard } from './ExploreCards'
+import { PlaylistCardLarge, TrackTile, HeroCard } from './ExploreCards'
+import { useMemo } from 'react'
 
 // ── Discovery sections (v2.16.1) ─────────────────────────────────────────────
 // The four discovery bodies (Trending / Fresh / Under the Radar / Online
@@ -23,9 +25,37 @@ export function DiscoveryBody({ state, tracks, onRetry }: {
 }
 
 export function TrendingSection({ state, tracks, onRetry }: { state: SectionState; tracks: OnlineTrack[]; onRetry: () => void }) {
+  // Explore 3.0 composition: HERO (#1) + horizontal rail of square tiles
+  // (#2…). Derived from the SAME list — songs for queue continuity computed
+  // once. The hero takes track[0] and the rail starts at #2, so a title can
+  // never appear twice on the page (a v2.16.1 test contract).
+  const songs = useMemo(() => tracks.map(toSong), [tracks])
+  const hero = state.status === 'done' ? tracks[0] : undefined
+  const rest = hero ? tracks.slice(1) : tracks
   return (
     <Section title="Trending on Audius" icon={<Flame size={11} />}>
-      <DiscoveryBody state={state} tracks={tracks} onRetry={onRetry} />
+      {state.status === 'loading' || state.status === 'idle' ? (
+        <TrackListSkeleton />
+      ) : state.status === 'error' ? (
+        <ErrorBlock kind={state.kind} message={state.message} onRetry={onRetry} />
+      ) : state.status === 'empty' ? (
+        <EmptyBlock note="Nothing here right now — check back later." />
+      ) : (
+        <>
+          {hero && <HeroCard track={hero} songs={songs} />}
+          {rest.length > 0 && (
+            <div
+              className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1"
+              style={{ scrollbarWidth: 'thin' }}
+              data-trending-rail
+            >
+              {rest.map((t, i) => (
+                <TrackTile key={t.id} track={t} rank={i + 2} songs={songs} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </Section>
   )
 }
@@ -43,9 +73,22 @@ export function FreshSection({ state, tracks, onRetry }: { state: SectionState; 
 }
 
 export function UndergroundSection({ state, tracks, onRetry }: { state: SectionState; tracks: OnlineTrack[]; onRetry: () => void }) {
+  const songs = useMemo(() => tracks.map(toSong), [tracks])
   return (
     <Section title="Under the Radar" icon={<Gem size={11} />}>
-      <DiscoveryBody state={state} tracks={tracks} onRetry={onRetry} />
+      {state.status === 'loading' || state.status === 'idle' ? (
+        <TrackListSkeleton />
+      ) : state.status === 'error' ? (
+        <ErrorBlock kind={state.kind} message={state.message} onRetry={onRetry} />
+      ) : state.status === 'empty' ? (
+        <EmptyBlock note="Nothing here right now — check back later." />
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3" data-underground-grid>
+          {tracks.map((t, i) => (
+            <TrackTile key={t.id} track={t} rank={i + 1} songs={songs} />
+          ))}
+        </div>
+      )}
     </Section>
   )
 }
@@ -65,9 +108,9 @@ export function PlaylistsSection({ state, playlists, onRetry, onOpen }: {
       ) : state.status === 'empty' ? (
         <EmptyBlock note="No playlists surfacing right now." />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-playlist-editorial>
           {playlists.map((pl) => (
-            <PlaylistCard key={pl.id} playlist={pl} onOpen={() => onOpen(pl)} />
+            <PlaylistCardLarge key={pl.id} playlist={pl} onOpen={() => onOpen(pl)} />
           ))}
         </div>
       )}

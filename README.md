@@ -2,9 +2,9 @@
 
 > A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-![Version](https://img.shields.io/badge/version-v2.16.0-blue)
+![Version](https://img.shields.io/badge/version-v3.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
 ![Electron](https://img.shields.io/badge/Electron-Latest-47848F?logo=electron)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)
@@ -17,7 +17,7 @@ Aura Player is a modern desktop music player focused on performance, simplicity,
 
 Instead of copying the look of existing players, Aura combines a premium glassmorphism interface with dynamic colors extracted from album artwork to create a unique listening experience.
 
-v2 is a full redesign on a token-based design system — a floating glass sidebar, a pill-shaped play bar wrapped in a living, engine-driven glow, a true light theme, and features that make Aura feel native to Windows: system media controls, taskbar buttons, global media keys, and file associations.
+v3 is the liquid-glass generation. A wide glass play bar breathes with the real bass of the track, eight complete theme identities each carry their own light paper and secondary accent, the sidebar truly collapses, the Now Playing view became a stage that crossfades between synchronized lyrics and three live visualizers, and the audio engine gained an effects rack with importable presets. Your music got more personal too — custom cover art, searchable track notes, and a first launch that greets you by name. Online, Explore reads as an editorial discovery page, Radio is filtered to music, and every failure state still tells you the truth.
 
 ---
 
@@ -33,7 +33,9 @@ v2 is a full redesign on a token-based design system — a floating glass sideba
 - **Album Grid View** and fast virtualized List View
 - Automatic metadata detection
 - Album artwork support (embedded art cached to disk — large libraries stay light)
-- Search across songs, artists, and albums
+- **Custom cover art** — override any song's artwork with your own image from the Properties page; it is scaled to a bounded local copy (≤512px), your audio files and provider metadata are never touched, and the override shows up everywhere — play bar, Now Playing, song rows, even the Mini Player — with a one-click reset to the original
+- **Track Notes** — private notes on any song, autosaved locally as you type, and searchable from the library search (free text or the dedicated `note:` operator)
+- Search across songs, artists, albums, and your notes
 - "Show in Folder" — reveal any song's file in Explorer
 
 ### ❤️ Favorites
@@ -50,11 +52,13 @@ v2 is a full redesign on a token-based design system — a floating glass sideba
 - Remove songs
 - Remove from queue (Now Playing view)
 - Export as M3U — opens in VLC, Winamp, and most other media players
+- **Searchable "Add to Playlist" picker** — stays the same size whether you have 3 or 300 playlists
 
 ### 🏷 Song Properties
 
 - "Properties" on any song's ⋯ menu — a full Windows-Media-Player-style page: tag details (title, artist, album, year, genre, track) plus technical file info: format, codec, size, bitrate, sample rate, channels, and full file path
 - "Your Listening" — per-song plays, completions, skips, total time, last played (100% local)
+- **Artwork & Notes tab** — choose, replace, or reset custom cover art with a live preview and an "Override active" badge, plus the Track Note editor with debounced autosave
 - "Show in Folder" shortcut right from the page
 
 ### 🔍 Find Info Online (keyless)
@@ -87,10 +91,21 @@ v2 is a full redesign on a token-based design system — a floating glass sideba
 - Repeat (all / one)
 - Crossfade — smooth fade between songs, adjustable 0–12s
 - **10-band Equalizer** — 8 preset curves plus fully custom band control, persisted; flat = true bypass
+- **Audio Effects** — see below
 - Sleep Timer — auto-pause after 15/30/45/60 minutes (Now Playing view)
 - Volume Control + scroll-wheel fine adjustment
 - Seek bar with hover time labels
-- **Aura Pulse** — a living glow around the play bar that breathes with the track's real low-frequency energy; rests smoothly on pause, and freezes in Performance Mode
+- **The queue survives restarts** — it persists as ID references, rebuilds against your library at launch, and Aura never autoplays on startup
+- **Aura Pulse** — the play bar's aurora field breathes with the track's real low-frequency energy; rests smoothly on pause, and freezes in Performance Mode
+
+### 🎚 Audio Effects
+
+- Five direct controls stacked on the equalizer: **Bass, Treble, Compression, Reverb, and Stereo Width** — double-click any knob to reset it
+- A real Web Audio chain behind the EQ: low shelf → high shelf → compressor → reverb (dry/wet) → mid/side stereo widener, with smooth parameter gliding
+- **Honest bypass** — neutral settings remove the chain from the signal path entirely; the engine costs nothing until you use it
+- The visualizer and the play bar's aurora listen **after** the effects — what you see is what you hear
+- **7 built-in presets** plus your own named presets — save, apply, and delete them from Settings → Playback
+- **Export / Import** your whole effects setup as a small JSON file — it carries configuration only, never processed audio, and foreign files are sanitized before anything is applied
 
 ### 🪟 Windows Integration
 
@@ -99,6 +114,20 @@ v2 is a full redesign on a token-based design system — a floating glass sideba
 - Windows taskbar thumbnail controls — Previous/Play-Pause/Next from the taskbar preview
 - Registered as a Windows music player — double-click any supported audio file to open it in Aura
 - Single-instance: double-clicking another song plays it in the existing window
+
+### 🐧 Linux
+
+- **AppImage and .deb** packages built from the repository (`npm run build:linux`)
+- Audio file associations via the desktop entry — Aura shows up in your system's "Open with" list
+- The same full app: liquid-glass UI, themes, effects, Mini Player, and first-launch flow all behave natively on Linux
+
+### 🌐 Explore & Radio
+
+- **Explore 3.0** — an editorial discovery page over Audius: a #1 hero card with Play-now, ranked trending rails, an "Under the Radar" grid, large online-playlist cards, and Fresh Finds — every piece plays straight into the same engine, queue, and Mini Player as your local files
+- **Live Radio** (Radio Browser) — search by name, filter by country, language, or genre, ranked by community votes
+- **Radio stays about the music** — stations tagged news, talk, politics, religion, sports, and similar are filtered out by their own metadata; untagged stations are kept (no evidence, no assumption), and your radio favorites are never filtered
+- **Failure states that speak** — Aura distinguishes "your internet connection is down" from "this online service is currently unavailable"; timeouts, rate limits, and provider errors each get their own message and a Retry
+- Offline, Explore stays useful with direct jumps into your local Library and Favorites
 
 ### ⌨ Keyboard Shortcuts
 
@@ -144,13 +173,16 @@ Every keyboard action gives visible confirmation — a small toast rises above t
 
 ### 🎨 UI
 
-- **Floating navigation card** — the sidebar is a rounded, shadowed glass card inset from the window edge, so the ambient background flows around it
-- Theme picker: ConsoleX (default), Forest, Ocean, Sunset, Amethyst, Crimson, or a fully Custom accent color
+- **Eight theme identities** — ConsoleX, Ocean Deep, Amethyst, Cyan Frost, Emerald, Crimson, Amber, and Mono — each remapping the entire palette (ink scale, ambient clouds, and a curated secondary accent) and carrying its own light "paper" for light mode; a fully Custom accent color is still available; every switch crossfades
+- **Liquid-glass play bar** — a wide glass slab (no more pill) with a top sheen, an accent-tinted hairline border, and a two-layer aurora field that breathes with the track's real bass; still when paused, calm in Performance Mode and reduced-motion
+- **Collapsible sidebar** — the floating glass card folds from 246px to a 56px icon rail and back, remembers its state across restarts, and keeps every destination reachable
+- **Now Playing stage** — one quiet segmented toggle crossfades between synchronized **Lyrics** and a full-size **Visualizer** (Aurora, Particles, or Radial) on a single efficient canvas that only animates while music plays
+- **Mini Player 3.0** — the independent desktop widget now inherits your theme and accent (artwork-aware on Now Playing), shows an honest "up next" preview on hover, and keeps its full draggable, always-on-top lifecycle
+- **A first launch that greets you** — an optional display name (never an account, never sent anywhere), a time-of-day "welcome back" greeting in the Library, and an honest "make Aura your default player" offer that opens your OS settings — no registry hacks, no fake success
 - **Dark & Light themes** — dark is Aura's true form; light is a designed, glow-first paper look with an animated cross-fade between them
 - Dynamic Accent Colors: your chosen theme stays consistent everywhere, except the Now Playing view, which pulls its ambient color from the current song's actual album art
-- Living Background: two soft ambient light orbs behind the interface, following the active theme color (frozen automatically in Performance Mode)
+- Living Background: soft ambient light behind the interface, following the active theme (frozen automatically in Performance Mode)
 - Glassmorphism with depth — layered translucency, soft shadows, refined hover and press states everywhere (never a layout shift)
-- **Mini Player** — a compact artwork widget with a progress ring (P), when you want the window for something else
 - Smooth animations — transform/opacity only, GPU-friendly, all of it disabled under Performance Mode or reduced-motion
 - Keyboard focus indicators throughout — fully navigable without a mouse
 
@@ -160,7 +192,7 @@ Every keyboard action gives visible confirmation — a small toast rises above t
 - Drag-and-drop import — drop audio files or whole folders anywhere on the window
 - Fast startup — lazy-loaded pages, virtualized lists, IndexedDB-backed library
 - Local music playback
-- Persistent settings and library
+- Persistent settings, library, queue, and last-played state
 - **Performance Mode** — one toggle strips blur and decorative animation for weak GPUs
 
 ---
@@ -220,47 +252,71 @@ Package as a Windows installer (also registers file associations)
 npm run build:electron
 ```
 
-The installer is optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and v2.1.0 strips every non-English Electron locale from the package (about 46 MB lighter unpacked) while keeping full functionality. `Aura.Player.Setup-2.16.0.exe` comes out **around 80 MB**.
+Package for Linux — builds an **AppImage** and a **.deb** (targets defined in `package.json`)
 
-> v2.16.0 — **Performance & Scale pass.** A dedicated audit-and-measure sweep over the whole app, ending in a permanent 15-budget performance probe (new `p15_perf_probe.py`) that runs a seeded **5,000-song library + 5,000-session history** through startup, every lazy-view navigation, deep-scroll, search, rapid queue storms, long-task counts, and heap-stability holds. Measured numbers: first library row paints in **~0.7s** with 5,000 tracks resident, worst lazy-view navigation settle **≤ 50ms**, deep-scroll to row 5,000 **≤ 50ms**, 60 instant queue skips in **~140ms**, and **zero measurable heap growth** across the navigation sweep and 6-second idle holds. Audit fixes: the visualizer's wave mode no longer allocates a fresh 2KB buffer every frame (one per effect, matching the bars/circle modes), and the mini-player heartbeat no longer ships **identical** snapshots 4×/s — a paused widget now costs zero IPC pushes and zero widget re-renders, while every show transition still force-pushes fresh state so the widget can never paint a stale frame. Zustand selector hygiene, virtualization, IndexedDB write coalescing, theme/pulse render loops, and listener lifecycles were re-audited and confirmed clean; full 13-suite functional + 12-suite unit regression battery green; zero new dependencies.
-> v2.15.0 — **Ambient Visuals, now truly optional.** The ambient system (artwork-tinted background orbs, Aura Pulse ring, dynamic per-view color) was audited against its contract: it never touches your chosen theme or accent — it drives a separate ambient variable family that reverts to your theme the moment you leave Now Playing, falls back gracefully when artwork fails to decode, respects Performance Mode (blur swapped for zero-GPU-cost gradients) and prefers-reduced-motion (stillness guarantees). What was missing was the OFF switch: **Settings → Ambient Visuals** now removes the orbs and pulse motion entirely for a completely still interface, persists across restarts, and is verified in the functional audit along with the theme-invariant checks.
-> v2.14.0 — **Mini Player, desktop-grade.** The independent desktop widget (v2.1.2) keeps its full lifecycle — auto-appears on minimize, floats and drags anywhere without stealing focus, its close button hides only itself, it dies with the app, and the whole thing runs under the same hardened security model — and now **remembers where you put it**: position persists across restarts in the user-data directory, sanity-checked against connected displays so a monitor unplugged since last session can never leave the widget stranded off-screen. Verified end-to-end in real Electron (12-check lifecycle probe).
-> v2.13.0 — **Playback Experience 2.0 — the keyboard, fully audited.** A complete routing audit of every key that reaches the app, with three real conflicts found and fixed: **Space on a focused button** no longer double-fires (the button activates; global play/pause stands down — the standard player contract), **arrow keys inside open menus** no longer skip tracks (Radix portals own their keys while open), and the v2.1.2 volume-vs-seek slider fix is kept and broadened. Everything else is verified working: L/S/R/M/N/Q/P shortcuts, Ctrl+K everywhere, input typing immunity, Ctrl+Arrows seek, shuffle on→off natural-order restore, repeat cycling, volume steps with OSD, crossfade, sleep timer (whose SMTC-pause crash was fixed in v2.12.0), and SMTC/global media keys riding the same playback funnel. 19-check functional audit added; zero regressions across the full 14-suite battery.
-> v2.12.0 — **Queue 2.0.** The queue is now fully under your control. **Reorder** upcoming tracks (move up/down, keyboard-accessible, the playing item never jumps), **Play now** on any row, **Clear upcoming** with one click, and **Play Next / Add to Queue** from every song's ⋯ menu — manual actions always outrank Smart Queue, which still only ever appends. **The queue now survives restarts**: it persists as ID references and is rebuilt against your library at launch — deleted files drop out honestly, the playhead is restored consistently, and Aura never autoplays on startup. Edge cases handled: one-track queues, repeated tracks as distinct rows, huge queues, edits while playback is active. Also fixed a latent crash: the sleep timer and SMTC pause/play handlers called an unimplemented store action.
-> v2.11.0 — **Listening History.** A full chronological record of everything you have played, backed by the same local database that already survived restarts since Wave 0. **2,500+ sessions stay smooth** — the list is virtualized with the same windowing engine the library uses (now one shared implementation). **Find anything**: substring search across title/artist/album, completed/skipped status filters, and all-time/today/7-day/30-day ranges — all composable, with an honest count line. **Stats strip**: sessions, unique songs, completion rate, total listening time. Deleted songs stay visible in history (never blank), marked inert; anything still in the library plays with one click. Search, filters and the whole dataset are computed locally — nothing leaves the machine.
-> v2.10.0 — **Artist & Album pages.** Your library now has real destinations, not just rows. **Artist page**: artwork mosaic, albums, full track list, local runtime stats, Start Radio (seeded by the artist's top track via the Smart Music Engine), and Related in your library — artists that share genres, honestly derived from your own tags. **Album page**: cover hero, year/runtime, trackNumber-ordered list, and an artist round-trip link. **Navigation everywhere**: every song's ⋯ menu gains Go to Artist / Go to Album, grid-view album cards gain a hover Open affordance (card click still plays), and artist↔album pages cross-link. Everything is clearly badged Local — Explore remains the online surface. Grouping is case-insensitive with stable display-name resolution; a shared helper module powers both pages with zero duplicated logic.
-> v2.9.0 — **Smart Queue & Smart Playlists.** The engine now keeps the music going and surfaces itself honestly. **Smart Queue**: as the queue runs dry (repeat off), Aura quietly appends up to 10 on-device recommendations seeded by what is playing — append-only, never reordered, every added row badged with its reason, and anything you remove stays removed (manual queue actions always win). Toggle it in the queue panel or Settings. **Smart Playlists page**: Made for You, Discovery (60% unheard), and Favorites Radio — deterministic on-device lists that refresh daily, regenerate on demand, show WHY every track was picked, and stay honest with notes when history is thin. Empty library → a note, never a crash.
-> v2.8.0 — **Smart Music Engine.** A local-first, purely algorithmic recommendation engine — no AI, no network, fully explainable. Every pick carries human-readable reasons ("Same artist as the seed", "You usually hear it to the end", "You often skip this", "New to you — a discovery pick") from real local signals: artist/genre/album/era similarity, play counts, completion rates, skip aversion, favorites, recency decay, and hour-of-day listening context. **Start Radio** on any library song (song ⋯ menu) builds a 25-track radio around it; **Play something for me** in the Command Palette builds a taste mix. Deterministic (same day + same seed → same list, debuggable), diversity-capped per artist, with a guaranteed exploration quota for discovery. Honest cold start: no history → favorites lead; no favorites → recently added. Empty library → a note, never a crash.
-> v2.7.0 — **Explore, complete.** The Explore page is now the full discovery experience over Audius: **Trending**, **Fresh this week** (newest releases from the weekly trending pool — honestly labeled, since Audius has no dedicated new-releases feed), **Under the Radar**, **Online Playlists** (trending cards open into full track lists), and a **Feeling Lucky** button that plays one random streamable pick from the whole discovery pool. **Search now covers playlists too** — one query returns tracks, artists, and playlists at once, and search stays honest: an error is only shown when the provider is truly unreachable. Playlist covers now render from the verified artwork map. Offline, Explore stays useful with direct jumps into your local Library and Favorites.
-> v2.6.0 — **Live Radio, worldwide.** Explore gains a Radio tab powered by Radio Browser — a community directory of thousands of live stations. **Find your frequency**: search by name and filter by country, language, or genre with live facet counts, ranked by community votes. **Play like a station, not a file**: streams play through the same engine and mini player (live tracks idle the progress bar and disable seeking — on purpose), dead stations are filtered before they ever reach the list, and a station that dies mid-play names itself in a toast instead of failing silently. **Radio favorites**: heart any station to keep it in a persisted list that survives restarts and works even when you are offline. Plays are pinged back to Radio Browser as good citizenship. As always: keyless, nothing to configure.
+```bash
+npm run build:linux
+```
 
-> v2.5.0 — **Audius is here: free streaming, keyless.** A new Explore tab streams music from Audius — the decentralized, free catalog — with zero accounts and zero tokens. **Discover**: Trending and Under the Radar lists load on open; search finds tracks and artists (verified badges, follower counts, one-tap artist pages). **Play like local**: online tracks ride the exact same engine, queue, mini player, visualizer, and media keys as your files — with an honest disabled state and a "not streamable" note on the rare track the catalog cannot serve. **Failure states that speak**: offline (with a real probe, not a guess), timeouts, rate limits, and provider errors each get their own message and a Retry. Every endpoint was verified against the live API before shipping; nothing is faked, and your library and listening history stay 100% local.
+The packages are optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and every non-English Electron locale is stripped from the package (about 46 MB lighter unpacked) while keeping full functionality. The Windows installer comes out **around 80 MB**; the Linux AppImage and .deb land **around 90 MB** each.
 
-> v2.4.0 — **Online Provider Core**. The groundwork for everything online, done right: every network call Aura makes now runs through one hardened layer in the main process — hard timeouts, automatic retries with backoff for transient failures, rate-limit awareness (429 + Retry-After), response-shape validation, a small TTL cache, and cancellation. The renderer names a provider and an operation (allowlisted); it can never fetch a URL directly, so the Electron security model stays intact. Providers are declared with honest capabilities, and offline is detected with a real probe (not just `navigator.onLine`). Find Info Online now rides this layer and is more resilient to slow or flaky networks.
+---
 
-> v2.3.0 — **Search & Navigation 2.0**. One search engine, everywhere. The library search and the Ctrl+K command palette now share a single architecture: the same parser, the same field operators (`artist:` `album:` `title:` `genre:` `year:`, quoted phrases), and the same fuzzy matcher. **Fuzzy close-matches**: a typo that finds nothing exact now surfaces ranked close matches in the library (with an honest "close matches" notice) and a dedicated Close Matches group in the palette — while operator queries stay literal, so `artist: aurrra` never fakes results. **Search hand-off**: the palette always offers "Search library for …" as its last row — one click (or a few ArrowDowns + Enter) drops your query into the Library, prefilled. **Keyboard access**: library rows are now focusable — Tab in, Enter plays, and the transport keys (arrows, Space) keep their global meaning so no key ever does two things at once. Under the hood, this phase also hardened the playback error guard: a run of unplayable files now stops skipping after 5 failures instead of looping the queue.
+# 🕘 Version History
 
-> v2.2.0 — **Library 2.0**. Your library now tells you the truth about itself. **Library Health** (Settings → Library) verifies every entry against the files on disk — flags missing files, unreadable entries, and duplicate recordings, with one-click cleanup that never touches your files. **Listen-stats sorting**: Recently Played, Most Played, and Most Skipped join the sort menu, powered by Aura's 100% local listening history. **Advanced search**: `artist:` `album:` `title:` `genre:` `year:` operators and quoted phrases in the library search box (`artist: aurora "run away"`). **Genre filter** and a richer library overview (artists, albums, genres, total runtime). **Playback errors speak up**: a broken or missing file now names itself in a toast instead of dying silently, and playback skips past it (loop-guarded) to keep the queue alive.
+> v3.0.0 — **The liquid-glass generation.** The largest design wave since v2. **Theme System 3.0**: eight complete identities — ConsoleX, Ocean Deep, Amethyst, Cyan Frost, Emerald, Crimson, Amber, Mono — each remapping the whole token cascade (ink scale, ambient clouds, secondary accent) with its own light paper, animated switching, and zero new dependencies; the primary accent stays on the artwork-driven pipeline. **Playbar 3.0**: the capsule became a wide liquid-glass slab with a top sheen, an accent-tinted hairline, and a two-layer aurora (field + specular rim) that breathes with real bass from the analyser and rests when paused. **Sidebar 3.0**: true collapse to a 56px icon rail, persisted across restarts, with one unified selection language and the nested-selection quirk fixed. **Now Playing stage**: a quiet LYRICS | VISUALIZER toggle crossfades into a single-canvas visualizer with three honest modes (Aurora, Particles, Radial) that only animates while music plays. **Mini Player 3.0**: the widget inherits your theme and resolved accent, previews what plays next on hover, and keeps its whole desktop lifecycle. **Explore 3.0**: an editorial composition layer — hero card, ranked rails, Underground grid, large playlist cards — with the hardened networking layer untouched, and Radio now filtered to music by station metadata (untagged stations kept, favorites never filtered). **Audio Effects**: a real five-knob chain (bass, treble, compression, reverb, stereo width) with neutral = true bypass, 7 built-in presets, user presets, and JSON export/import (configuration only, never processed audio). **Your music, more yours**: custom cover art (bounded local override, propagated everywhere, non-destructive) and searchable Track Notes. **First launch**: an optional name, a "Good morning — welcome back" greeting, and an honest default-player offer that hands off to your OS. Two real bugs found by the release audit were fixed: Find Info Online had been silently broken by a swallowed reference error (now fixed and verified against the live sources), and the Properties page could crash on partial file stats. Measured at a 5,000-song scale, all 15 performance budgets hold — first library row ~0.9s, worst navigation settle 50ms, zero heap growth — and the full regression battery (20 runtime + 17 unit suites) runs green. Linux packaging (AppImage + .deb) ships from the project's own build config.
 
-> v2.1.2 — The real-world fixes wave. **Playlist menus that scale**: the song `...` menu no longer dumps every playlist into one giant dropdown — "Add to Playlist…" now opens a searchable picker (arrow-key + Enter navigation, scrollable list, live counts) that stays the same size whether you have 3 or 300 playlists. **A true desktop Mini Player**: P (or the pill button, or the command palette) now opens an independent, always-on-top, freely draggable mini player window — it also appears automatically when you minimize Aura and politely disappears on restore, its close button hides only the widget, and playback controls ride the same media-command funnel as your keyboard's media keys. **Keyboard routing that respects focus**: arrow keys on a focused volume slider adjust only the volume (no more accidental track skips from the same keypress), while global shortcuts still work everywhere else. **A menu-glitch sweep**: dropdown items lost their conflicting inline hover styles that fought the keyboard-highlight CSS (highlights now always render, hover and arrow-key navigation look identical), and a song row with an open menu no longer visually loses its controls.
+> v2.16.1 — **The network honesty wave.** Provider failures now speak their true kind: typed errors end every failover path, so a host fallback that exhausts its list reports "this service is unreachable" instead of pretending to be offline, a 403 is never relabeled as "no network", and a provider dying mid-request can never come back as "no results". Every Audius and Radio Browser call now runs a host failover across backup endpoints with per-attempt timeouts, retry/after handling and request cancellation preserved, and an on-demand diagnostic probe that reports what it actually measured (latency, error kind, detail) instead of swallowing the exception. The result: the Radio page's intermittent network errors became named, honest, recoverable states.
 
-> v2.1.1 — The stability wave. **What you delete stays deleted**: removing a song from the Library (while keeping the file on disk) no longer resurrects on the next Folder Sync — intentional removals are remembered as tombstones, cleared the moment you explicitly re-import the same file, and garbage-collected once the file disappears from disk. **What you change stays changed**: Library sort key, sort direction, and list/grid view now persist across restarts alongside every other preference, and a coordinated-shutdown handshake makes the renderer flush all pending state writes before the window actually closes — a setting changed half a second before quitting now survives the restart instead of dying inside the write debounce. **Nothing keeps playing that isn't there**: removing the currently-playing song (or clearing the library) now actually stops the audio instead of leaving it sounding under an empty UI, and the seek/time UI resets cleanly. Under the hood, the persistence layer gained a pre-hydration write gate (a boot-time state write can no longer clobber your library snapshot) built directly on the "why Rewind persistence just works" audit of the v1 storage paths.
+> v2.16.0 — **Performance & Scale pass.** A dedicated audit-and-measure sweep over the whole app, ending in a permanent 15-budget performance probe (`p15_perf_probe.py`) that runs a seeded **5,000-song library + 5,000-session history** through startup, every lazy-view navigation, deep-scroll, search, rapid queue storms, long-task counts, and heap-stability holds. Measured: first library row paints in **~0.7s** with 5,000 tracks resident, worst lazy-view navigation settle **≤ 50ms**, deep-scroll to row 5,000 **≤ 50ms**, 60 instant queue skips in **~140ms**, and **zero measurable heap growth**. Audit fixes: the visualizer's wave mode no longer allocates a fresh 2KB buffer every frame, and the mini-player heartbeat no longer ships identical snapshots 4×/s — a paused widget now costs zero IPC pushes and zero re-renders. Full functional + unit regression battery green; zero new dependencies.
 
-> v2.1.0 — Faster, cleaner, more native. The sidebar is now a **floating glass card** — rounded, shadowed, inset from the window edge, with the ambient background flowing around it and the same 256px footprint as before. Aura learned **Windows System Media Transport Controls**: the native media flyout (volume overlay, Win+K, lock screen) shows the current track, artist, album art, and live playback state with working Play/Pause/Previous/Next — including while Aura is minimized — driven by the standard MediaSession API with zero new dependencies. The Library gained a proper **Sort** menu (Recently Added, Title, Artist, Album, Duration, each ascending or descending) built on a pure, unit-tested ordering module. The **Light theme Lyrics modal was fixed** — lyric lines, carets, and shadows are all token-driven now, so text is readable in both themes (and the Visualizer and Queue popovers share the fix). The **Play Bar is wider and glassier** — min(1240px, 100vw−24), a saturating blur, an inset top highlight — and its aura got more present while still resting calmly on pause. Under the hood: the whole pill chrome and the entire Now Playing view stop re-rendering at the progress tick (only the seek bar and lyric highlight do), the Visualizer stopped allocating a buffer and calling getComputedStyle every frame, album-grid cards no longer hold a permanent GPU layer, and buttons across the app regained the pointer cursor Tailwind v4 had dropped — plus a consistent hover/highlight language for menus, toggles, and modal actions. Modal proportions were rebalanced per dialog (small forms no longer stretch), packaged size dropped by stripping non-English Electron locales, and a full 202-check regression battery — including a new 31-item v2.1.0 suite and the 5,000-track stress test — runs green.
->
-> v2.0.0 — The milestone. **Aura Rewind** turns your listening history into a cinematic monthly story — total time, top songs/artists/albums with animated rankings, a 24-hour listening clock, week rhythm, GitHub-style day-by-day heatmap, completion donut (played through vs. skipped), unique counts, streaks, and a locally-rendered **shareable image card** — all computed from the 100% offline scrobble store, with a month stepper to travel back. A **Ctrl+K command palette** puts the whole app one keystroke away: navigation, playback, playlist jumps, panel toggles, live library search that plays what you find, and system switches (theme, mini-player, Performance Mode). A **mini-player** mode (P) swaps the pill for a compact artwork widget with a progress ring. **Folder watching** keeps the library live: imported folders are watched with fs.watch, debounced in the main process, and reconciled through Folder Sync automatically (event-driven — zero polling, toggleable in Settings). **Light mode** ships with an animated cross-fade (colors glide, nothing snaps), every remaining hardcoded color was swept to theme-aware tokens, and the pill Play Bar learned a bass-driven energy pool plus an orbiting light that circle it while music plays. New shortcuts (Ctrl+K, N, Q, P), a unified hover/motion system, and the pill's responsive columns round it out.
->
-> v1.11.6 — Calmer background: the drifting light-orb motion is gone — the glow is back to the original still, fixed look. On the playlist view the glow now takes its color from the playlist's cover image (the first song with artwork), so the ambient light extends from the playlist art itself. Settings → Online Services now lists **Lyrics (LRCLIB)** as its own entry.
->
-> v1.11.5 — Queue panel fix: the Now Playing queue now reads top-to-bottom in true playback order — the playing song first, then what comes after it, wrapping around — so "what plays next" is always right below the current song, wherever you started in the list. Shuffle display unchanged (still deliberately unpredictable).
->
-> v1.11.4 — The ambient background got more alive: the drifting light orbs are brighter, bigger, and sweep visibly across the window — including behind the playlist view, which now shares the same living background as the rest of the app.
->
-> v1.11.3 — Cleaned up: the optional "Identify by sound" experiment was removed — every audio-recognition API requires a personal key, and Aura stays 100% keyless. The keyless Find Info Online search (Deezer + Apple Music + MusicBrainz) with editable search terms remains the way to fix wrong tags.
->
-> v1.11.0 — Phase 2 kickoff: Song Properties dialog (tags + technical file info), keyless "Find Info Online" that searches Deezer, Apple Music, and MusicBrainz (no API key, no audio upload) and lets you apply the correct metadata with a field-by-field diff, plus two slow-drifting ambient light orbs in the background.
->
-> v1.10.0 — Phase 1 finale: anchored Lyrics/Visualizer popovers that open exactly on their play-bar icons, the in-app Keyboard Shortcuts guide, toast feedback for keyboard actions, mute (M), scroll-wheel volume, and a slimmed-down installer.
+> v2.15.0 — **Ambient Visuals, now truly optional.** The ambient system (artwork-tinted background orbs, Aura Pulse ring, dynamic per-view color) was audited against its contract: it never touches your chosen theme or accent — it drives a separate ambient variable family that reverts to your theme the moment you leave Now Playing, falls back gracefully when artwork fails to decode, respects Performance Mode and prefers-reduced-motion. What was missing was the OFF switch: **Settings → Ambient Visuals** now removes the orbs and pulse motion entirely for a completely still interface, persists across restarts.
+
+> v2.14.0 — **Mini Player, desktop-grade.** The independent desktop widget keeps its full lifecycle — auto-appears on minimize, floats and drags anywhere without stealing focus, its close button hides only itself, it dies with the app — and now **remembers where you put it**: position persists across restarts, sanity-checked against connected displays so a monitor unplugged since last session can never leave the widget stranded off-screen. Verified end-to-end in real Electron.
+
+> v2.13.0 — **Playback Experience 2.0 — the keyboard, fully audited.** A complete routing audit of every key that reaches the app: **Space on a focused button** no longer double-fires, **arrow keys inside open menus** no longer skip tracks, and the volume-vs-seek slider fix is kept and broadened. Everything else verified working: L/S/R/M/N/Q/P shortcuts, Ctrl+K everywhere, input typing immunity, Ctrl+Arrows seek, shuffle restore, repeat cycling, volume steps with OSD, crossfade, sleep timer, and SMTC/global media keys riding the same playback funnel.
+
+> v2.12.0 — **Queue 2.0.** Reorder upcoming tracks, Play now on any row, Clear upcoming with one click, and Play Next / Add to Queue from every song's ⋯ menu — manual actions always outrank Smart Queue. **The queue survives restarts**: it persists as ID references, is rebuilt against your library at launch, the playhead is restored consistently, and Aura never autoplays on startup.
+
+> v2.11.0 — **Listening History.** A full chronological record of everything you have played, virtualized so **2,500+ sessions stay smooth**, with substring search, completed/skipped filters, time ranges, and a stats strip (sessions, unique songs, completion rate, total listening time). Deleted songs stay visible in history, marked inert.
+
+> v2.10.0 — **Artist & Album pages.** Real destinations, not just rows: artwork mosaics, album pages, Start Radio from any artist, Related in your library, Go to Artist / Go to Album in every ⋯ menu. Everything clearly badged Local — Explore remains the online surface.
+
+> v2.9.0 — **Smart Queue & Smart Playlists.** As the queue runs dry, Aura quietly appends on-device recommendations seeded by what is playing — append-only, badged with reasons. Made for You, Discovery, and Favorites Radio: deterministic on-device lists that show WHY every track was picked.
+
+> v2.8.0 — **Smart Music Engine.** A local-first, purely algorithmic recommendation engine — no AI, no network, fully explainable. Every pick carries human-readable reasons from real local signals: artist/genre/album/era similarity, play counts, completion rates, skip aversion, favorites, recency decay, and hour-of-day context. Start Radio on any song; "Play something for me" in the palette.
+
+> v2.7.0 — **Explore, complete.** Trending, Fresh this week, Under the Radar, Online Playlists, and a Feeling Lucky button. Search covers tracks, artists, and playlists at once — and stays honest: an error is only shown when the provider is truly unreachable.
+
+> v2.6.0 — **Live Radio, worldwide.** A Radio tab powered by Radio Browser: search by name, filter by country/language/genre with live facets, live streams through the same engine (no seeking on live — on purpose), dead stations filtered before they reach the list, persisted radio favorites, and play pings back to the directory as good citizenship. Keyless, nothing to configure.
+
+> v2.5.0 — **Audius is here: free streaming, keyless.** Trending and Under the Radar on open; search finds tracks and artists; online tracks ride the exact same engine, queue, mini player, visualizer, and media keys as your files. Offline detection by real probe, timeouts, rate limits and provider errors each get their own message and a Retry. Nothing is faked; your library stays 100% local.
+
+> v2.4.0 — **Online Provider Core.** Every network call runs through one hardened layer in the main process — hard timeouts, retries with backoff, rate-limit awareness (429 + Retry-After), response validation, a small TTL cache, and cancellation. The renderer names a provider and an operation (allowlisted); it can never fetch a URL directly.
+
+> v2.3.0 — **Search & Navigation 2.0.** One search engine everywhere: shared parser, field operators, and fuzzy matcher between library search and Ctrl+K. Typo-friendly close matches (operators stay literal), search hand-off from palette to library, focusable library rows, and a loop-guard on unplayable files.
+
+> v2.2.0 — **Library 2.0.** Library Health verifies every entry against disk (missing, unreadable, duplicates) with one-click cleanup. Listen-stats sorting, advanced field operators, genre filter, a richer library overview, and playback errors that name themselves in a toast.
+
+> v2.1.2 — Playlist menus that scale (searchable picker), a true always-on-top desktop Mini Player (P), keyboard routing that respects focus, and a menu-glitch sweep.
+
+> v2.1.1 — The stability wave: intentional deletions stay deleted (tombstones), view/sort preferences persist, coordinated-shutdown flush, removing the playing song actually stops the audio, and a pre-hydration write gate protects the library snapshot.
+
+> v2.1.0 — Floating glass sidebar, Windows SMTC (native media flyout + global media keys), Library sort menu, light-theme lyrics fix, a wider glassier play bar, deep render-loop optimizations, and a 202-check regression battery.
+
+> v2.0.0 — The milestone. **Aura Rewind** (cinematic monthly story + shareable card), **Ctrl+K command palette**, mini-player mode, event-driven **folder watching**, **light mode** with animated cross-fade, and the living pill play bar.
+
+> v1.11.6 — Calmer background: the drifting light-orb motion is gone; playlist glow takes its color from the playlist's cover image.
+
+> v1.11.5 — Queue panel fix: the Now Playing queue reads top-to-bottom in true playback order.
+
+> v1.11.4 — The ambient background orbs got brighter, bigger, and sweep visibly across the window.
+
+> v1.11.3 — The "Identify by sound" experiment removed — Aura stays 100% keyless.
+
+> v1.11.0 — Song Properties dialog, keyless Find Info Online (Deezer + Apple Music + MusicBrainz), and the ambient light orbs.
+
+> v1.10.0 — Phase 1 finale: anchored Lyrics/Visualizer popovers, the Keyboard Shortcuts guide, toast feedback, mute (M), scroll-wheel volume, and a slimmed-down installer.
 
 ---
 
@@ -268,15 +324,22 @@ The installer is optimized for size — only true runtime dependencies (`music-m
 
 ```
 src/
- ├── components/   # UI components, grouped by area (Sidebar, Player, Library, Modals, Toast, Properties, Settings)
- ├── hooks/        # useAudio, useLibraryImport, useLyrics, useMediaKeys (OS media integration), useFolderWatcher, ...
- ├── pages/        # Library, Playlist, Settings, NowPlaying, PropertiesPage, RewindPage
- ├── store/        # Zustand stores — playerStore (playback/library), toastStore (feedback), uiStore (panels/palette)
+ ├── components/   # UI components, grouped by area (Sidebar, Player, Library, NowPlaying, Explore,
+ │                 #   Properties, Settings, Modals, Toast, States, FirstLaunch, CommandPalette)
+ ├── hooks/        # useAudio, useLibraryImport, useLyrics, useMediaKeys, useFolderWatcher, useStoreHydration, ...
+ ├── pages/        # Library, Explore, Playlist, NowPlaying, Settings, PropertiesPage, RewindPage,
+ │                 #   HistoryPage, SmartPlaylists, ArtistPage, AlbumPage
+ ├── store/        # Zustand stores — playerStore (playback/library/queue), toastStore, uiStore, radioStore
+ │                 #   + domain stores: notesStore, artworkStore, userPrefsStore (separately persisted)
+ ├── styles/       # tokens.css (design tokens) + themes.css (8 theme identities)
  ├── types/        # Shared TS types, incl. the ElectronAPI contract
- └── lib/          # Pure modules — playbackController (audio engine), queueEngine, sort, eq, rewind, scrobbleStore
+ └── lib/          # Pure modules — playbackController (audio engine + FX chain), queueEngine, sort, eq,
+                   #   audioFx, radioMusic, search, smartEngine, smartQueue, rewind, scrobbleStore, ...
 
 electron/
- ├── main.cjs      # Main process — window, IPC handlers, SMTC feature flag, fs watchers, file associations
+ ├── main.cjs      # Main process — window, IPC handlers, fs watchers, file associations,
+ │                 #   default-player OS handoff, coordinated shutdown
+ ├── findinfo.cjs  # Keyless metadata lookup (Deezer / iTunes / MusicBrainz), scored + merged
  └── preload.cjs   # contextBridge — the only surface the renderer can reach into Node with
 ```
 
@@ -284,11 +347,22 @@ electron/
 
 # 📸 Screenshots
 
-![Home](./docs/sc2.png)
-![Preview](./docs/sc5.png)
-![PlayList](./docs/sc1.png)
-![Setting](./docs/sc3.png)
-![Setting](./docs/sc4.png)
+![Home](./docs/Home.png)
+![Preview](./docs/NowPlaying1.png)
+![Preview](./docs/NowPlaying2.png)
+![PlayList](./docs/PlayList.png)
+![Setting](./docs/Setting0.png)
+![Setting](./docs/Setting1.png)
+![Setting](./docs/Setting2.png)
+![Setting](./docs/Setting3.png)
+![Properties](./docs/Properties1.png)
+![Properties](./docs/Properties2.png)
+![History](./docs/History.png)
+![Rewind](./docs/Rewind.png)
+![Smart](./docs/Smart.png)
+![Radio](./docs/Radio.png)
+![Explore](./docs/Explore.png)
+
 
 ---
 

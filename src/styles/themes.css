@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURA THEME SYSTEM 3.0 — the theme registry (Wave 4)
+   ═══════════════════════════════════════════════════════════════════════════
+   A THEME is a color IDENTITY, orthogonal to the appearance (dark/light):
+   `data-aura-theme` selects the identity, `data-theme` stays the appearance
+   switch. Each identity remaps:
+
+     • the PRIMITIVE ink scale (§tokens.css) toward its own hue family —
+       the whole semantic layer (surfaces, borders, chrome) inherits for
+       free, which is exactly the three-layer architecture doing its job;
+     • the idle cloud/ambient family (the glow color before any artwork);
+     • a curated SECONDARY accent (--accent-2) for 3.0 surfaces
+       (Playbar glass, Explore hero, selected states).
+
+   The PRIMARY accent is NOT defined here — it keeps flowing through the
+   dynamic pipeline (useDynamicTheme → --color-dynamic-*) so custom accent
+   colors, Now Playing artwork-ambient and playlist covers keep working
+   unchanged (spec §6: Now Playing stays artwork-driven).
+
+   Light mode: the light foundation in tokens.css re-maps inks to paper.
+   Themes only tint the paper (--surface-base) — the veil-based accent
+   system survives light mode untouched, by design.
+
+   Everything here is static CSS — switching themes costs one attribute
+   write; transitions ride the existing .theme-anim cross-fade.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Secondary-accent semantic tokens (defaults = derived from dynamic) ── */
+:root {
+  --accent-2:        var(--color-dynamic-2);
+  --accent-2-veil:   color-mix(in srgb, var(--color-dynamic-2) 12%, transparent);
+  --accent-2-border: color-mix(in srgb, var(--color-dynamic-2) 40%, transparent);
+}
+
+/* ═══ CONSOLEX — the house identity (default; equals the token base) ════ */
+[data-aura-theme='default'] {
+  --aura-ink-900: #0A0A0F;
+  --aura-ink-800: #101017;
+  --aura-ink-700: #16161E;
+  --aura-ink-600: #1D1D27;
+  --aura-cloud-500: #B0B8C8;
+  --accent-2:        #D7DEEB;
+  --accent-2-veil:   rgba(215, 222, 235, 0.12);
+  --accent-2-border: rgba(215, 222, 235, 0.38);
+}
+
+/* ═══ OCEAN DEEP — deep blue ════════════════════════════════════════════ */
+[data-aura-theme='ocean'] {
+  --aura-ink-900: #060A13;
+  --aura-ink-800: #0A111E;
+  --aura-ink-700: #0E1728;
+  --aura-ink-600: #131F35;
+  --aura-cloud-500: #8FB3D9;
+  --cloud:       #8FB3D9;
+  --cloud-soft:  rgba(143, 179, 217, 0.15);
+  --cloud-glow:  rgba(143, 179, 217, 0.08);
+  --accent-2:        #7FB8E8;
+  --accent-2-veil:   rgba(127, 184, 232, 0.12);
+  --accent-2-border: rgba(127, 184, 232, 0.38);
+}
+
+/* ═══ AMETHYST — violet ═════════════════════════════════════════════════ */
+[data-aura-theme='amethyst'] {
+  --aura-ink-900: #0B0913;
+  --aura-ink-800: #100D1B;
+  --aura-ink-700: #151228;
+  --aura-ink-600: #1B1834;
+  --aura-cloud-500: #B5A8D9;
+  --cloud:       #B5A8D9;
+  --cloud-soft:  rgba(181, 168, 217, 0.15);
+  --cloud-glow:  rgba(181, 168, 217, 0.08);
+  --accent-2:        #C4B0F0;
+  --accent-2-veil:   rgba(196, 176, 240, 0.12);
+  --accent-2-border: rgba(196, 176, 240, 0.38);
+}
+
+/* ═══ CYAN FROST ════════════════════════════════════════════════════════ */
+[data-aura-theme='cyan'] {
+  --aura-ink-900: #061113;
+  --aura-ink-800: #0A1A1E;
+  --aura-ink-700: #0E2328;
+  --aura-ink-600: #132E35;
+  --aura-cloud-500: #8FCED9;
+  --cloud:       #8FCED9;
+  --cloud-soft:  rgba(143, 206, 217, 0.15);
+  --cloud-glow:  rgba(143, 206, 217, 0.08);
+  --accent-2:        #86E3EE;
+  --accent-2-veil:   rgba(134, 227, 238, 0.12);
+  --accent-2-border: rgba(134, 227, 238, 0.38);
+}
+
+/* ═══ EMERALD ═══════════════════════════════════════════════════════════ */
+[data-aura-theme='forest'] {
+  --aura-ink-900: #070F0A;
+  --aura-ink-800: #0B1710;
+  --aura-ink-700: #0F2016;
+  --aura-ink-600: #142A1D;
+  --aura-cloud-500: #9BCBB0;
+  --cloud:       #9BCBB0;
+  --cloud-soft:  rgba(155, 203, 176, 0.15);
+  --cloud-glow:  rgba(155, 203, 176, 0.08);
+  --accent-2:        #86D0A8;
+  --accent-2-veil:   rgba(134, 208, 168, 0.12);
+  --accent-2-border: rgba(134, 208, 168, 0.38);
+}
+
+/* ═══ CRIMSON ═══════════════════════════════════════════════════════════ */
+[data-aura-theme='crimson'] {
+  --aura-ink-900: #110A0C;
+  --aura-ink-800: #190F12;
+  --aura-ink-700: #211418;
+  --aura-ink-600: #2B1A1F;
+  --aura-cloud-500: #D9A0A8;
+  --cloud:       #D9A0A8;
+  --cloud-soft:  rgba(217, 160, 168, 0.15);
+  --cloud-glow:  rgba(217, 160, 168, 0.08);
+  --accent-2:        #F0A3AA;
+  --accent-2-veil:   rgba(240, 163, 170, 0.12);
+  --accent-2-border: rgba(240, 163, 170, 0.38);
+}
+
+/* ═══ AMBER — warm sunset ═══════════════════════════════════════════════ */
+[data-aura-theme='sunset'] {
+  --aura-ink-900: #100C07;
+  --aura-ink-800: #181209;
+  --aura-ink-700: #20180D;
+  --aura-ink-600: #2A2012;
+  --aura-cloud-500: #D9C29A;
+  --cloud:       #D9C29A;
+  --cloud-soft:  rgba(217, 194, 154, 0.15);
+  --cloud-glow:  rgba(217, 194, 154, 0.08);
+  --accent-2:        #F2BE8A;
+  --accent-2-veil:   rgba(242, 190, 138, 0.12);
+  --accent-2-border: rgba(242, 190, 138, 0.38);
+}
+
+/* ═══ MONO — pure grayscale, zero chroma ════════════════════════════════ */
+[data-aura-theme='mono'] {
+  --aura-ink-900: #08080A;
+  --aura-ink-800: #0E0E10;
+  --aura-ink-700: #141416;
+  --aura-ink-600: #1B1B1E;
+  --aura-cloud-500: #C8C8CC;
+  --cloud:       #C8C8CC;
+  --cloud-soft:  rgba(200, 200, 204, 0.15);
+  --cloud-glow:  rgba(200, 200, 204, 0.08);
+  --accent-2:        #FAFAFA;
+  --accent-2-veil:   rgba(250, 250, 250, 0.10);
+  --accent-2-border: rgba(250, 250, 250, 0.36);
+}
+
+/* ═══ LIGHT PAPERS — per-identity paper tint over the light foundation ══ */
+[data-aura-theme='ocean'][data-theme='light']     { --surface-base: #EFF3F8; --color-chrome-solid: #f6f9fc; }
+[data-aura-theme='amethyst'][data-theme='light']  { --surface-base: #F4F2F8; --color-chrome-solid: #faf9fc; }
+[data-aura-theme='cyan'][data-theme='light']      { --surface-base: #EEF5F7; --color-chrome-solid: #f5fafb; }
+[data-aura-theme='forest'][data-theme='light']    { --surface-base: #F0F5F1; --color-chrome-solid: #f6faf7; }
+[data-aura-theme='crimson'][data-theme='light']   { --surface-base: #F8F2F3; --color-chrome-solid: #fbf7f8; }
+[data-aura-theme='sunset'][data-theme='light']    { --surface-base: #F8F4EE; --color-chrome-solid: #fcf9f5; }
+[data-aura-theme='mono'][data-theme='light']      { --surface-base: #F6F6F7; --color-chrome-solid: #fafafa; }

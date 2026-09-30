@@ -10,19 +10,22 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
 import { formatTime } from '@/lib/utils'
 import { AuraPulse } from './AuraPulse'
+import { useArtworkStore } from '@/store/artworkStore'
 
-// ── The Pill Play Bar (Wave 3, refined v2.0.0) ──────────────────────────────
-// Aura's signature transport: a floating capsule that hovers over the content
-// instead of bricking it off. Artwork, title/artist and quick context live on
-// the left; the transport sits dead center; queue/lyrics/visualizer/volume
-// cluster on the right; the seek line rides the pill's top edge with hover
-// time labels. AuraPulse wraps the whole thing in a living, engine-driven
-// glow ring. All control titles/aria-labels are contracts (keyboard shortcut
-// hints + regression tests) and are preserved verbatim from the v1 bar.
+// ── Playbar 3.0 (Aura 3.0 Wave 5) ───────────────────────────────────────────
+// Aura's signature transport, redesigned: the v2 floating CAPSULE becomes a
+// wide liquid-glass slab — softly rounded (24px, deliberately not a capsule),
+// horizontally calm, with a gradient hairline border, a baked-in top sheen
+// reflection and the aurora field breathing behind it (see AuraPulse.tsx).
+// Artwork sits as a rounded square with a playing glow; the seek line still
+// rides the top edge with hover time labels. All control titles/aria-labels
+// are contracts (keyboard shortcut hints + regression tests) and are
+// preserved verbatim.
 //
-// v2.0.0 changes: panels moved to uiStore (one source for pill/shortcuts/
-// palette), mini-player toggle, CSS-driven hover classes (no per-button JS
-// handlers), and responsive side columns for narrow windows.
+// Unchanged mechanics from v2: panels in uiStore (one source for pill/
+// shortcuts/palette), mini-player toggle, progress isolation into PillSeek
+// (~4-10Hz ticks re-render only the seek nodes, not this chrome), CSS-driven
+// hover classes, responsive side columns.
 export function PlayerBar() {
   // Narrow selectors — PlayerBar legitimately re-renders on song/isPlaying/
   // volume/repeat changes, but NOT on the ~4-10Hz progress tick anymore:
@@ -31,6 +34,8 @@ export function PlayerBar() {
   // artwork, transport, panels, volume — now holds still while a track
   // plays. Previously every tick re-rendered the entire pill.
   const currentSong = usePlayerStore((s) => s.currentSong)
+  // Aura 3.0 — the user's artwork override wins over embedded/provider art.
+  const coverOverride = useArtworkStore((s) => (s.overrides[currentSong?.id ?? '']?.url ?? null))
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -124,8 +129,8 @@ export function PlayerBar() {
       initial={{ y: 110, opacity: 0, x: '-50%' }}
       animate={{ y: 0, opacity: 1, x: '-50%' }}
       transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-      className="fixed bottom-2.5 left-1/2 z-50"
-      style={{ width: 'min(1240px, calc(100vw - 24px))', height: 72 }}
+      className="fixed bottom-3 left-1/2 z-50"
+      style={{ width: 'min(1280px, calc(100vw - 32px))', height: 76 }}
       data-player-bar
     >
       <AuraPulse active={isPlaying && !performanceMode} />
@@ -133,12 +138,17 @@ export function PlayerBar() {
       <div
         className="perf-blur relative h-full w-full flex flex-col overflow-hidden group/pill pb-lift"
         style={{
-          borderRadius: 'var(--radius-pill)',
-          background: 'color-mix(in srgb, var(--surface-chrome) 86%, transparent)',
-          border: '1px solid var(--border-strong)',
+          borderRadius: 'var(--radius-2xl)',
+          // Liquid-glass slab: translucent chrome over a gradient hairline,
+          // with a soft top sheen baked into the background stack.
+          background: `
+            linear-gradient(180deg, rgba(255,255,255,0.05), transparent 26%),
+            color-mix(in srgb, var(--surface-chrome) 84%, transparent) padding-box,
+            linear-gradient(155deg, var(--border-emphasis), var(--border-subtle) 38%, var(--accent-border)) border-box`,
+          border: '1px solid transparent',
           boxShadow: 'var(--shadow-overlay), inset 0 1px 0 var(--border-emphasis)',
-          backdropFilter: 'blur(44px) saturate(1.4)',
-          WebkitBackdropFilter: 'blur(44px) saturate(1.4)',
+          backdropFilter: 'blur(48px) saturate(1.5)',
+          WebkitBackdropFilter: 'blur(48px) saturate(1.5)',
         }}
       >
         {/* Seek line + hover time labels — their own component so the tick
@@ -149,7 +159,7 @@ export function PlayerBar() {
 
           {/* ── Left: clickable song info → opens Now Playing ── */}
           <div
-            className={`pb-info flex items-center gap-3 shrink-0 rounded-full p-1.5 -ml-1.5 transition-colors ${currentSong ? 'cursor-pointer hover-surface' : ''}`}
+            className={`pb-info flex items-center gap-3 shrink-0 rounded-2xl p-1.5 -ml-1.5 transition-colors ${currentSong ? 'cursor-pointer hover-surface' : ''}`}
             onClick={openNowPlaying}
             title={currentSong ? (isNowPlaying ? 'Close Now Playing' : 'Open Now Playing') : ''}
           >
@@ -163,31 +173,25 @@ export function PlayerBar() {
                   transition={{ type: 'spring', stiffness: 380, damping: 26 }}
                   className="relative shrink-0"
                 >
-                  {currentSong.coverArt
+                  {(coverOverride ?? currentSong.coverArt)
                     ? <img
-                        src={currentSong.coverArt}
+                        src={(coverOverride ?? currentSong.coverArt)!}
                         alt=""
-                        className="w-11 h-11 rounded-full object-cover"
+                        className="w-12 h-12 rounded-xl object-cover"
                         style={{
-                          boxShadow: isPlaying ? '0 0 18px var(--accent-veil)' : 'none',
+                          boxShadow: isPlaying
+                            ? '0 0 20px var(--accent-veil), 0 0 0 1px var(--accent-border)'
+                            : '0 0 0 1px var(--border-default)',
                           transition: 'box-shadow 1s ease',
                         }}
                       />
                     : <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center"
+                        className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ background: 'var(--glass-2)', border: '1px solid var(--border-default)' }}
                       >
                         <Music2 size={16} style={{ color: 'var(--text-faint)' }} />
                       </div>
                   }
-                  {isPlaying && !performanceMode && (
-                    <motion.div
-                      className="absolute inset-[-3px] rounded-full border border-dashed"
-                      style={{ borderColor: 'var(--accent)', opacity: 0.3 }}
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
-                    />
-                  )}
                 </motion.div>
               ) : null}
             </AnimatePresence>
@@ -204,9 +208,6 @@ export function PlayerBar() {
                 >
                   <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{currentSong.title}</p>
                   <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{currentSong.artist}</p>
-                  <p className="text-[10px] mt-0.5 truncate pb-hint" style={{ color: 'var(--text-faint)' }}>
-                    {isNowPlaying ? 'Click to close ↓' : 'Click to expand ↑'}
-                  </p>
                 </motion.div>
               ) : (
                 <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm" style={{ color: 'var(--text-faint)' }}>
@@ -232,10 +233,12 @@ export function PlayerBar() {
               aria-label={isPlaying ? 'Pause' : 'Play'}
               className="w-11 h-11 rounded-full flex items-center justify-center transition-all pressable"
               style={{
-                color: 'var(--text-primary)',
-                background: 'var(--glass-3)',
+                color: isPlaying ? 'var(--text-on-accent)' : 'var(--text-primary)',
+                background: isPlaying
+                  ? 'linear-gradient(140deg, var(--accent), var(--accent-strong))'
+                  : 'var(--glass-3)',
                 border: '1px solid var(--border-strong)',
-                boxShadow: isPlaying ? '0 0 24px var(--accent-veil)' : undefined,
+                boxShadow: isPlaying ? '0 0 26px var(--accent-veil)' : undefined,
               }}
             >
               <AnimatePresence mode="wait">

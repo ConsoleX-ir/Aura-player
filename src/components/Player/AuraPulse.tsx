@@ -2,44 +2,40 @@ import { useEffect, useRef, useState } from 'react'
 import { getAnalyser } from '@/lib/playbackController'
 import { usePlayerStore } from '@/store/playerStore'
 
-// ── Aura Pulse ──────────────────────────────────────────────────────────────
-// The living glow around the Play Bar — the component that makes Aura feel
-// like Aura. While music plays, the pill is wrapped in an engine-driven aura
-// built from three layers:
+// ── Aurora Bar Field (Aura 3.0 Playbar — Wave 5 redesign of Aura Pulse) ─────
+// The living glow behind the Playbar 3.0. The v2 three-layer construction
+// (two concentric rings + orbiting light + energy pool) read as a *capsule
+// decoration*; the 3.0 bar is a wide glass slab, so the aura became a FIELD:
 //
-//   1. TWO CONCENTRIC RINGS — breathe with the track's REAL low-frequency
-//      energy, read straight from the playback engine's AnalyserNode.
-//   2. THE ENERGY POOL — a soft accent field blooming underneath the pill,
-//      scaling and brightening with the same bass signal; the "sound has
-//      weight" layer.
-//   3. THE ORBIT — a faint light slowly circling behind the pill (pure CSS
-//      keyframes, transform-only) that reads as motion even between beats.
+//   1. THE AURORA FIELD — a broad accent gradient blooming behind the whole
+//      bar, breathing with the track's REAL low-frequency energy (read
+//      straight from the engine's AnalyserNode). Artwork/theme-aware via the
+//      --accent family.
+//   2. THE RIM LIGHT — a hairline of light along the bar's top edge that
+//      brightens with the same bass signal: reads as the glass catching the
+//      music. Subtle by design — ambience, not a light show.
 //
-// Design constraints (locked roadmap rules):
+// Design constraints (locked rules, unchanged from v2):
 //   • Performance first: the loop writes `transform`/`opacity` directly on
-//     THREE DOM nodes via refs — no React state, no re-renders, no layout
+//     TWO DOM nodes via refs — no React state, no re-renders, no layout
 //     thrash. One Uint8Array, allocated once. getByteFrequencyData is a
 //     stateless read, so sharing the analyser with the visualizer is safe.
 //   • Paused = still. No rAF runs when nothing is playing; layers settle to
 //     a calm resting glow via CSS transitions (graceful, not abrupt).
-//   • prefers-reduced-motion and Performance Mode both freeze the pulse at
-//     its resting state and remove the orbit/pool entirely — visible, calm,
-//     zero animation.
+//   • prefers-reduced-motion and Performance Mode both freeze the field at
+//     its resting state (CSS stillness rules hide the rim entirely).
 //
 // Test hooks: [data-aura-pulse] root carries data-mode="live"|"static" and
 // data-active="true"|"false" so functional tests can verify the states
 // without pixel-hunting a glow.
 
 const BASS_BINS = 24          // ≈ 0–500 Hz of the 2048-fft analyser
-// v2.1.0: presence retuned — the aura was so quiet it read as "off" to anyone
-// not staring at the pill; lifted rest/play ceilings so the breathing is
-// clearly visible at a glance while staying ambience, not a light show.
-const REST_OPACITY = 0.20
-const MAX_OPACITY = 0.72
+const REST_OPACITY = 0.22     // field resting glow
+const MAX_OPACITY = 0.66      // field at full bass
 const REST_SCALE = 1
-const MAX_SCALE = 1.034
-const POOL_REST = 0.12
-const POOL_MAX = 0.42
+const MAX_SCALE = 1.028
+const RIM_REST = 0.30         // rim light resting brightness
+const RIM_MAX = 0.85
 
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && !!window.matchMedia
@@ -47,9 +43,8 @@ function prefersReducedMotion(): boolean {
 }
 
 export function AuraPulse({ active }: { active: boolean }) {
-  const outerRef = useRef<HTMLDivElement>(null)
-  const innerRef = useRef<HTMLDivElement>(null)
-  const poolRef = useRef<HTMLDivElement>(null)
+  const fieldRef = useRef<HTMLDivElement>(null)
+  const rimRef = useRef<HTMLDivElement>(null)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
   const [reduced, setReduced] = useState(prefersReducedMotion)
 
@@ -66,39 +61,31 @@ export function AuraPulse({ active }: { active: boolean }) {
   const staticMode = performanceMode || reduced
 
   useEffect(() => {
-    const outer = outerRef.current
-    const inner = innerRef.current
-    const pool = poolRef.current
-    if (!outer || !inner || !pool) return
+    const field = fieldRef.current
+    const rim = rimRef.current
+    if (!field || !rim) return
 
     // ── Static mode: calm resting glow, no loop, ever. ──
     if (staticMode) {
-      outer.style.transition = 'opacity 800ms ease'
-      inner.style.transition = 'opacity 800ms ease'
-      outer.style.opacity = String(REST_OPACITY * 0.6)
-      inner.style.opacity = String(REST_OPACITY * 0.6)
-      outer.style.transform = 'scale(1)'
-      inner.style.transform = 'scale(1)'
-      pool.style.opacity = String(POOL_REST * 0.6)
-      pool.style.transform = 'scale(1)'
+      field.style.transition = 'opacity 800ms ease'
+      rim.style.transition = 'opacity 800ms ease'
+      field.style.opacity = String(REST_OPACITY * 0.6)
+      field.style.transform = 'scale(1)'
+      rim.style.opacity = String(RIM_REST * 0.6)
       return
     }
 
     // ── Paused: settle to rest with a soft transition, no loop. ──
     if (!active) {
-      outer.style.transition = 'opacity 900ms ease, transform 900ms ease'
-      inner.style.transition = 'opacity 900ms ease, transform 900ms ease'
-      pool.style.transition = 'opacity 900ms ease, transform 900ms ease'
-      outer.style.opacity = String(REST_OPACITY)
-      inner.style.opacity = String(REST_OPACITY * 0.8)
-      outer.style.transform = `scale(${REST_SCALE})`
-      inner.style.transform = `scale(${REST_SCALE})`
-      pool.style.opacity = String(POOL_REST)
-      pool.style.transform = 'scale(1)'
+      field.style.transition = 'opacity 900ms ease, transform 900ms ease'
+      rim.style.transition = 'opacity 900ms ease'
+      field.style.opacity = String(REST_OPACITY)
+      field.style.transform = `scale(${REST_SCALE})`
+      rim.style.opacity = String(RIM_REST)
       return
     }
 
-    // ── Playing: the pulse. Direct per-frame writes, engine-driven. ──
+    // ── Playing: the aurora. Direct per-frame writes, engine-driven. ──
     let raf = 0
     let intensity = 0
     const analyserNow = getAnalyser()
@@ -117,14 +104,10 @@ export function AuraPulse({ active }: { active: boolean }) {
 
       const o = REST_OPACITY + intensity * (MAX_OPACITY - REST_OPACITY)
       const s = REST_SCALE + intensity * (MAX_SCALE - REST_SCALE)
-      outer.style.opacity = String(o)
-      outer.style.transform = `scale(${s})`
-      // The inner ring trails slightly behind for depth.
-      inner.style.opacity = String(o * 0.55)
-      inner.style.transform = `scale(${1 + (s - 1) * 1.8})`
-      // The pool underneath breathes the same bass, slightly gentler.
-      pool.style.opacity = String(POOL_REST + intensity * (POOL_MAX - POOL_REST))
-      pool.style.transform = `scaleX(${1 + intensity * 0.06}) scaleY(${1 + intensity * 0.14})`
+      field.style.opacity = String(o)
+      field.style.transform = `scale(${s})`
+      // The rim brightens faster than the field — it reads as specular light.
+      rim.style.opacity = String(RIM_REST + intensity * (RIM_MAX - RIM_REST))
 
       raf = requestAnimationFrame(tick)
     }
@@ -140,43 +123,31 @@ export function AuraPulse({ active }: { active: boolean }) {
       data-active={active ? 'true' : 'false'}
       aria-hidden
       className="absolute inset-0 pointer-events-none"
-      style={{ borderRadius: 'var(--radius-pill)' }}
+      style={{ borderRadius: 'var(--radius-2xl)' }}
     >
-      {/* Energy pool — a wide accent field blooming from beneath the pill */}
+      {/* Aurora field — wide accent gradient blooming from behind the bar */}
       <div
-        ref={poolRef}
-        className="aura-pulse-pool absolute"
+        ref={fieldRef}
+        className="aurora-field absolute"
         style={{
-          left: '4%', right: '4%', bottom: -14, height: 46,
-          borderRadius: '50%',
-          background: 'radial-gradient(ellipse closest-side, var(--accent), transparent 78%)',
-          filter: 'blur(18px)',
-          opacity: POOL_REST,
-        }}
-      />
-      {/* Orbit — a faint light circling behind the pill while playing.
-          Pure CSS (transform keyframes); visibility is driven by the root's
-          data-active so pause fades it out via the class rules in index.css. */}
-      <div className="aura-pulse-orbit absolute inset-[-26px]" style={{ borderRadius: 'var(--radius-pill)' }}>
-        <div className="aura-orb" />
-      </div>
-      <div
-        ref={outerRef}
-        className="absolute inset-0"
-        style={{
-          borderRadius: 'var(--radius-pill)',
-          border: '1.5px solid var(--accent)',
+          inset: -18,
+          borderRadius: 40,
+          background: 'radial-gradient(ellipse 78% 120% at 50% 62%, var(--accent) 0%, var(--accent-2, var(--accent)) 34%, transparent 74%)',
+          filter: 'blur(34px)',
           opacity: REST_OPACITY,
-          boxShadow: '0 0 34px var(--accent-whisper), inset 0 0 26px var(--accent-whisper)',
+          transform: `scale(${REST_SCALE})`,
         }}
       />
+      {/* Rim light — hairline along the top edge, brightens with bass */}
       <div
-        ref={innerRef}
-        className="absolute inset-[-3px]"
+        ref={rimRef}
+        className="aurora-rim absolute"
         style={{
+          top: -1, left: 26, right: 26, height: 1.5,
           borderRadius: 'var(--radius-pill)',
-          border: '1px solid var(--accent)',
-          opacity: REST_OPACITY * 0.8,
+          background: 'linear-gradient(90deg, transparent, var(--accent-strong) 22%, rgba(255,255,255,0.85) 50%, var(--accent-strong) 78%, transparent)',
+          filter: 'blur(0.4px)',
+          opacity: RIM_REST,
         }}
       />
     </div>

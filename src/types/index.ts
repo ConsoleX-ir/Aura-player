@@ -169,6 +169,7 @@ export interface ElectronAPI {
   savePlaylistFile: (defaultName: string) => Promise<string | null>
   writeTextFile: (filePath: string, content: string) => Promise<boolean>
   showItemInFolder: (filePath: string) => void
+  setAsDefaultMusicPlayer?: () => Promise<{ ok: boolean; openedSettings?: boolean; reason?: string }>
   parseMetadata: (path: string) => Promise<Omit<Song, 'id' | 'path'>>
   // Technical file properties for the Properties dialog — fetched on demand.
   getFileStats: (path: string) => Promise<SongFileStats>
@@ -229,6 +230,11 @@ export interface ElectronAPI {
     isPlaying: boolean
     progress: number
     appearance: 'dark' | 'light'
+    /** Aura 3.0 — theme identity + resolved accent vars (artwork-aware). */
+    theme?: string
+    accent?: { d1: string; d2: string; d3: string; glow: string }
+    /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
+    nextTitle?: string | null
   }) => void
   setMiniVisible: (visible: boolean) => void
   miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'restore' | 'close') => void
@@ -240,10 +246,42 @@ export interface ElectronAPI {
     isPlaying: boolean
     progress: number
     appearance: 'dark' | 'light'
+    theme?: string
+    accent?: { d1: string; d2: string; d3: string; glow: string }
+    nextTitle?: string | null
   }) => void) => () => void
   onMiniVisibility: (cb: (visible: boolean) => void) => () => void
 }
 
 declare global {
   interface Window { electronAPI: ElectronAPI }
+}
+
+// ── Aura 3.0 domain entities (Wave 1/2) ────────────────────────────────────
+// User-owned annotations that live in their OWN persisted stores (never in
+// the main player snapshot — keeps the library payload lean and these
+// concepts independent of library re-imports). None of this is provider
+// metadata; nothing here is ever sent to an external service.
+
+/** A free-form user note attached to one library track (Wave 11 UI). */
+export interface TrackNote {
+  text: string
+  updatedAt: number // epoch ms — drives "edited" hints and search ranking
+}
+
+/** A user-chosen artwork image overriding one track's provider/embedded art. */
+export interface ArtworkOverride {
+  /** aura:// cache URL (via net:cacheArtwork) or a data: URL. */
+  url: string
+  addedAt: number
+}
+
+/** Local-only preferences captured outside the main player store. */
+export interface UserPrefs {
+  /** Display name for greeting surfaces; '' = not set (optional, never sent anywhere). */
+  username: string
+  /** First-launch setup flow has been completed (or deliberately skipped). */
+  onboarded: boolean
+  /** "Set Aura as default player" card dismissed — never nag again (§14). */
+  defaultAppPromptDismissed: boolean
 }

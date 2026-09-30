@@ -7,14 +7,20 @@
 // to the component tree and made every refactor riskier.)
 //
 // Audio graph (built once at startup):
-//   <audio> → source → EQ[10 bands, reserved] → gain → analyser → destination
+//   <audio> → source → EQ[10 bands, reserved] → FX chain → gain → analyser → destination
 //
 //   • EQ bands: 10 peaking BiquadFilters at 0 dB — acoustically transparent,
 //     zero measurable cost — reserved NOW so Wave 3's EQ UI can plug into
 //     real filter nodes instead of bolting them onto a running graph later.
+//   • FX chain (Aura 3.0 Wave 3): lowshelf → highshelf → compressor →
+//     [dry + wet(convolver)] sum → mid/side stereo widener. Every parameter
+//     has a neutral value (0 dB / ratio 1 / wet 0 / width 1) so Bypass is the
+//     neutral graph — same zero-cost philosophy as the EQ, no branches.
+//     The reverb IR is a generated synthetic impulse (no assets, no deps).
 //   • gain: user volume × mute × crossfade envelope (single element — the
 //     v1.x gain-envelope crossfade is preserved exactly).
-//   • analyser: the existing visualizer/Aura-Pulse data source.
+//   • analyser: the existing visualizer/Aura-Pulse data source — sits AFTER
+//     the FX chain, so visuals honestly reflect what the user hears.
 //
 // Reliability fixes over v1.x (AURA_V2_ROADMAP audit #1/#3):
 //   • Generation tokens on track loads: a superseded play() promise (rapid
@@ -32,6 +38,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { safeAppendScrobble } from '@/lib/scrobbleStore'
 import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
+import { sanitizeFx, BASS_SHELF_HZ, TREBLE_SHELF_HZ, compressionParams } from '@/lib/audioFx'
 import { toast } from '@/store/toastStore'
 
 // ── Module state (singleton — the app has exactly one audio engine) ─────────
@@ -44,6 +51,16 @@ let initialized = false
 // Reserved EQ slots — filled at init, adjusted by Wave 3's EQ UI.
 export const EQ_BAND_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const
 const eqBands: BiquadFilterNode[] = []
+
+// Aura 3.0 FX nodes — filled at init, driven by applyAudioFx().
+let fxBass: BiquadFilterNode | null = null
+let fxTreble: BiquadFilterNode | null = null
+let fxComp: DynamicsCompressorNode | null = null
+let fxWet: GainNode | null = null
+let fxDry: GainNode | null = null
+let fxSideLevel: GainNode | null = null   // the stereo-width control
+let fxConvolver: ConvolverNode | null = null
+let fxIrGenerated = false
 
 // Live analyser handle for the VisualizerPanel / future Aura Pulse ring.
 // (Same export shape useAudio exposed in v1.x, so existing consumers keep
@@ -156,7 +173,53 @@ export function initPlayback() {
     node = band
     eqBands.push(band)
   }
-  node.connect(gainNode)
+
+  // ── FX chain (Aura 3.0 Wave 3) — neutral until driven ─────────────────
+  const bass = ctx.createBiquadFilter()
+  bass.type = 'lowshelf'
+  bass.frequency.value = BASS_SHELF_HZ
+  bass.gain.value = 0
+  const treble = ctx.createBiquadFilter()
+  treble.type = 'highshelf'
+  treble.frequency.value = TREBLE_SHELF_HZ
+  treble.gain.value = 0
+  const comp = ctx.createDynamicsCompressor()
+  const cp = compressionParams(0)
+  comp.threshold.value = cp.threshold
+  comp.ratio.value = cp.ratio
+  comp.knee.value = cp.knee
+  comp.attack.value = cp.attack
+  comp.release.value = cp.release
+  node.connect(bass); bass.connect(treble); treble.connect(comp)
+  fxBass = bass; fxTreble = treble; fxComp = comp
+
+  // Reverb: dry path always runs; wet path rides a generated IR.
+  const dry = ctx.createGain(); dry.gain.value = 1
+  const wet = ctx.createGain(); wet.gain.value = 0
+  comp.connect(dry)
+  const convolver = ctx.createConvolver()
+  convolver.buffer = null // generated lazily on first use
+  comp.connect(convolver); convolver.connect(wet)
+  fxDry = dry; fxWet = wet; fxConvolver = convolver
+
+  // Mid/side stereo widener (see applyAudioFx for the math). At width=1 the
+  // M/S round-trip reproduces the original L/R exactly (0.5(L+R) ± 0.5(L−R)).
+  const splitter = ctx.createChannelSplitter(2)
+  const merger = ctx.createChannelMerger(2)
+  const midG = ctx.createGain(); midG.gain.value = 0.5
+  const sidePos = ctx.createGain(); sidePos.gain.value = 0.5
+  const sideNeg = ctx.createGain(); sideNeg.gain.value = -0.5
+  const sideLevel = ctx.createGain(); sideLevel.gain.value = 1
+  const sideInvert = ctx.createGain(); sideInvert.gain.value = -1
+  dry.connect(splitter); wet.connect(splitter)
+  splitter.connect(midG, 0); splitter.connect(midG, 1)          // mid = (L+R)/2
+  splitter.connect(sidePos, 0); splitter.connect(sideNeg, 1)    // side = (L−R)/2
+  sidePos.connect(sideLevel); sideNeg.connect(sideLevel)
+  midG.connect(merger, 0, 0); midG.connect(merger, 0, 1)
+  sideLevel.connect(merger, 0, 0)                // outL = mid + w·side
+  sideLevel.connect(sideInvert); sideInvert.connect(merger, 0, 1) // outR = mid − w·side
+  fxSideLevel = sideLevel
+  merger.connect(gainNode)
   gainNode.connect(analyserNode)
   analyserNode.connect(ctx.destination)
 
@@ -357,12 +420,19 @@ export function initPlayback() {
     if (state.eqGains !== prev.eqGains) {
       applyEqGains(state.eqGains)
     }
+
+    // ── Audio FX changed (Aura 3.0 — Settings effects card) ─────────────
+    if (state.audioFx !== prev.audioFx) {
+      applyAudioFx(state.audioFx)
+    }
   })
 
   // Restore whatever EQ shape the user had when they last closed Aura.
   // (New fields in persisted state are simply absent — sanitizeGains turns
   // that into a flat curve, which is the zero-cost bypass.)
   applyEqGains(usePlayerStore.getState().eqGains ?? [])
+  // Restore the FX state the same way (missing field → neutral graph).
+  applyAudioFx(usePlayerStore.getState().audioFx)
 
   // Stats schema marker — fire-and-forget, purely for future migrations.
   ensureStatsSchemaMeta()
@@ -391,4 +461,74 @@ export function applyEqGains(gains: number[]): void {
 /** Live EQ gains as the engine currently holds them (tests / debug tooling). */
 export function getEqGains(): number[] {
   return eqBands.map((b) => b.gain.value)
+}
+
+// ── Audio FX (Aura 3.0 Wave 3) ──────────────────────────────────────────────
+// Drives the reserved FX chain from one sanitized state object. The reverb
+// IR is generated lazily on the first non-zero wet mix — a 1.6 s stereo
+// decaying-noise impulse built once and cached, no assets, no dependencies.
+// Every parameter writes through setTargetAtTime so live tweaks glide
+// instead of clicking.
+const IR_SECONDS = 1.6
+function ensureReverbIr(): void {
+  if (fxIrGenerated || !ctx || !fxConvolver) return
+  const rate = ctx.sampleRate
+  const len = Math.floor(rate * IR_SECONDS)
+  const buf = ctx.createBuffer(2, len, rate)
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch)
+    let lp = 0
+    for (let i = 0; i < len; i++) {
+      // Decaying diffuse noise with a one-pole lowpass — darkens the tail,
+      // which reads as a hall rather than a hiss. Deterministic decay, no
+      // randomness in the envelope itself.
+      const t = i / len
+      const decay = Math.pow(1 - t, 2.4)
+      const n = (Math.random() * 2 - 1) * decay
+      lp += 0.35 * (n - lp)
+      data[i] = lp
+    }
+    // A few early reflections give the tail a spatial skeleton without an IR asset.
+    for (const [ms, amp] of [[11, 0.5], [23, 0.38], [37, 0.27], [53, 0.19]] as const) {
+      const idx = Math.floor((ms / 1000) * rate)
+      if (idx < len) data[idx] += amp * (ch === 0 ? 1 : -0.8)
+    }
+  }
+  fxConvolver.buffer = buf
+  fxIrGenerated = true
+}
+
+export function applyAudioFx(input: unknown): void {
+  const fx = sanitizeFx(input)
+  if (fxBass) fxBass.gain.setTargetAtTime(fx.bassGain, ctx?.currentTime ?? 0, 0.04)
+  if (fxTreble) fxTreble.gain.setTargetAtTime(fx.trebleGain, ctx?.currentTime ?? 0, 0.04)
+  if (fxComp) {
+    const cp = compressionParams(fx.compression)
+    fxComp.threshold.setTargetAtTime(cp.threshold, ctx?.currentTime ?? 0, 0.04)
+    fxComp.ratio.setTargetAtTime(cp.ratio, ctx?.currentTime ?? 0, 0.04)
+  }
+  if (fxDry && fxWet) {
+    // Crossfade dry/wet so the perceived loudness stays roughly constant.
+    const wetG = fx.reverbMix > 0 ? Math.min(0.9, fx.reverbMix * 0.9) : 0
+    const dryG = fx.reverbMix > 0 ? 1 - fx.reverbMix * 0.35 : 1
+    fxDry.gain.setTargetAtTime(dryG, ctx?.currentTime ?? 0, 0.05)
+    fxWet.gain.setTargetAtTime(wetG, ctx?.currentTime ?? 0, 0.05)
+  }
+  if (fx.reverbMix > 0) ensureReverbIr()
+  if (fxSideLevel) fxSideLevel.gain.setTargetAtTime(fx.stereoWidth, ctx?.currentTime ?? 0, 0.04)
+}
+
+/** Live FX parameters as the engine currently holds them (tests / debug tooling). */
+export function getAudioFxSnapshot(): {
+  bassGain: number; trebleGain: number; compression: { threshold: number; ratio: number }
+  reverbMix: { wet: number; dry: number; irReady: boolean }; stereoWidth: number
+} | null {
+  if (!fxBass || !fxTreble || !fxComp || !fxDry || !fxWet || !fxSideLevel) return null
+  return {
+    bassGain: fxBass.gain.value,
+    trebleGain: fxTreble.gain.value,
+    compression: { threshold: fxComp.threshold.value, ratio: fxComp.ratio.value },
+    reverbMix: { wet: fxWet.gain.value, dry: fxDry.gain.value, irReady: fxIrGenerated },
+    stereoWidth: fxSideLevel.gain.value,
+  }
 }

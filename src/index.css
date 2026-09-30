@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
+@import "./styles/themes.css";
 
 /* ── Aura Player v2 — base styles & utilities ─────────────────────────────
    Every constant lives in ./styles/tokens.css (the design system).
@@ -249,9 +250,8 @@ body {
 :root[data-ambient="off"] .dynamic-bg::after {
   display: none;
 }
-:root[data-ambient="off"] .aura-pulse-pool,
-:root[data-ambient="off"] .aura-pulse-orbit,
-:root[data-ambient="off"] .aura-orb {
+:root[data-ambient="off"] .aurora-field,
+:root[data-ambient="off"] .aurora-rim {
   display: none;
 }
 
@@ -490,43 +490,19 @@ body {
   border-color: var(--border-emphasis) !important;
 }
 
-/* ── Aura Pulse layers (Wave 4 / v2.0.0) ─────────────────────────────────── */
+/* ── Aurora Bar Field (Aura 3.0 Playbar — Wave 5) ─────────────────────────── */
 
-/* Orbit: one faint light circling behind the pill while playing. The wrapper
-   fades on pause via the root's data-active attribute — no JS involvement. */
-.aura-pulse-orbit {
-  opacity: 0;
-  transition: opacity 1.2s ease;
-}
-[data-aura-pulse][data-active='true'] .aura-pulse-orbit {
-  opacity: 1;
-}
-.aura-orb {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 46%;
-  height: 220%;
-  margin-left: -23%;
-  margin-top: -110%;
-  border-radius: 50%;
-  /* v2.1.0: accent-veil (was whisper) so the orbit reads at a glance */
-  background: radial-gradient(ellipse closest-side, var(--accent-veil), transparent 72%);
-  animation: aura-orbit 9s var(--ease-smooth) infinite alternate;
-  will-change: transform;
-}
-@keyframes aura-orbit {
-  from { transform: rotate(0deg) translateX(34%) ; }
-  to   { transform: rotate(180deg) translateX(-34%); }
-}
-/* Stillness guarantees: Performance Mode and reduced-motion remove the
-   decorative layers entirely — the rings' resting glow is enough. */
-:root[data-performance="on"] .aura-pulse-orbit,
-:root[data-performance="on"] .aura-pulse-pool {
+/* The aurora layers are driven by direct style writes (see AuraPulse.tsx);
+   CSS owns only the stillness guarantees below — no keyframes needed. The
+   field sits BEHIND the glass shell (z-order by DOM order inside the bar). */
+
+/* Stillness guarantees: Performance Mode and reduced-motion calm the field
+   to its resting glow and remove the rim light entirely. */
+:root[data-performance="on"] .aurora-rim {
   display: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .aura-pulse-orbit { display: none; }
+  .aurora-rim { display: none; }
 }
 
 /* ── Pill Play Bar responsive columns ───────────────────────────────────────

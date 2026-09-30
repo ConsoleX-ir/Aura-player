@@ -6,6 +6,7 @@ import { searchStations, countries, languages, tags, type RadioFacet } from '@/s
 import { toPayload, Section, TrackListSkeleton, ErrorBlock } from './ExploreStates'
 import { RadioFilters } from './RadioFilters'
 import { StationList } from './StationList'
+import { filterMusicStations, filterMusicFacets } from '@/lib/radioMusic'
 
 // ── Radio tab (Phase 5 — Radio Browser; v2.16.1 architecture pass) ──────────
 // Live-station discovery: name search + Country / Language / Genre facets
@@ -27,6 +28,13 @@ import { StationList } from './StationList'
 // CORS mode and the stream can actually load. A citizenship click-ping fires
 // fire-and-forget. If a station's stream is dead anyway, the playback-error
 // toast names it and the one-item queue means no skip storm.
+//
+// Aura 3.0 (spec §9 — music focus): results and Genre facets pass through
+// lib/radioMusic — stations carrying news/talk/politics/religion/sports-class
+// directory tags are filtered OUT (metadata-driven only; untagged stations
+// stay, station NAMES are never judged). Favorites are NOT filtered — an
+// explicit user choice outranks the directory's categories. The search
+// over-fetches (120 → slice 60) so the filter can't hollow out the list.
 
 type FacetKey = 'country' | 'language' | 'tag'
 
@@ -53,11 +61,14 @@ export function RadioTab() {
     const ac = new AbortController()
     abortRef.current = ac
     setState('loading')
-    searchStations({ ...q, limit: 60, order: 'votes' }, { signal: ac.signal })
+    searchStations({ ...q, limit: 120, order: 'votes' }, { signal: ac.signal })
       .then((r) => {
         if (ac.signal.aborted) return
-        setStations(r.stations)
-        setState(r.stations.length === 0 ? 'empty' : 'done')
+        // Spec §9: music-focused results (over-fetched above so filtering
+        // can't hollow the list out).
+        const music = filterMusicStations(r.stations).slice(0, 60)
+        setStations(music)
+        setState(music.length === 0 ? 'empty' : 'done')
       })
       .catch((e) => {
         if (ac.signal.aborted) return
@@ -77,7 +88,9 @@ export function RadioTab() {
       tags({ signal: ac.signal }).catch(() => ({ facets: [] as RadioFacet[] })),
     ]).then(([c, l, t]) => {
       if (ac.signal.aborted) return
-      setFacets({ country: c.facets, language: l.facets, tag: t.facets })
+      // Genre chips curate toward music categories (spec §9) — the same
+      // marker list the results filter uses.
+      setFacets({ country: c.facets, language: l.facets, tag: filterMusicFacets(t.facets) })
     })
     return () => ac.abort()
   }, [online])

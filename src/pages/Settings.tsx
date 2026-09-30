@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
-import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer, Snowflake, Contrast } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
-import { setAppearanceAnimated } from '@/lib/appearance'
+import { setAppearanceAnimated, setThemeAnimated } from '@/lib/appearance'
+import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { EqualizerCard } from '@/components/Settings/EqualizerCard'
+import { AudioFxCard } from '@/components/Settings/AudioFxCard'
 import { LibraryHealthCard } from '@/components/Settings/LibraryHealthCard'
 import { formatRuntime } from '@/lib/utils'
 import { useLibrarySync } from '@/hooks/useLibrarySync'
@@ -19,13 +21,14 @@ const THEME_ICONS: Record<string, typeof Palette> = {
   sunset:   Sunset,
   amethyst: Gem,
   crimson:  Flame,
+  cyan:     Snowflake,
+  mono:     Contrast,
 }
 
 export function Settings() {
   // Narrow selectors — Settings has nothing to do with playback progress,
   // but was previously re-rendering on every tick while left open.
   const theme = usePlayerStore((s) => s.theme)
-  const setTheme = usePlayerStore((s) => s.setTheme)
   const customAccentColor = usePlayerStore((s) => s.customAccentColor)
   const setCustomAccentColor = usePlayerStore((s) => s.setCustomAccentColor)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
@@ -66,6 +69,12 @@ export function Settings() {
 
   const { syncAll, syncing, progress, lastResult, folderCount } = useLibrarySync()
 
+  // Aura 3.0 — display name (§13): editable here, consumed by the greeting.
+  const storedUsername = useUserPrefsStore((s) => s.username)
+  const setUserPrefs = useUserPrefsStore((s) => s.setUserPrefs)
+  const [usernameDraft, setUsernameDraft] = useState(storedUsername)
+  useEffect(() => { setUsernameDraft(storedUsername) }, [storedUsername])
+
   const [confirmClear, setConfirmClear] = useState(false)
 
   return (
@@ -78,6 +87,27 @@ export function Settings() {
       </h1>
 
       <div className="max-w-2xl space-y-8">
+
+        {/* ── Profile (Aura 3.0 §13) ─────────────────────────────────── */}
+        <Section title="You">
+          <SettingRow
+            label="Your name"
+            description="How Aura greets you. Optional, stored only on this device, never an account."
+          >
+            <input
+              value={usernameDraft}
+              onChange={(e) => setUsernameDraft(e.target.value)}
+              onBlur={() => setUserPrefs({ username: usernameDraft.trim() })}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              placeholder="Add a name…"
+              maxLength={40}
+              aria-label="Your display name"
+              data-profile-name
+              className="w-52 px-3 py-2 rounded-xl text-sm outline-none"
+              style={{ background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+            />
+          </SettingRow>
+        </Section>
 
         {/* ── Appearance ────────────────────────────────────────────────── */}
         <Section title="Appearance">
@@ -93,7 +123,7 @@ export function Settings() {
                   label={p.label}
                   icon={THEME_ICONS[p.id] ?? Palette}
                   active={theme === p.id}
-                  onClick={() => setTheme(p.id)}
+                  onClick={() => setThemeAnimated(p.id)}
                 />
               ))}
               <ThemeButton
@@ -101,7 +131,7 @@ export function Settings() {
                 label="Custom"
                 icon={SlidersHorizontal}
                 active={theme === 'custom'}
-                onClick={() => setTheme('custom')}
+                onClick={() => setThemeAnimated('custom')}
               />
               {theme === 'custom' && (
                 <input
@@ -188,6 +218,7 @@ export function Settings() {
 
           {/* Wave 3: the reserved EQ bands get their face */}
           <EqualizerCard />
+          <AudioFxCard />
 
           {/* Phase 8 — Smart Queue */}
           <SettingRow
@@ -324,7 +355,7 @@ export function Settings() {
                   className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums"
                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
                 >
-                  v2.16.1
+                  v3.0.0
                 </span>
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>

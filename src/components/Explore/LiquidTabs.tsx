@@ -40,10 +40,13 @@ interface LiquidTabsProps<T extends string> {
   ariaLabel: string
   /** chip = compact segmented control (Explore tabs); row = full-width nav row (sidebar). */
   variant?: 'chip' | 'row'
+  /** Sidebar 3.0: icons-only collapsed mode — labels/trailing hidden, the
+   * button's title tooltip (already item.label) carries the name. */
+  hideLabels?: boolean
   className?: string
 }
 
-export function LiquidTabs<T extends string>({ items, value, onChange, ariaLabel, variant = 'chip', className }: LiquidTabsProps<T>) {
+export function LiquidTabs<T extends string>({ items, value, onChange, ariaLabel, variant = 'chip', hideLabels, className }: LiquidTabsProps<T>) {
   const rowRef = useRef<HTMLDivElement>(null)
   const pillRef = useRef<HTMLSpanElement>(null)
   const tabRefs = useRef(new Map<T, HTMLButtonElement>())
@@ -168,6 +171,7 @@ export function LiquidTabs<T extends string>({ items, value, onChange, ariaLabel
             className={cn(
               'relative flex items-center rounded-lg text-xs font-medium transition-colors outline-none',
               variant === 'chip' ? 'gap-1.5 px-3.5 py-1.5' : 'gap-3 px-3 py-2 text-sm w-full',
+              hideLabels && variant === 'row' && 'justify-center px-0',
             )}
             style={{
               transitionDuration: 'var(--dur-fast)',
@@ -176,8 +180,8 @@ export function LiquidTabs<T extends string>({ items, value, onChange, ariaLabel
           >
             {item.leading?.(active)}
             {item.icon}
-            <span className={variant === 'row' ? 'flex-1 text-left' : undefined}>{item.label}</span>
-            {item.trailing}
+            {!hideLabels && <span className={variant === 'row' ? 'flex-1 text-left' : undefined}>{item.label}</span>}
+            {!hideLabels && item.trailing}
           </button>
         )
       })}

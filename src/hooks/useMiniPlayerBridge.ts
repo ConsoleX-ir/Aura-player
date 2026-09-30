@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
+import { effectiveCover, useArtworkStore } from '@/store/artworkStore'
 
 // ── Mini player bridge (v2.1.2) ──────────────────────────────────────────────
 // The desktop mini player is a separate BrowserWindow with its own JS context
@@ -43,14 +44,36 @@ export function useMiniPlayerBridge() {
 
     const snapshot = () => {
       const s = usePlayerStore.getState()
+      const overrides = useArtworkStore.getState().overrides
+      // Aura 3.0 — the widget inherits the full theme: the identity id (for
+      // data-aura-theme), the RESOLVED accent vars (the dynamic pipeline's
+      // output — theme color or artwork ambient, so the widget's accent
+      // lighting always matches what the main window shows), and an honest
+      // next-up preview. Computed-style reads are ~µs at this cadence.
+      const cs = getComputedStyle(document.documentElement)
+      const v = (name: string) => cs.getPropertyValue(name).trim()
+      // Next-up honesty: repeat-one repeats; shuffle order is not knowable
+      // until the skip happens; end-of-queue has no next.
+      let nextTitle: string | null = null
+      if (s.repeat === 'one') nextTitle = s.currentSong?.title ?? null
+      else if (!s.shuffle && s.queue.length && s.queueIndex + 1 < s.queue.length)
+        nextTitle = s.queue[s.queueIndex + 1]?.title ?? null
       return {
         hasSong: !!s.currentSong,
         title: s.currentSong?.title ?? 'Nothing playing',
         artist: s.currentSong?.artist ?? 'Aura mini-player',
-        coverArt: s.currentSong?.coverArt ?? null,
+        coverArt: s.currentSong ? effectiveCover(overrides, s.currentSong) : null,
         isPlaying: s.isPlaying,
         progress: s.duration > 0 ? s.progress : 0,
         appearance: s.appearance,
+        theme: s.theme,
+        accent: {
+          d1: v('--color-dynamic-1'),
+          d2: v('--color-dynamic-2'),
+          d3: v('--color-dynamic-3'),
+          glow: v('--color-dynamic-glow'),
+        },
+        nextTitle,
       }
     }
 

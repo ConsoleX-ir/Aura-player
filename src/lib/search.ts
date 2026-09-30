@@ -18,7 +18,7 @@ import type { Song } from '@/types'
 //                                  contains the phrase 'run away'
 //   `genre: jazz year:1994`      → genre contains 'jazz' AND year === 1994
 
-export type SearchField = 'title' | 'artist' | 'album' | 'genre' | 'year'
+export type SearchField = 'title' | 'artist' | 'album' | 'genre' | 'year' | 'note'
 
 export interface SearchToken {
   field: SearchField | null
@@ -28,7 +28,7 @@ export interface SearchToken {
   year: number | null
 }
 
-const FIELD_RE = /^(title|artist|album|genre|year):(.*)$/i
+const FIELD_RE = /^(title|artist|album|genre|year|note):(.*)$/i
 
 /**
  * Parses a raw query string into AND-composed tokens. Malformed field
@@ -120,16 +120,18 @@ function includes(haystack: string | null | undefined, needle: string): boolean 
 }
 
 /** Does this one song satisfy every token? (AND semantics) */
-export function matchSong(song: Song, tokens: SearchToken[]): boolean {
+export function matchSong(song: Song, tokens: SearchToken[], noteText?: string): boolean {
   for (const t of tokens) {
     if (t.field === null) {
-      // Free text: the broad net — title, artist, album, genre, and (for
-      // numeric queries like "1994") the year as a string.
+      // Free text: the broad net — title, artist, album, genre, the user's
+      // own note (Aura 3.0, spec §21), and (for numeric queries like "1994")
+      // the year as a string.
       const hit =
         includes(song.title, t.text) ||
         includes(song.artist, t.text) ||
         includes(song.album, t.text) ||
         includes(song.genre, t.text) ||
+        (noteText != null && noteText.includes(t.text)) ||
         (song.year != null && String(song.year).includes(t.text))
       if (!hit) return false
     } else if (t.field === 'year') {
@@ -142,6 +144,8 @@ export function matchSong(song: Song, tokens: SearchToken[]): boolean {
       if (!includes(song.album, t.text)) return false
     } else if (t.field === 'genre') {
       if (!includes(song.genre, t.text)) return false
+    } else if (t.field === 'note') {
+      if (noteText == null || !noteText.includes(t.text)) return false
     }
   }
   return true
@@ -199,12 +203,26 @@ export interface LibrarySearchResult {
  * query has no field operators (a typo inside `artist:` is a constraint the
  * user wrote on purpose, not a spelling mistake to forgive), fall back to
  * fuzzy close-matches ranked by their best field score.
+ *
+ * Aura 3.0 (Wave 10, spec §21): `notes` (the notesStore map, keyed by song
+ * id) extends BOTH the free-text net and the dedicated `note:` operator.
+ * Lookup is a plain map-read per song — O(1), no index, no measurable
+ * latency at any realistic note count (spec §17's no-latency rule).
  */
-export function searchLibrary(songs: Song[], rawQuery: string, fuzzyLimit = 40): LibrarySearchResult {
+export function searchLibrary(
+  songs: Song[],
+  rawQuery: string,
+  fuzzyLimit = 40,
+  notes?: Record<string, { text: string }>,
+): LibrarySearchResult {
   const tokens = parseSearchQuery(rawQuery)
   if (tokens.length === 0) return { matches: songs, fuzzy: false }
+  const noteOf = (s: Song): string | undefined => {
+    const n = notes?.[s.id]
+    return n ? n.text.toLowerCase() : undefined
+  }
 
-  const exact = songs.filter((s) => matchSong(s, tokens))
+  const exact = songs.filter((s) => matchSong(s, tokens, noteOf(s)))
   if (exact.length > 0) return { matches: exact, fuzzy: false }
 
   if (tokens.some((t) => t.field !== null)) {

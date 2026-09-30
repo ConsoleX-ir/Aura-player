@@ -27,6 +27,7 @@ export function StationList({ stations }: { stations: RadioStation[] }) {
         return (
           <div
             key={`${station.id}-${i}`}
+            data-station-row
             tabIndex={playable ? 0 : -1}
             aria-disabled={!playable}
             onKeyDown={(e) => {

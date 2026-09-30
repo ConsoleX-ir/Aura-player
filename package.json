@@ -1,9 +1,12 @@
 {
   "name": "aura-player",
   "private": true,
-  "version": "2.16.2",
+  "version": "3.0.0",
   "description": "Aura",
-  "author": "ConsoleX",
+  "author": {
+    "name": "ConsoleX",
+    "email": "consolex@users.noreply.github.com"
+  },
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -132,5 +135,6 @@
     "vite": "^8.1.0",
     "wait-on": "^9.0.10",
     "zustand": "^5.0.14"
-  }
+  },
+  "homepage": "https://github.com/ConsoleX-ir/Aura-player"
 }

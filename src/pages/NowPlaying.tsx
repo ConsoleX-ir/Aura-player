@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   ChevronDown, ChevronUp, Play, Pause, SkipBack, SkipForward,
-  Shuffle, Repeat, Repeat1, Heart, ListMusic, ListX, Music2, Mic2, Moon, X
+  Shuffle, Repeat, Repeat1, Heart, ListMusic, ListX, Music2, Mic2, Moon, X, AudioLines
 } from 'lucide-react'
 import * as Slider from '@radix-ui/react-slider'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLyrics } from '@/hooks/useLyrics'
+import { VisualStage } from '@/components/NowPlaying/VisualStage'
+import { useArtworkStore } from '@/store/artworkStore'
 import { useVirtualWindow } from '@/hooks/useVirtualWindow'
 import { formatTime } from '@/lib/utils'
 
@@ -73,6 +75,14 @@ export function NowPlaying() {
   const { lines, plain, loading } = useLyrics(currentSong)
   const isFav = currentSong ? favorites.includes(currentSong.id) : false
 
+  // ── Stage toggle (Aura 3.0 Wave 8): LYRICS ↔ VISUALIZER ──────────────
+  // The right column's big panel becomes a stage: synchronized lyrics or
+  // the canvas visualizer, one polished crossfade between them. Session
+  // state — a view mood, not a preference.
+  const [npStage, setNpStage] = useState<'lyrics' | 'visualizer'>('lyrics')
+  // Aura 3.0 — custom artwork override (Wave 11) drives the hero + backdrop.
+  const coverOverride = useArtworkStore((s) => (s.overrides[currentSong?.id ?? '']?.url ?? null))
+
   // Active lyric line index + auto-scroll now live inside <NowPlayingLyrics/>
   // (they tick with progress; this page doesn't need to know).
 
@@ -88,10 +98,10 @@ export function NowPlaying() {
     >
       {/* Blurred album art background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {currentSong.coverArt && (
+        {(coverOverride ?? currentSong.coverArt) && (
           <motion.img
             key={currentSong.id}
-            src={currentSong.coverArt}
+            src={(coverOverride ?? currentSong.coverArt)!}
             alt=""
             initial={{ opacity: 0, scale: 1.08 }}
             animate={{ opacity: 1, scale: 1.1 }}
@@ -200,9 +210,9 @@ export function NowPlaying() {
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
               className="relative"
             >
-              {currentSong.coverArt ? (
+              {(coverOverride ?? currentSong.coverArt) ? (
                 <img
-                  src={currentSong.coverArt}
+                  src={(coverOverride ?? currentSong.coverArt)!}
                   alt={currentSong.title}
                   className="w-64 h-64 rounded-3xl object-cover"
                   style={{
@@ -316,16 +326,20 @@ export function NowPlaying() {
           animate="show"
           variants={{ show: { transition: { staggerChildren: 0.07, delayChildren: 0.1 } } }}
         >
-          {/* Lyrics panel */}
+          {/* Lyrics ↔ Visualizer stage (Aura 3.0 Wave 8) */}
           <motion.div
             variants={panelVariants}
             className="flex-1 flex flex-col rounded-2xl overflow-hidden"
             style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}
           >
             <div className="flex items-center gap-2 px-5 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <Mic2 size={13} style={{ color: 'var(--accent)' }} />
-              <span className="text-xs font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>Lyrics</span>
-              {loading && (
+              {npStage === 'lyrics'
+                ? <Mic2 size={13} style={{ color: 'var(--accent)' }} />
+                : <AudioLines size={13} style={{ color: 'var(--accent)' }} />}
+              <span className="text-xs font-semibold tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+                {npStage === 'lyrics' ? 'Lyrics' : 'Visualizer'}
+              </span>
+              {npStage === 'lyrics' && loading && (
                 <div className="flex gap-0.5 ml-2 items-end h-3">
                   {[0, 1, 2].map((i) => (
                     <motion.div key={i} className="w-0.5 rounded-full"
@@ -336,10 +350,61 @@ export function NowPlaying() {
                   ))}
                 </div>
               )}
+              {/* The toggle — a quiet segmented control on the header's right */}
+              <div
+                className="ml-auto flex items-center rounded-lg p-0.5"
+                style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}
+                role="group"
+                aria-label="Now Playing stage"
+                data-np-stage-toggle
+              >
+                {([['lyrics', 'Lyrics'], ['visualizer', 'Visualizer']] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setNpStage(id)}
+                    aria-pressed={npStage === id}
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all"
+                    style={{
+                      transitionDuration: 'var(--dur-fast)',
+                      color: npStage === id ? 'var(--accent)' : 'var(--text-tertiary)',
+                      background: npStage === id ? 'var(--accent-dim)' : 'transparent',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-6 px-5 space-y-2">
-              <NowPlayingLyrics lines={lines} plain={plain} />
+            {/* Stage body — crossfade between lyrics and the visualizer;
+                AnimatePresence mode=wait keeps only one mounted so the
+                canvas rAF loop never runs hidden. */}
+            <div className="flex-1 min-h-0 relative">
+              <AnimatePresence mode="wait" initial={false}>
+                {npStage === 'lyrics' ? (
+                  <motion.div
+                    key="lyrics"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                    className="absolute inset-0 overflow-y-auto py-6 px-5 space-y-2"
+                  >
+                    <NowPlayingLyrics lines={lines} plain={plain} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="visualizer"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                    className="absolute inset-0 flex flex-col"
+                  >
+                    <VisualStage />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
 

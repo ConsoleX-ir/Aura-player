@@ -101,7 +101,7 @@ const ERROR_COPY: Record<string, { title: string; hint: string }> = {
   http: { title: 'The provider had a problem', hint: 'The service answered with an error status.' },
   rate_limited: { title: 'Slow down a little', hint: 'The provider asked us to wait a moment — retry shortly.' },
   malformed: { title: 'The provider answered oddly', hint: 'The response was not in the expected shape.' },
-  unavailable: { title: 'Provider unavailable', hint: 'This online source is not reachable right now.' },
+  unavailable: { title: 'Provider unavailable', hint: 'Your internet connection is working, but this online service is currently unavailable.' },
 }
 
 /**

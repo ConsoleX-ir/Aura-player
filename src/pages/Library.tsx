@@ -4,6 +4,8 @@ import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUp
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
+import { useNotesStore } from '@/store/notesStore'
+import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 import { useListenAggregates } from '@/hooks/useListenAggregates'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
@@ -42,6 +44,12 @@ export function Library() {
   // can pre-fill it and jump here — one shared search state, one shared
   // search engine (lib/search).
   const search = useUiStore((s) => s.librarySearch)
+  const notes = useNotesStore((s) => s.notes)
+  // Aura 3.0 (§13): "Welcome back, <name>" on the primary entry surface —
+  // only when the user gave a name, and only as a greeting, never a state.
+  const username = useUserPrefsStore((s) => s.username)
+  const hour = new Date().getHours()
+  const daypart = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const setSearch = useUiStore((s) => s.setLibrarySearch)
   const hydrated = useStoreHydration()
   // Phase 1 — Library 2.0: whole-history listening aggregates power the
@@ -74,8 +82,10 @@ export function Library() {
     if (genreFilter) src = src.filter((s) => (s.genre ?? '').trim() === genreFilter)
     // Phase 2: one shared search entry point — exact operators/substring
     // first, fuzzy close-matches only when exact finds nothing.
-    return searchLibrary(src, deferredSearch)
-  }, [library, activeView, favorites, genreFilter, deferredSearch])
+    // Aura 3.0: the user's track notes are part of the free-text net (and
+    // the note: operator) — spec §21, zero-latency map reads.
+    return searchLibrary(src, deferredSearch, 40, notes)
+  }, [library, activeView, favorites, genreFilter, deferredSearch, notes])
 
   const songs = useMemo(() =>
     // Sort last, on the filtered set only. sortSongs copies once — the
@@ -115,6 +125,11 @@ export function Library() {
             >
               {isFavorites ? 'Favorites' : 'Library'}
             </h1>
+            {username ? (
+              <p className="text-xs mt-1" style={{ color: 'var(--accent)' }} data-welcome-greeting>
+                {daypart}, {username} — welcome back
+              </p>
+            ) : null}
             <p className="text-xs mt-1 tabular-nums" style={{ color: 'var(--text-faint)' }}>
               {songs.length} {songs.length === 1 ? 'song' : 'songs'}
             </p>

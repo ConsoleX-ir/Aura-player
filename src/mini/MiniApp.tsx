@@ -14,6 +14,11 @@ export interface MiniState {
   progress: number
   /** 'dark' | 'light' — applied as data-theme so tokens resolve correctly. */
   appearance: 'dark' | 'light'
+  /** Aura 3.0 — theme identity (data-aura-theme) + resolved accent vars. */
+  theme?: string
+  accent?: { d1: string; d2: string; d3: string; glow: string }
+  /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
+  nextTitle?: string | null
 }
 
 const INITIAL: MiniState = {
@@ -26,7 +31,7 @@ const INITIAL: MiniState = {
   appearance: 'dark',
 }
 
-// Progress ring geometry — same visual language as the in-app player pill.
+// Progress ring geometry — same visual language as the in-app playbar.
 const R = 27          // ring radius inside the 60px artwork box
 const CIRC = 2 * Math.PI * R
 
@@ -42,10 +47,23 @@ export function MiniApp() {
   }, [])
 
   // Theme tokens resolve under [data-theme] on the root element. The main
-  // window does this via App.tsx; here the appearance rides the state push.
+  // window does this via App.tsx; here the appearance AND the Aura 3.0 theme
+  // identity ride the state push, plus the resolved accent vars so the
+  // widget's accent lighting always matches the main window (artwork-aware
+  // on Now Playing, theme color everywhere else).
   useEffect(() => {
-    document.documentElement.dataset.theme = state.appearance
-  }, [state.appearance])
+    const root = document.documentElement
+    root.dataset.theme = state.appearance
+    if (state.theme && state.theme !== 'custom') root.dataset.auraTheme = state.theme
+    else delete root.dataset.auraTheme
+    const a = state.accent
+    if (a?.d1) {
+      root.style.setProperty('--color-dynamic-1', a.d1)
+      root.style.setProperty('--color-dynamic-2', a.d2)
+      root.style.setProperty('--color-dynamic-3', a.d3)
+      root.style.setProperty('--color-dynamic-glow', a.glow)
+    }
+  }, [state.appearance, state.theme, state.accent])
 
   const act = (action: 'togglePlay' | 'next' | 'previous' | 'restore' | 'close') =>
     window.electronAPI?.miniAction?.(action)
@@ -54,15 +72,33 @@ export function MiniApp() {
     <div className="fixed inset-0 p-2">
       <div
         data-mini-player
-        className="h-full flex items-center gap-3 px-3 perf-blur"
+        className="group/mini relative h-full flex items-center gap-3 px-3 perf-blur transition-transform duration-200"
         style={{
-          background: 'var(--color-chrome-solid, var(--surface-chrome))',
-          border: '1px solid var(--border-strong)',
+          // Liquid-glass card (Playbar 3.0 recipe, widget scale): gradient
+          // hairline border over translucent chrome, top sheen baked in.
+          background: `
+            linear-gradient(180deg, rgba(255,255,255,0.05), transparent 30%),
+            color-mix(in srgb, var(--surface-chrome) 88%, transparent) padding-box,
+            linear-gradient(155deg, var(--border-emphasis), var(--border-subtle) 40%, var(--accent-border)) border-box`,
+          border: '1px solid transparent',
           borderRadius: 24,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.3)',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.3), inset 0 1px 0 var(--border-emphasis)',
+          backdropFilter: 'blur(28px) saturate(1.4)',
+          WebkitBackdropFilter: 'blur(28px) saturate(1.4)',
           WebkitAppRegion: 'drag',
         } as React.CSSProperties}
       >
+        {/* Artwork-aware accent wash — the glass catches the music's color */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none transition-opacity duration-1000"
+          style={{
+            borderRadius: 24,
+            background: 'radial-gradient(ellipse 62% 120% at 18% 55%, var(--accent-whisper), transparent 70%)',
+            opacity: state.isPlaying ? 1 : 0.35,
+          }}
+        />
+
         {/* Artwork + progress ring + play/pause on hover */}
         <button
           onClick={() => act('togglePlay')}
@@ -98,14 +134,31 @@ export function MiniApp() {
           </div>
         </button>
 
-        {/* Title / artist — the only text, truncated hard */}
-        <div className="flex-1 min-w-0">
+        {/* Title / artist + hover-revealed next-up strip (queue access) */}
+        <div className="flex-1 min-w-0 relative">
           <p className="text-[12.5px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>
             {state.hasSong ? state.title : 'Nothing playing'}
           </p>
           <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
             {state.hasSong ? state.artist : 'Aura mini-player'}
           </p>
+          {/* Next-up preview: revealed on hover, click to skip. Hidden when
+              the honest answer is "unknown" (shuffle) or "none" (queue end). */}
+          {state.hasSong && state.nextTitle && (
+            <button
+              onClick={() => act('next')}
+              title={`Next: ${state.nextTitle}`}
+              aria-label={`Skip to ${state.nextTitle}`}
+              className="absolute left-0 right-0 -bottom-0.5 text-[9.5px] truncate text-left opacity-0 group-hover/mini:opacity-100 transition-opacity pointer-events-auto cursor-pointer"
+              style={{
+                color: 'var(--accent)',
+                WebkitAppRegion: 'no-drag',
+                transitionDuration: 'var(--dur-fast)',
+              } as React.CSSProperties}
+            >
+              Next: {state.nextTitle}
+            </button>
+          )}
         </div>
 
         {/* Transport — no-drag so clicks work inside the draggable card */}

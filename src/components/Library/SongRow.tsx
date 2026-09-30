@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import { Play, Heart, MoreHorizontal, ListPlus, ListX, Trash2, FolderOpen, Info, Sparkles, Radio, Mic2, Disc3, ListEnd, ArrowRightToLine } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
+import { useArtworkStore } from '@/store/artworkStore'
 import { useUiStore } from '@/store/uiStore'
 import { formatTime, cn } from '@/lib/utils'
 import { startSmartRadio } from '@/lib/smartRadioActions'
@@ -30,6 +31,9 @@ interface SongRowProps {
 // rather than the whole array) means each row only re-renders when something
 // about *that row* actually changed.
 export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt = true, playlistId }: SongRowProps) {
+  // Aura 3.0 — artwork override (Wave 11): primitive selector, re-renders
+  // only when THIS row's override changes.
+  const coverOverride = useArtworkStore((s) => (s.overrides[song.id]?.url ?? null))
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const isFav = usePlayerStore((s) => s.favorites.includes(song.id))
@@ -118,8 +122,8 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
 
       {showAlbumArt && (
         <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden">
-          {song.coverArt
-            ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
+          {(coverOverride ?? song.coverArt)
+            ? <img src={(coverOverride ?? song.coverArt)!} alt="" className="w-full h-full object-cover" loading="lazy" />
             : <ArtworkPlaceholder seed={song.id} size="sm" />
           }
         </div>

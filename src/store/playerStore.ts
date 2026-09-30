@@ -8,6 +8,7 @@ import {
   shuffledAround, nextIndex, prevIndex, removeByIds, moveItem, indexAfterMove, insertAfter, upcomingIds,
 } from '@/lib/queueEngine'
 import { eqPresetById, clampDb, isFlat, sanitizeGains } from '@/lib/eq'
+import { sanitizeFx, sanitizeUserPresets, NEUTRAL_FX, type AudioFxState, type FxUserPreset } from '@/lib/audioFx'
 import { appendSmartPicks, pruneSmartIds } from '@/lib/smartQueue'
 
 interface PlayerState {
@@ -173,6 +174,17 @@ interface PlayerState {
   setEqBand: (index: number, gainDb: number) => void
   applyEqPreset: (presetId: string) => void
 
+  // ── Audio FX (Aura 3.0 Wave 3) ──────────────────────────────────────
+  // One sanitized state object driving the engine's FX chain (see
+  // lib/audioFx.ts). Neutral by default = the transparent graph. User
+  // presets are name+state pairs; export/import (Wave 12 UI) exchanges
+  // the CONFIGURATION as JSON, never processed audio.
+  audioFx: AudioFxState
+  setAudioFx: (patch: Partial<AudioFxState>) => void
+  fxUserPresets: FxUserPreset[]
+  saveFxPreset: (name: string) => void
+  deleteFxPreset: (name: string) => void
+
   // Sleep Timer — a timestamp (ms) to auto-pause at, or null when off.
   // Deliberately NOT persisted: a timer left running from a previous session
   // silently firing on next launch would be a confusing surprise, not a
@@ -207,6 +219,12 @@ interface PlayerState {
   setLibrarySortKey: (k: SortKey) => void
   setLibrarySortDir: (d: SortDir) => void
   setLibraryViewMode: (m: 'list' | 'grid') => void
+
+  // ── Sidebar 3.0 (Aura 3.0 Wave 7 — persisted) ─────────────────────────
+  // The sidebar's expanded ⇄ collapsed (icons-only) state is a workspace
+  // preference, not an ephemeral UI mood — it survives restarts.
+  sidebarCollapsed: boolean
+  toggleSidebarCollapsed: () => void
 
   // seekTo trigger watched by audio engine
   seekRequest: number | null
@@ -595,6 +613,20 @@ export const usePlayerStore = create<PlayerState>()(
         return { eqGains: [...preset.gains], eqPreset: preset.id }
       }),
 
+      audioFx: { ...NEUTRAL_FX },
+      setAudioFx: (patch) => set((s) => ({ audioFx: sanitizeFx({ ...s.audioFx, ...patch }) })),
+      fxUserPresets: [],
+      saveFxPreset: (name) => set((s) => {
+        const trimmed = name.trim()
+        if (!trimmed) return s
+        // Re-saving an existing name overwrites it — predictable, no dupes.
+        const rest = s.fxUserPresets.filter((p) => p.name !== trimmed)
+        return { fxUserPresets: [...rest, { name: trimmed, state: { ...s.audioFx }, createdAt: Date.now() }] }
+      }),
+      deleteFxPreset: (name) => set((s) => ({
+        fxUserPresets: s.fxUserPresets.filter((p) => p.name !== name),
+      })),
+
       sleepTimerEndsAt: null,
       setSleepTimer: (minutes) => set({
         sleepTimerEndsAt: minutes ? Date.now() + minutes * 60_000 : null
@@ -622,6 +654,9 @@ export const usePlayerStore = create<PlayerState>()(
       setLibrarySortKey: (k) => set({ librarySortKey: k }),
       setLibrarySortDir: (d) => set({ librarySortDir: d }),
       setLibraryViewMode: (m) => set({ libraryViewMode: m }),
+
+      sidebarCollapsed: false,
+      toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
     }),
     {
       name: 'aura-player',
@@ -648,6 +683,9 @@ export const usePlayerStore = create<PlayerState>()(
         crossfade: s.crossfade,
         eqGains: s.eqGains,
         eqPreset: s.eqPreset,
+        // Aura 3.0 — effects state + user presets survive restarts.
+        audioFx: s.audioFx,
+        fxUserPresets: s.fxUserPresets,
         appearance: s.appearance,
         watchFolders: s.watchFolders,
         // Wave 0 — persistence stability: tombstones keep deleted songs
@@ -656,6 +694,8 @@ export const usePlayerStore = create<PlayerState>()(
         librarySortKey: s.librarySortKey,
         librarySortDir: s.librarySortDir,
         libraryViewMode: s.libraryViewMode,
+        // Aura 3.0 — sidebar collapse state survives restarts.
+        sidebarCollapsed: s.sidebarCollapsed,
         // Phase 8 — Smart Queue opt-out survives restarts.
         smartQueue: s.smartQueue,
         // Phase 14 — ambient visuals opt-out survives restarts.
@@ -689,6 +729,10 @@ export const usePlayerStore = create<PlayerState>()(
         const base = { ...current, ...p } as PlayerState
         return {
           ...base,
+          // Aura 3.0 — persisted FX fields are sanitized against corrupted
+          // or foreign snapshots before they can reach the engine.
+          audioFx: sanitizeFx((p as { audioFx?: unknown }).audioFx),
+          fxUserPresets: sanitizeUserPresets((p as { fxUserPresets?: unknown }).fxUserPresets),
           queue,
           naturalQueue,
           currentSong,

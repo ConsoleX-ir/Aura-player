@@ -11,6 +11,9 @@ import { getSongStats } from '@/lib/scrobbleStore'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { FindInfoPanel } from '@/components/Properties/FindInfoPanel'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
+import { useArtworkStore } from '@/store/artworkStore'
+import { ImageIcon } from 'lucide-react'
+import { PersonalTab } from '@/components/Properties/PersonalTab'
 
 // ── Song Properties — a full page, Windows-Media-Player style (Wave 3) ──────
 // The v1.x properties dialog did its job, but it floated over the app as a
@@ -25,7 +28,7 @@ import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPla
 //   Find Info Online — the keyless metadata lookup (FindInfoPanel)
 // Escape (or Back) returns to the view the user came from.
 
-type Tab = 'info' | 'find'
+type Tab = 'info' | 'find' | 'personal'
 
 export function PropertiesPage() {
   const songId = useUiStore((s) => s.propertiesSongId)
@@ -92,6 +95,7 @@ export function PropertiesPage() {
           <div className="flex gap-1 ml-auto p-1 rounded-full" style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}>
             <TabButton active={tab === 'info'} icon={Info} label="Properties" onClick={() => setTab('info')} />
             <TabButton active={tab === 'find'} icon={Sparkles} label="Find Info Online" onClick={() => setTab('find')} />
+            <TabButton active={tab === 'personal'} icon={ImageIcon} label="Artwork & Notes" onClick={() => setTab('personal')} />
           </div>
         </div>
 
@@ -106,6 +110,9 @@ export function PropertiesPage() {
         <div className={cn(tab !== 'find' && 'hidden')}>
           <FindInfoPanel key={song.id} song={song} onApplied={() => setTab('info')} />
         </div>
+        <div className={cn(tab !== 'personal' && 'hidden')}>
+          <PersonalTab key={song.id} song={song} />
+        </div>
       </div>
     </motion.div>
   )
@@ -113,6 +120,7 @@ export function PropertiesPage() {
 
 // ── Hero: artwork + identity + quick actions ────────────────────────────────
 function SongHero({ song }: { song: Song }) {
+  const overrideUrl = useArtworkStore((s) => s.overrides[song.id]?.url ?? null)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const isActive = usePlayerStore((s) => s.currentSong?.id === song.id)
   const isFav = usePlayerStore((s) => s.favorites.includes(song.id))
@@ -123,8 +131,8 @@ function SongHero({ song }: { song: Song }) {
   return (
     <div className="flex items-center gap-6 mb-6 p-5 rounded-3xl" style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}>
       <div className="w-28 h-28 rounded-2xl overflow-hidden shrink-0" style={{ boxShadow: 'var(--shadow-2)' }}>
-        {song.coverArt
-          ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" />
+        {overrideUrl ?? song.coverArt
+          ? <img src={(overrideUrl ?? song.coverArt)!} alt="" className="w-full h-full object-cover" />
           : <ArtworkPlaceholder seed={song.id} size="lg" />
         }
       </div>
@@ -248,11 +256,14 @@ function InfoTab({ song }: { song: Song }) {
                 label="Format"
                 value={
                   stats
-                    ? [stats.extension.replace('.', '').toUpperCase(), stats.codec, stats.container].filter(Boolean).join(' · ') || null
+                    // Defensive: fs:fileStats can return a partial object
+                    // (unreadable tags, older shapes) — a missing extension
+                    // must not crash the whole page.
+                    ? [(stats.extension || '').replace('.', '').toUpperCase(), stats.codec, stats.container].filter(Boolean).join(' · ') || null
                     : null
                 }
               />
-              <Row label="Size"        value={stats ? formatBytes(stats.sizeBytes) : null} />
+              <Row label="Size"        value={stats && typeof stats.sizeBytes === 'number' ? formatBytes(stats.sizeBytes) : null} />
               <Row label="Bitrate"     value={stats?.bitrateKbps ? `${stats.bitrateKbps} kbps` : null} />
               <Row label="Sample Rate" value={stats?.sampleRateHz ? `${(stats.sampleRateHz / 1000).toFixed(1)} kHz` : null} />
               <Row label="Channels"    value={stats?.channels ? stats.channels === 2 ? 'Stereo' : stats.channels === 1 ? 'Mono' : stats.channels.toString() : null} />

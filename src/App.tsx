@@ -21,6 +21,7 @@ import { useMiniPlayerBridge } from '@/hooks/useMiniPlayerBridge'
 import { useFolderWatcher } from '@/hooks/useFolderWatcher'
 import { useSmartQueueContinuation } from '@/hooks/useSmartQueue'
 import { useUiStore } from '@/store/uiStore'
+import { FirstLaunch } from '@/components/FirstLaunch'
 import { UploadCloud, Loader2 } from 'lucide-react'
 
 // Library is what's shown on launch almost every time, so it stays a normal
@@ -137,6 +138,18 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', appearance)
   }, [appearance])
+
+  // ── Theme System 3.0 (Wave 4) ───────────────────────────────────────────
+  // data-aura-theme selects the color IDENTITY (ink tints, ambient cloud,
+  // secondary accent — see styles/themes.css); data-theme above stays the
+  // dark/light appearance. Orthogonal on purpose. A Custom accent color has
+  // no identity block — the attribute is removed so the token defaults
+  // (and the custom color's derived companions) take over.
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'custom') root.removeAttribute('data-aura-theme')
+    else root.setAttribute('data-aura-theme', theme)
+  }, [theme])
 
   if (!hydrated) return <BootScreen />
 
@@ -337,6 +350,10 @@ export default function App() {
       <Toaster />
       <HelpModal />
       <CommandPalette />
+
+      {/* Aura 3.0 — first-launch welcome (name + default-player offer),
+          shown at most once, above everything. */}
+      <FirstLaunch />
     </div>
   )
 }

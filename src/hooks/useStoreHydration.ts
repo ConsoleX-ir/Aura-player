@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useNotesStore } from '@/store/notesStore'
+import { useArtworkStore } from '@/store/artworkStore'
+import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { markHydrationComplete } from '@/lib/idbStorage'
 
 /* ── Store hydration gate ────────────────────────────────────────────────────
@@ -12,12 +15,28 @@ import { markHydrationComplete } from '@/lib/idbStorage'
    This hook reports when zustand's persist middleware has finished reading
    storage; App.tsx holds the shell on a branded boot screen until it
    returns true. After the first hydration everything is in-memory and this
-   is free. */
+   is free.
+
+   Aura 3.0 (Wave 1): the app now has FOUR persisted stores — the main
+   player store plus the notes / artwork / user-prefs domain stores. The
+   gate waits for ALL of them (cheap — same shared IndexedDB) so a view
+   can never observe a hydrated library but default-valued notes/prefs. */
+const PERSISTED_STORES = [
+  usePlayerStore,
+  useNotesStore,
+  useArtworkStore,
+  useUserPrefsStore,
+] as const
+
+function allHydrated(): boolean {
+  return PERSISTED_STORES.every((s) => s.persist.hasHydrated())
+}
+
 export function useStoreHydration(): boolean {
-  const [hydrated, setHydrated] = useState(() => usePlayerStore.persist.hasHydrated())
+  const [hydrated, setHydrated] = useState(allHydrated)
 
   useEffect(() => {
-    if (usePlayerStore.persist.hasHydrated()) {
+    if (allHydrated()) {
       setHydrated(true)
       // Opens the idbStorage pre-hydration write gate (Wave 0): from this
       // point on, store writes describe complete, hydrated state and are
@@ -25,11 +44,15 @@ export function useStoreHydration(): boolean {
       markHydrationComplete()
       return
     }
-    const unsub = usePlayerStore.persist.onFinishHydration(() => {
-      setHydrated(true)
-      markHydrationComplete()
-    })
-    return unsub
+    const unsubs = PERSISTED_STORES.map((s) =>
+      s.persist.onFinishHydration(() => {
+        if (allHydrated()) {
+          setHydrated(true)
+          markHydrationComplete()
+        }
+      }),
+    )
+    return () => unsubs.forEach((u) => u())
   }, [])
 
   return hydrated

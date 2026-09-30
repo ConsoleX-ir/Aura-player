@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePlaylistFile: (defaultName) => ipcRenderer.invoke('dialog:savePlaylistFile', defaultName),
   writeTextFile: (filePath, content) => ipcRenderer.invoke('fs:writeTextFile', filePath, content),
   showItemInFolder: (filePath) => ipcRenderer.send('shell:showItemInFolder', filePath),
+  // Aura 3.0 — first-launch "set as default player" offer (opens the OS
+  // default-apps surface; associations themselves belong to the installers).
+  setAsDefaultMusicPlayer: () => ipcRenderer.invoke('sys:setDefaultPlayer'),
   parseMetadata: (p)      => ipcRenderer.invoke('fs:parseMetadata', p),
   parseMetadataBatch: (paths) => ipcRenderer.invoke('fs:parseMetadataBatch', paths),
   // Library Health (Phase 1): batch existence check for every library entry.
