@@ -357,6 +357,8 @@ electron/
 ![Setting](./docs/Setting3.png)
 ![Properties](./docs/Properties1.png)
 ![Properties](./docs/Properties2.png)
+![Properties](./docs/FindInfo1.png)
+![Properties](./docs/FindInfo2.png)
 ![History](./docs/History.png)
 ![Rewind](./docs/Rewind.png)
 ![Smart](./docs/Smart.png)
