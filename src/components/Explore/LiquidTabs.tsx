@@ -24,6 +24,9 @@ import { cn } from '@/lib/utils'
 export interface LiquidTabItem<T extends string = string> {
   id: T
   label: string
+  /** Optional tooltip override (defaults to the label) — the sidebar's
+   * destination rows carry longer descriptive titles when expanded. */
+  title?: string
   icon?: React.ReactNode
   /** Trailing node — a count badge, for example. */
   trailing?: React.ReactNode
@@ -165,7 +168,7 @@ export function LiquidTabs<T extends string>({ items, value, onChange, ariaLabel
             aria-label={`${item.label} tab`}
             tabIndex={active || !anySelected ? 0 : -1}
             onClick={() => onChange(item.id)}
-            title={item.label}
+            title={item.title ?? item.label}
             onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--glass-1)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             className={cn(

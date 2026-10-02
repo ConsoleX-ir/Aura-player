@@ -22,6 +22,11 @@ export const THEME_PRESETS: ThemePreset[] = [
   { id: 'crimson',  label: 'Crimson',     color: '#D9636B' }, // muted rose red
   { id: 'sunset',   label: 'Amber',       color: '#E0894F' }, // warm amber/coral
   { id: 'mono',     label: 'Mono',        color: '#D4D4D8' }, // pure grayscale
+  // ── v3.2.0 Special identities (additive — no existing id touched) ──
+  { id: 'orchid',    label: 'Orchid',    color: '#D96BB4' }, // plum-magenta bloom
+  { id: 'indigo',    label: 'Indigo',    color: '#6474D9' }, // deep blue-violet night
+  { id: 'champagne', label: 'Champagne', color: '#C9A84C' }, // warm aged gold
+  { id: 'aurora',    label: 'Aurora',    color: '#3FBFA0' }, // boreal teal-green
 ]
 
 export const DEFAULT_THEME_ID = 'default'

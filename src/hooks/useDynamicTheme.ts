@@ -19,6 +19,32 @@ function applyVars(d1: string, d2: string, d3: string, glow: string) {
   r.style.setProperty('--color-dynamic-glow', glow)
 }
 
+// ── Adaptive on-accent ink (v3.2.0 light-pass §3) ─────────────────────────
+// --text-on-accent used to be a hard #FFFFFF, which fails the 3:1 target
+// for meaningful graphics on LIGHT accents (the cloud-gray ConsoleX default,
+// Cyan Frost, Amber, Mono, …): a white glyph on #B0B8C8 is 1.99:1. Rather
+// than patching components one by one, the accent pipeline derives the
+// readable ink from the accent's own luminance — dark ink on light accents,
+// white on dark ones. One function, applied everywhere accents are written
+// (built-in presets, Custom picker, artwork ambient), so every surface that
+// consumes the token (play button, chips, badges, active sliders) is fixed
+// at once without touching any hue.
+export function onAccentInk(color: string): string {
+  let hex = color.trim()
+  const rgb = hex.startsWith('#')
+    ? [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
+    : null
+  if (!rgb || rgb.some((n) => !isFinite(n))) return '#FFFFFF'
+  const lin = (c: number) => {
+    c /= 255
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  }
+  const L = 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+  // #FFFFFF clears 3:1 while L ≤ 0.30; above that, Aura's ink (#101017)
+  // clears it by a wide margin (L>0.30 ⇒ ≥3.7:1 against the ink).
+  return L > 0.30 ? '#101017' : '#FFFFFF'
+}
+
 // Every built-in preset's idle color, keyed by id — kept as a lookup rather
 // than duplicating THEME_PRESETS' array-find logic on every effect run.
 const PRESET_COLORS_BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p.color]))
@@ -113,6 +139,7 @@ export function useDynamicTheme(
       // currently playing.
       const v = colorToVars(themeHex)
       applyVars(v.d1, v.d2, v.d3, v.glow)
+      document.documentElement.style.setProperty('--text-on-accent', onAccentInk(themeHex))
       return
     }
     getDominantColor(coverArt)
@@ -124,17 +151,20 @@ export function useDynamicTheme(
         const bg = Math.min(255, Math.round(g * boost))
         const bb = Math.min(255, Math.round(b * boost))
         const [lr, lg, lb] = lighten(br, bg, bb, 0.35)
+        const boostedHex = toHex(br, bg, bb)
         applyVars(
-          toHex(br, bg, bb),
+          boostedHex,
           toHex(lr, lg, lb),
           `rgba(${br},${bg},${bb},0.15)`,
           `rgba(${br},${bg},${bb},0.07)`
         )
+        document.documentElement.style.setProperty('--text-on-accent', onAccentInk(boostedHex))
       })
       .catch(() => {
         // Album art failed to load/decode — fall back to the theme's color
         const v = colorToVars(themeHex)
         applyVars(v.d1, v.d2, v.d3, v.glow)
+        document.documentElement.style.setProperty('--text-on-accent', onAccentInk(themeHex))
       })
   }, [coverArt, theme, customAccentColor, useAlbumArtColor])
 }

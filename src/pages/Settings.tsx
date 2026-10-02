@@ -1,11 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer, Snowflake, Contrast } from 'lucide-react'
+import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer, Snowflake, Contrast, Flower2, MoonStar, Crown, Rainbow } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { setAppearanceAnimated, setThemeAnimated } from '@/lib/appearance'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
-import { EqualizerCard } from '@/components/Settings/EqualizerCard'
-import { AudioFxCard } from '@/components/Settings/AudioFxCard'
 import { LibraryHealthCard } from '@/components/Settings/LibraryHealthCard'
 import { formatRuntime } from '@/lib/utils'
 import { useLibrarySync } from '@/hooks/useLibrarySync'
@@ -23,6 +21,11 @@ const THEME_ICONS: Record<string, typeof Palette> = {
   crimson:  Flame,
   cyan:     Snowflake,
   mono:     Contrast,
+  // v3.2.0 Special identities
+  orchid:    Flower2,
+  indigo:    MoonStar,
+  champagne: Crown,
+  aurora:    Rainbow,
 }
 
 export function Settings() {
@@ -216,9 +219,27 @@ export function Settings() {
             </div>
           </SettingRow>
 
-          {/* Wave 3: the reserved EQ bands get their face */}
-          <EqualizerCard />
-          <AudioFxCard />
+          {/* v3.2.0 — the EQ and Audio Effects moved OUT of Settings into
+              their own Sidebar destination: Audio Studio. The underlying
+              engine and persisted state are unchanged. */}
+          <SettingRow
+            label="Audio Studio"
+            description="The equalizer and audio effects now live in their own workspace — find Audio Studio in the sidebar."
+          >
+            <button
+              onClick={() => usePlayerStore.getState().setActiveView('studio')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium active:scale-95 transition-all"
+              style={{
+                background: 'var(--accent-dim)',
+                border: '1px solid var(--accent-border)',
+                color: 'var(--accent)',
+                transitionDuration: 'var(--dur-fast)',
+              }}
+            >
+              <SlidersHorizontal size={13} />
+              Open Audio Studio
+            </button>
+          </SettingRow>
 
           {/* Phase 8 — Smart Queue */}
           <SettingRow
@@ -355,7 +376,7 @@ export function Settings() {
                   className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums"
                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
                 >
-                  v3.0.0
+                  v3.2.0
                 </span>
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>

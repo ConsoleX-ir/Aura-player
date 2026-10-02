@@ -1,5 +1,5 @@
 import { useEffect, useMemo, lazy, Suspense } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { Sidebar } from '@/components/Sidebar/Sidebar'
 import { PlayerBar } from '@/components/Player/PlayerBar'
 import { Library } from '@/pages/Library'
@@ -40,6 +40,7 @@ const SmartPlaylists = lazy(() => import('@/pages/SmartPlaylists').then((m) => (
 const ArtistPage = lazy(() => import('@/pages/ArtistPage').then((m) => ({ default: m.ArtistPage })))
 const AlbumPage = lazy(() => import('@/pages/AlbumPage').then((m) => ({ default: m.AlbumPage })))
 const HistoryPage = lazy(() => import('@/pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
+const AudioStudio = lazy(() => import('@/pages/AudioStudio').then((m) => ({ default: m.AudioStudio })))
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)
@@ -154,6 +155,12 @@ export default function App() {
   if (!hydrated) return <BootScreen />
 
   return (
+    // v3.2.0 — one global reduced-motion contract for every framer-motion
+    // animation in the app: when the OS asks for reduced motion, transform/
+    // layout animations resolve instantly (opacity/color still fade, so
+    // state changes stay visible). Sidebar/page/panel motion all inherit
+    // this automatically — no per-component branching.
+    <MotionConfig reducedMotion="user">
     <div
       className="dynamic-bg flex flex-col h-screen overflow-hidden select-none relative"
       {...dragHandlers}
@@ -309,6 +316,17 @@ export default function App() {
               >
                 <HistoryPage />
               </motion.div>
+            ) : activeView === 'studio' ? (
+              <motion.div
+                key="studio"
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.2 }}
+                className="h-full overflow-hidden"
+              >
+                <AudioStudio />
+              </motion.div>
             ) : activeView === 'smart' ? (
               <motion.div
                 key="smart"
@@ -355,6 +373,7 @@ export default function App() {
           shown at most once, above everything. */}
       <FirstLaunch />
     </div>
+    </MotionConfig>
   )
 }
 

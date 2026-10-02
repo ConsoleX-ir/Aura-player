@@ -31,10 +31,12 @@ export const EQ_PRESETS: EqPreset[] = [
   { id: 'bass',       label: 'Bass Boost', gains: [6, 5, 3.5, 1.5, 0, 0, 0, 0, 0, 0] },
   { id: 'vocal',      label: 'Vocal',      gains: [-2, -1, 0, 2.5, 4, 4, 2.5, 1, 0, -1] },
   { id: 'treble',     label: 'Treble',     gains: [0, 0, 0, 0, 0, 1, 2.5, 4.5, 5.5, 6] },
+  { id: 'pop',        label: 'Pop',        gains: [-1, 0.5, 2.5, 4, 2.5, 0, -1, -0.5, 1.5, 2.5] },
   { id: 'rock',       label: 'Rock',       gains: [5, 4, 2, -1, -2, 0, 2, 3.5, 4.5, 5] },
   { id: 'jazz',       label: 'Jazz',       gains: [3.5, 2.5, 1, 1.5, -1, -1, 0, 1.5, 3, 4] },
   { id: 'electronic', label: 'Electronic', gains: [5.5, 4.5, 1.5, 0, -1.5, 1, 1.5, 2.5, 4.5, 5.5] },
   { id: 'classical',  label: 'Classical',  gains: [3, 2.5, 2, 1.5, -1, -1, 0, 1.5, 2.5, 3] },
+  { id: 'acoustic',   label: 'Acoustic',   gains: [4, 3, 2, 0.5, -0.5, -0.5, 1, 2, 3, 3.5] },
 ]
 
 export function eqPresetById(id: string): EqPreset | undefined {

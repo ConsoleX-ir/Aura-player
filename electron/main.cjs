@@ -212,8 +212,10 @@ function isPointOnAnyDisplay(x, y) {
 
 function miniTargetBounds() {
   const { screen } = require('electron')
-  const width = 384
-  const height = 100
+  // v3.2.0: 460×112 — the extra width hosts the volume control and the
+  // extra height the seek bar (spec §6: progress, seek, volume).
+  const width = 460
+  const height = 112
   if (miniLastBounds && isPointOnAnyDisplay(miniLastBounds.x, miniLastBounds.y)) {
     return { ...miniLastBounds, width, height }
   }
@@ -233,7 +235,11 @@ function createMiniWindow() {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    focusable: false, // a widget, not a workspace — clicks work, focus never stolen
+    // v3.2.0: focusable = true — the widget stays a click-once surface that
+    // never steals focus when it APPEARS (showInactive everywhere), but a
+    // click now focuses it so every button is reachable by TAB as well as by
+    // mouse (spec §8 keyboard accessibility for the mini player).
+    focusable: true,
     hasShadow: false, // the card paints its own CSS shadow inside the bounds
     alwaysOnTop: true,
     show: false,
@@ -1044,6 +1050,12 @@ ipcMain.on('mini:action', (_e, action) => {
         mainWindow.webContents.send('media:command', cmd)
       }
       break
+    // v3.2.0 — the widget's mute button rides the same funnel.
+    case 'toggleMute':
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('media:command', 'mute')
+      }
+      break
     case 'restore':
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore()
@@ -1055,6 +1067,29 @@ ipcMain.on('mini:action', (_e, action) => {
     case 'close':
       hideMiniPlayer() // hides the widget only — the main window is untouched
       break
+  }
+})
+
+// ── Mini player seek + volume (v3.2.0) ──────────────────────────────────────
+// Same posture as mini:action: validate at the boundary, forward a narrow,
+// typed message to the MAIN window's renderer — the mini window itself never
+// touches playback state, it only asks. Both values are clamped into range;
+// garbage is dropped.
+ipcMain.on('mini:seek', (_e, fraction) => {
+  const v = Number(fraction)
+  if (!Number.isFinite(v)) return
+  const clamped = Math.min(1, Math.max(0, v))
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('media:seek', clamped)
+  }
+})
+
+ipcMain.on('mini:setVolume', (_e, volume) => {
+  const v = Number(volume)
+  if (!Number.isFinite(v)) return
+  const clamped = Math.min(1, Math.max(0, v))
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('media:volume', clamped)
   }
 })
 

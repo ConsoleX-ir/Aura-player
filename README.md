@@ -2,7 +2,7 @@
 
 > A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-![Version](https://img.shields.io/badge/version-v3.0.0-blue)
+![Version](https://img.shields.io/badge/version-v3.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
@@ -90,22 +90,24 @@ v3 is the liquid-glass generation. A wide glass play bar breathes with the real 
 - Shuffle — a real play order (the queue always shows exactly what plays next)
 - Repeat (all / one)
 - Crossfade — smooth fade between songs, adjustable 0–12s
-- **10-band Equalizer** — 8 preset curves plus fully custom band control, persisted; flat = true bypass
-- **Audio Effects** — see below
+- **10-band Equalizer** — 10 preset curves plus fully custom band control and user-saved curves, persisted; flat = true bypass — now living in the dedicated **Audio Studio** (see below)
+- **Audio Studio** — a dedicated Sidebar destination for all sound shaping: Master (preamp, balance, limiter), Equalizer, Effects, Presets, and a global Bypass — see below
 - Sleep Timer — auto-pause after 15/30/45/60 minutes (Now Playing view)
 - Volume Control + scroll-wheel fine adjustment
 - Seek bar with hover time labels
 - **The queue survives restarts** — it persists as ID references, rebuilds against your library at launch, and Aura never autoplays on startup
 - **Aura Pulse** — the play bar's aurora field breathes with the track's real low-frequency energy; rests smoothly on pause, and freezes in Performance Mode
 
-### 🎚 Audio Effects
+### 🎛 Audio Studio (v3.2.0)
 
-- Five direct controls stacked on the equalizer: **Bass, Treble, Compression, Reverb, and Stereo Width** — double-click any knob to reset it
-- A real Web Audio chain behind the EQ: low shelf → high shelf → compressor → reverb (dry/wet) → mid/side stereo widener, with smooth parameter gliding
-- **Honest bypass** — neutral settings remove the chain from the signal path entirely; the engine costs nothing until you use it
-- The visualizer and the play bar's aurora listen **after** the effects — what you see is what you hear
-- **7 built-in presets** plus your own named presets — save, apply, and delete them from Settings → Playback
-- **Export / Import** your whole effects setup as a small JSON file — it carries configuration only, never processed audio, and foreign files are sanitized before anything is applied
+A dedicated workspace for everything that shapes the sound, reachable from the Sidebar (or Ctrl+K → "Open Audio Studio"). It edits the same live playback graph the main player, Playbar and Mini Player use — there is exactly one audio engine, and the Studio is a control surface over it, never a second one.
+
+- **Master** — input **Preamp** (−12…+12 dB with a 0 dB reference tick), stereo **Balance** (double-click or press 0 to recenter), and an honest **Output Limiter** protection stage that catches peaks a boosted EQ or preamp would clip
+- **Equalizer** — the 10-band graphic EQ (31 Hz – 16 kHz) with drag, double-click reset and arrow-key nudging; 10 built-in curves (Flat, Bass Boost, Vocal, Treble, Pop, Rock, Jazz, Electronic, Classical, Acoustic); an **Enable gate** that flattens the bands while keeping your curve intact; **custom curves** with save / rename / duplicate / delete
+- **Effects** — the five real controls (Bass, Treble, Compression, Reverb, Stereo Width) on the Web Audio chain, built-in presets, and **custom effect presets** with full rename/duplicate/delete support; export/import as JSON configuration (never processed audio)
+- **Bypass & Reset** — one toggle suspends the whole chain (every stage glides to its transparent neutral point; your settings are kept), one button resets everything
+- A live status pill tells you what the engine is actually doing: Neutral, Active (N stages), or Bypassed
+- **Zero-cost architecture** — every stage sits at an acoustically transparent neutral value until you touch it; parameter changes glide through scheduled AudioParam updates; the graph is built once and never rebuilt
 
 ### 🪟 Windows Integration
 
@@ -173,11 +175,11 @@ Every keyboard action gives visible confirmation — a small toast rises above t
 
 ### 🎨 UI
 
-- **Eight theme identities** — ConsoleX, Ocean Deep, Amethyst, Cyan Frost, Emerald, Crimson, Amber, and Mono — each remapping the entire palette (ink scale, ambient clouds, and a curated secondary accent) and carrying its own light "paper" for light mode; a fully Custom accent color is still available; every switch crossfades
+- **Twelve theme identities** — ConsoleX, Ocean Deep, Amethyst, Cyan Frost, Emerald, Crimson, Amber, Mono, plus the v3.2.0 Specials **Orchid, Indigo, Champagne and Aurora** — each remapping the entire palette (ink scale, ambient clouds, and a curated secondary accent) and carrying its own light "paper" for light mode; a fully Custom accent color is still available; every switch crossfades
 - **Liquid-glass play bar** — a wide glass slab (no more pill) with a top sheen, an accent-tinted hairline border, and a two-layer aurora field that breathes with the track's real bass; still when paused, calm in Performance Mode and reduced-motion
-- **Collapsible sidebar** — the floating glass card folds from 246px to a 56px icon rail and back, remembers its state across restarts, and keeps every destination reachable
+- **Collapsible sidebar** — the floating glass card folds from 246px to a 56px icon rail and back, remembers its state across restarts, and keeps every destination reachable; v3.2.0 gives it a designed collapse chip, a travelling selection pill across all destination rows, and coordinated label fades (all reduced-motion aware)
 - **Now Playing stage** — one quiet segmented toggle crossfades between synchronized **Lyrics** and a full-size **Visualizer** (Aurora, Particles, or Radial) on a single efficient canvas that only animates while music plays
-- **Mini Player 3.0** — the independent desktop widget now inherits your theme and accent (artwork-aware on Now Playing), shows an honest "up next" preview on hover, and keeps its full draggable, always-on-top lifecycle
+- **Mini Player 3.2** — the independent desktop widget now adds a real **seek bar** with elapsed/remaining times, a **volume slider with mute**, keyboard-focusable transport buttons, and inherits your theme, accent, and adaptive on-accent ink; keeps its full draggable, always-on-top lifecycle and position memory
 - **A first launch that greets you** — an optional display name (never an account, never sent anywhere), a time-of-day "welcome back" greeting in the Library, and an honest "make Aura your default player" offer that opens your OS settings — no registry hacks, no fake success
 - **Dark & Light themes** — dark is Aura's true form; light is a designed, glow-first paper look with an animated cross-fade between them
 - Dynamic Accent Colors: your chosen theme stays consistent everywhere, except the Now Playing view, which pulls its ambient color from the current song's actual album art
@@ -264,6 +266,8 @@ The packages are optimized for size — only true runtime dependencies (`music-m
 
 # 🕘 Version History
 
+> v3.2.0 — **The Audio Studio & refinement wave.** The equalizer and audio effects moved out of Settings into their own Sidebar destination: **Audio Studio** — a real audio workspace over the one authoritative playback graph, with a **Master** section (preamp −12…+12 dB, stereo balance, an honest output **Limiter** protection stage), the **10-band Equalizer** (now with an enable gate that keeps your curve, plus Pop and Acoustic presets), the **Effects** rack, and full **custom-preset CRUD** — save, rename, duplicate, delete, apply, persisted across launches, for both EQ curves and effect states. A one-click **Bypass** gate neutralizes the entire chain (parameters glide, the graph never rebuilds — still zero-cost at rest). **Four new Special themes** — Orchid, Indigo, Champagne, Aurora — join the eight existing identities as first-class token remaps with their own light papers. **Light theme quality pass**: the ink ladder, borders, glass and hover surfaces re-tuned against measured WCAG contrast (tertiary text went from 2.48:1 to 4.79:1; secondary 4.18:1 → 6.60:1), a new evidence script ships in `scripts/`, and the on-accent ink is now computed per-accent luminance so white glyphs never sit on light accents. **Mini Player 3.2**: the desktop widget gains a real **seek bar** with elapsed/remaining times, a **volume control** with mute, keyboard-focusable buttons, and a boot-race fix that guarantees the widget always catches the first playback snapshot. **Sidebar motion**: the collapse control is a designed chip, destination rows share the travelling gel pill, labels fade with the collapse, and every animation honors reduced-motion. **Playbar fix** (tester): the elapsed/remaining hover timestamps sit tight under the seek line, one step larger, no longer overlapping the artwork. Typecheck, build, 18 unit suites and a 32-check real-Electron smoke probe all green; zero new dependencies.
+
 > v3.0.0 — **The liquid-glass generation.** The largest design wave since v2. **Theme System 3.0**: eight complete identities — ConsoleX, Ocean Deep, Amethyst, Cyan Frost, Emerald, Crimson, Amber, Mono — each remapping the whole token cascade (ink scale, ambient clouds, secondary accent) with its own light paper, animated switching, and zero new dependencies; the primary accent stays on the artwork-driven pipeline. **Playbar 3.0**: the capsule became a wide liquid-glass slab with a top sheen, an accent-tinted hairline, and a two-layer aurora (field + specular rim) that breathes with real bass from the analyser and rests when paused. **Sidebar 3.0**: true collapse to a 56px icon rail, persisted across restarts, with one unified selection language and the nested-selection quirk fixed. **Now Playing stage**: a quiet LYRICS | VISUALIZER toggle crossfades into a single-canvas visualizer with three honest modes (Aurora, Particles, Radial) that only animates while music plays. **Mini Player 3.0**: the widget inherits your theme and resolved accent, previews what plays next on hover, and keeps its whole desktop lifecycle. **Explore 3.0**: an editorial composition layer — hero card, ranked rails, Underground grid, large playlist cards — with the hardened networking layer untouched, and Radio now filtered to music by station metadata (untagged stations kept, favorites never filtered). **Audio Effects**: a real five-knob chain (bass, treble, compression, reverb, stereo width) with neutral = true bypass, 7 built-in presets, user presets, and JSON export/import (configuration only, never processed audio). **Your music, more yours**: custom cover art (bounded local override, propagated everywhere, non-destructive) and searchable Track Notes. **First launch**: an optional name, a "Good morning — welcome back" greeting, and an honest default-player offer that hands off to your OS. Two real bugs found by the release audit were fixed: Find Info Online had been silently broken by a swallowed reference error (now fixed and verified against the live sources), and the Properties page could crash on partial file stats. Measured at a 5,000-song scale, all 15 performance budgets hold — first library row ~0.9s, worst navigation settle 50ms, zero heap growth — and the full regression battery (20 runtime + 17 unit suites) runs green. Linux packaging (AppImage + .deb) ships from the project's own build config.
 
 > v2.16.1 — **The network honesty wave.** Provider failures now speak their true kind: typed errors end every failover path, so a host fallback that exhausts its list reports "this service is unreachable" instead of pretending to be offline, a 403 is never relabeled as "no network", and a provider dying mid-request can never come back as "no results". Every Audius and Radio Browser call now runs a host failover across backup endpoints with per-attempt timeouts, retry/after handling and request cancellation preserved, and an on-demand diagnostic probe that reports what it actually measured (latency, error kind, detail) instead of swallowing the exception. The result: the Radio page's intermittent network errors became named, honest, recoverable states.
@@ -324,7 +328,7 @@ The packages are optimized for size — only true runtime dependencies (`music-m
 
 ```
 src/
- ├── components/   # UI components, grouped by area (Sidebar, Player, Library, NowPlaying, Explore,
+ ├── components/   # UI components, grouped by area (Sidebar, Player, Studio, Library, NowPlaying, Explore,
  │                 #   Properties, Settings, Modals, Toast, States, FirstLaunch, CommandPalette)
  ├── hooks/        # useAudio, useLibraryImport, useLyrics, useMediaKeys, useFolderWatcher, useStoreHydration, ...
  ├── pages/        # Library, Explore, Playlist, NowPlaying, Settings, PropertiesPage, RewindPage,
@@ -347,24 +351,11 @@ electron/
 
 # 📸 Screenshots
 
-![Home](./docs/Home.png)
-![Preview](./docs/NowPlaying1.png)
-![Preview](./docs/NowPlaying2.png)
-![PlayList](./docs/PlayList.png)
-![Setting](./docs/Setting0.png)
-![Setting](./docs/Setting1.png)
-![Setting](./docs/Setting2.png)
-![Setting](./docs/Setting3.png)
-![Properties](./docs/Properties1.png)
-![Properties](./docs/Properties2.png)
-![Properties](./docs/FindInfo1.png)
-![Properties](./docs/FindInfo2.png)
-![History](./docs/History.png)
-![Rewind](./docs/Rewind.png)
-![Smart](./docs/Smart.png)
-![Radio](./docs/Radio.png)
-![Explore](./docs/Explore.png)
-
+![Home](./docs/sc2.png)
+![Preview](./docs/sc5.png)
+![PlayList](./docs/sc1.png)
+![Setting](./docs/sc3.png)
+![Setting](./docs/sc4.png)
 
 ---
 

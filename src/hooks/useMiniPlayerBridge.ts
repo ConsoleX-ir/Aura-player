@@ -32,13 +32,27 @@ export function useMiniPlayerBridge() {
     // progress field changes every tick so the stream is unchanged.
     let lastPushed = ''
 
+    // v3.2.0 fix (found by the Xvfb smoke probe): the FIRST push after a show
+    // can race the widget window's boot — a snapshot sent while the mini
+    // renderer is still loading is dropped, and with the dedupe above every
+    // later identical push (a paused app's snapshot never changes) would be
+    // suppressed too, leaving the widget on its initial "Nothing playing"
+    // frame forever. After each show we therefore force-push through the
+    // dedupe for a bounded 2.5s grace window (~10 heartbeats) so the widget
+    // ALWAYS catches at least one full snapshot; steady-state cost is
+    // unchanged (zero pushes while paused after grace expires).
+    let forceUntil = 0
+
     // Authoritative visibility from main → uiStore (direct setState: no echo).
     const offVisibility = api.onMiniVisibility((visible: boolean) => {
       // Show transition forces the next push out even if the snapshot is
       // unchanged — the widget may be freshly created (first show) or have
       // missed updates while hidden, and the contract is "never paints a
       // stale frame on show". Hide just stops the pushes (see dedupe below).
-      if (visible) lastPushed = ''
+      if (visible) {
+        lastPushed = ''
+        forceUntil = Date.now() + 2500
+      }
       useUiStore.setState({ miniPlayer: !!visible })
     })
 
@@ -65,6 +79,11 @@ export function useMiniPlayerBridge() {
         coverArt: s.currentSong ? effectiveCover(overrides, s.currentSong) : null,
         isPlaying: s.isPlaying,
         progress: s.duration > 0 ? s.progress : 0,
+        // v3.2.0 — the widget renders its own seek bar + elapsed/remaining,
+        // and mirrors volume/mute so both surfaces agree.
+        durationSec: s.duration > 0 ? s.duration : 0,
+        volume: s.volume,
+        muted: s.muted,
         appearance: s.appearance,
         theme: s.theme,
         accent: {
@@ -72,6 +91,9 @@ export function useMiniPlayerBridge() {
           d2: v('--color-dynamic-2'),
           d3: v('--color-dynamic-3'),
           glow: v('--color-dynamic-glow'),
+          // v3.2.0 — adaptive on-accent ink (light pass §3), so the widget's
+          // accent surfaces keep AA contrast under every theme.
+          onAccent: v('--text-on-accent'),
         },
         nextTitle,
       }
@@ -80,12 +102,13 @@ export function useMiniPlayerBridge() {
     // 250ms heartbeat while visible. Progress arrives at ~4Hz from the audio
     // element itself, so this adds at most one redundant frame per second —
     // and buys immunity against any dropped update in either direction.
-    // (Dedupe rationale: see the lastPushed note above.)
+    // (Dedupe rationale: see the lastPushed note above; the grace window is
+    // the boot-race fix two blocks up.)
     const pushIfChanged = () => {
       if (!useUiStore.getState().miniPlayer) return
       const snap = snapshot()
       const key = JSON.stringify(snap)
-      if (key === lastPushed) return
+      if (key === lastPushed && Date.now() >= forceUntil) return
       lastPushed = key
       api.pushMiniState!(snap)
     }

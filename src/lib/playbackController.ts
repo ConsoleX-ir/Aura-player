@@ -39,6 +39,7 @@ import { safeAppendScrobble } from '@/lib/scrobbleStore'
 import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
 import { sanitizeFx, BASS_SHELF_HZ, TREBLE_SHELF_HZ, compressionParams } from '@/lib/audioFx'
+import { clampPreampDb, clampBalance, limiterEngagedParams, limiterNeutralParams } from '@/lib/audioStudio'
 import { toast } from '@/store/toastStore'
 
 // ── Module state (singleton — the app has exactly one audio engine) ─────────
@@ -47,6 +48,20 @@ let ctx: AudioContext | null = null
 let gainNode: GainNode | null = null
 let analyserNode: AnalyserNode | null = null
 let initialized = false
+
+// ── Audio Studio 3.2 nodes — filled at init, param-updated in place ─────
+// Graph order (spec §5.4), all inside the ONE authoritative pipeline:
+//   source → preamp → EQ[10] → bass → treble → comp → dry/wet reverb →
+//   M/S widener → balance → limiter → master gain(volume) → analyser → out
+let preampNode: GainNode | null = null
+let balanceNode: StereoPannerNode | null = null
+let limiterNode: DynamicsCompressorNode | null = null
+// The bypass/enable gates live as VALUES, never as graph branches: when the
+// EQ is disabled or the whole studio is bypassed, the nodes simply glide to
+// their transparent neutral params (and back when re-enabled). This keeps
+// the "no rebuilds, no reconnections" lifecycle rule intact.
+let eqEnabledState = true
+let bypassState = false
 
 // Reserved EQ slots — filled at init, adjusted by Wave 3's EQ UI.
 export const EQ_BAND_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const
@@ -161,8 +176,13 @@ export function initPlayback() {
   analyserNode.smoothingTimeConstant = 0.8
 
   // EQ: 10 reserved peaking bands — 0 dB gain is transparent, so this chain
-  // is a no-op until Wave 3 gives the bands an API + UI.
+  // is a no-op until the Audio Studio drives them.
+  const preamp = ctx.createGain()
+  preamp.gain.value = 1 // 0 dB — transparent
+  preampNode = preamp
   let node: AudioNode = ctx.createMediaElementSource(audio)
+  node.connect(preamp)
+  node = preamp
   for (const freq of EQ_BAND_FREQS) {
     const band = ctx.createBiquadFilter()
     band.type = 'peaking'
@@ -219,7 +239,27 @@ export function initPlayback() {
   sideLevel.connect(merger, 0, 0)                // outL = mid + w·side
   sideLevel.connect(sideInvert); sideInvert.connect(merger, 0, 1) // outR = mid − w·side
   fxSideLevel = sideLevel
-  merger.connect(gainNode)
+
+  // Balance (v3.2.0) — a plain StereoPanner at pan 0 is bit-transparent.
+  const balance = ctx.createStereoPanner()
+  balance.pan.value = 0
+  balanceNode = balance
+  merger.connect(balance)
+
+  // Limiter (v3.2.0) — the protection stage after everything that can add
+  // gain (preamp/EQ boosts). At threshold 0 dB + ratio 1 it is transparent;
+  // engaged params come from limiterEngagedParams().
+  const limiter = ctx.createDynamicsCompressor()
+  const lp = limiterNeutralParams()
+  limiter.threshold.value = lp.threshold
+  limiter.knee.value = lp.knee
+  limiter.ratio.value = lp.ratio
+  limiter.attack.value = lp.attack
+  limiter.release.value = lp.release
+  limiterNode = limiter
+  balance.connect(limiter)
+
+  limiter.connect(gainNode)
   gainNode.connect(analyserNode)
   analyserNode.connect(ctx.destination)
 
@@ -416,7 +456,7 @@ export function initPlayback() {
       usePlayerStore.getState().clearSeekRequest()
     }
 
-    // ── EQ gains changed (Settings sliders / presets) ───────────────────
+    // ── EQ gains changed (Audio Studio sliders / presets) ────────────────
     if (state.eqGains !== prev.eqGains) {
       applyEqGains(state.eqGains)
     }
@@ -425,14 +465,27 @@ export function initPlayback() {
     if (state.audioFx !== prev.audioFx) {
       applyAudioFx(state.audioFx)
     }
+
+    // ── Audio Studio 3.2 stages (preamp / balance / limiter / gates) ────
+    if (state.preampDb !== prev.preampDb) applyPreamp(state.preampDb)
+    if (state.balance !== prev.balance) applyBalance(state.balance)
+    if (state.limiterEnabled !== prev.limiterEnabled) applyLimiter(state.limiterEnabled)
+    if (state.eqEnabled !== prev.eqEnabled) {
+      eqEnabledState = state.eqEnabled
+      applyEqEnabled()
+    }
+    if (state.studioBypass !== prev.studioBypass) {
+      bypassState = state.studioBypass
+      applyStudioState(state)
+    }
   })
 
   // Restore whatever EQ shape the user had when they last closed Aura.
   // (New fields in persisted state are simply absent — sanitizeGains turns
   // that into a flat curve, which is the zero-cost bypass.)
-  applyEqGains(usePlayerStore.getState().eqGains ?? [])
-  // Restore the FX state the same way (missing field → neutral graph).
-  applyAudioFx(usePlayerStore.getState().audioFx)
+  // v3.2.0 — the whole Studio state restores through one gate that honors
+  // eqEnabled + studioBypass, so a persisted bypassed state boots bypassed.
+  applyStudioState(usePlayerStore.getState())
 
   // Stats schema marker — fire-and-forget, purely for future migrations.
   ensureStatsSchemaMeta()
@@ -452,6 +505,10 @@ export function getAnalyser(): AnalyserNode | null {
 // so no routing/branch is ever needed. Clamped to ±12 dB, sanitized against
 // corrupted or foreign persisted state.
 export function applyEqGains(gains: number[]): void {
+  // Gate: while the EQ is disabled or the studio is bypassed the bands stay
+  // transparent — the new curve is kept in the store and lands the moment
+  // the gate reopens (applyEqEnabled / applyStudioState).
+  if (!eqEnabledState || bypassState) return
   const safe = sanitizeGains(gains)
   for (let i = 0; i < eqBands.length; i++) {
     eqBands[i].gain.setTargetAtTime(safe[i], ctx?.currentTime ?? 0, 0.03)
@@ -499,6 +556,9 @@ function ensureReverbIr(): void {
 }
 
 export function applyAudioFx(input: unknown): void {
+  // Bypass gate — same convention as applyEqGains: keep the state, stay
+  // transparent. Un-bypassing re-applies everything from the store.
+  if (bypassState) return
   const fx = sanitizeFx(input)
   if (fxBass) fxBass.gain.setTargetAtTime(fx.bassGain, ctx?.currentTime ?? 0, 0.04)
   if (fxTreble) fxTreble.gain.setTargetAtTime(fx.trebleGain, ctx?.currentTime ?? 0, 0.04)
@@ -530,5 +590,131 @@ export function getAudioFxSnapshot(): {
     compression: { threshold: fxComp.threshold.value, ratio: fxComp.ratio.value },
     reverbMix: { wet: fxWet.gain.value, dry: fxDry.gain.value, irReady: fxIrGenerated },
     stereoWidth: fxSideLevel.gain.value,
+  }
+}
+
+// ── Audio Studio 3.2 — preamp / balance / limiter / gates ───────────────────
+// All stage changes are PARAM writes on long-lived nodes (setTargetAtTime
+// glides, no disconnects, no rebuilds — spec §5.5). The gates (EQ enable,
+// studio bypass) are value-driven neutralization: nodes stay connected,
+// parameters glide to their transparent points, so enabling/disabling is
+// click-free and costs nothing while idle.
+
+/** Preamp: input gain before the EQ chain, −12…+12 dB (0 = transparent). */
+export function applyPreamp(db: number): void {
+  if (!preampNode || bypassState) return
+  const linear = Math.pow(10, clampPreampDb(db) / 20)
+  preampNode.gain.setTargetAtTime(linear, ctx?.currentTime ?? 0, 0.03)
+}
+
+/** Balance: −1 hard left … +1 hard right (0 = center, transparent). */
+export function applyBalance(pan: number): void {
+  if (!balanceNode || bypassState) return
+  balanceNode.pan.setTargetAtTime(clampBalance(pan), ctx?.currentTime ?? 0, 0.03)
+}
+
+/** Limiter: engaged = true protection stage, false = transparent defaults. */
+export function applyLimiter(enabled: boolean): void {
+  if (!limiterNode) return
+  const p = enabled && !bypassState ? limiterEngagedParams() : limiterNeutralParams()
+  const t = ctx?.currentTime ?? 0
+  limiterNode.threshold.setTargetAtTime(p.threshold, t, 0.04)
+  limiterNode.knee.setTargetAtTime(p.knee, t, 0.04)
+  limiterNode.ratio.setTargetAtTime(p.ratio, t, 0.04)
+  limiterNode.attack.setTargetAtTime(p.attack, t, 0.04)
+  limiterNode.release.setTargetAtTime(p.release, t, 0.04)
+}
+
+/**
+ * EQ enable gate. Disabled = every band glides to 0 dB (the acoustically
+ * transparent state) while the user's curve stays intact in the store —
+ * re-enabling restores it exactly. Reads the live store gains.
+ */
+export function applyEqEnabled(): void {
+  const on = eqEnabledState && !bypassState
+  const gains = on ? sanitizeGains(usePlayerStore.getState().eqGains ?? []) : new Array(10).fill(0)
+  const t = ctx?.currentTime ?? 0
+  for (let i = 0; i < eqBands.length; i++) {
+    eqBands[i].gain.setTargetAtTime(gains[i], t, 0.03)
+  }
+}
+
+/**
+ * Whole-studio bypass gate. TRUE neutralizes every stage (preamp 0 dB, EQ
+ * flat, FX neutral, balance center, limiter transparent); FALSE re-applies
+ * the full persisted state. One authoritative gate for the "Reset/Bypass"
+ * control in the Audio Studio header — still zero graph branches.
+ */
+export function applyStudioState(state: {
+  eqGains?: number[]
+  audioFx?: unknown
+  preampDb?: number
+  balance?: number
+  limiterEnabled?: boolean
+}): void {
+  const t = ctx?.currentTime ?? 0
+
+  // Preamp
+  if (preampNode) {
+    const db = bypassState ? 0 : clampPreampDb(state.preampDb ?? 0)
+    preampNode.gain.setTargetAtTime(Math.pow(10, db / 20), t, 0.03)
+  }
+
+  // EQ bands
+  const eqOn = !bypassState && eqEnabledState
+  const gains = eqOn ? sanitizeGains(state.eqGains ?? []) : new Array(10).fill(0)
+  for (let i = 0; i < eqBands.length; i++) {
+    eqBands[i].gain.setTargetAtTime(gains[i], t, 0.03)
+  }
+
+  // FX chain
+  const fx = bypassState
+    ? { bassGain: 0, trebleGain: 0, compression: 0, reverbMix: 0, stereoWidth: 1 }
+    : sanitizeFx(state.audioFx)
+  if (fxBass) fxBass.gain.setTargetAtTime(fx.bassGain, t, 0.04)
+  if (fxTreble) fxTreble.gain.setTargetAtTime(fx.trebleGain, t, 0.04)
+  if (fxComp) {
+    const cp = compressionParams(fx.compression)
+    fxComp.threshold.setTargetAtTime(cp.threshold, t, 0.04)
+    fxComp.ratio.setTargetAtTime(cp.ratio, t, 0.04)
+  }
+  if (fxDry && fxWet) {
+    const wetG = fx.reverbMix > 0 ? Math.min(0.9, fx.reverbMix * 0.9) : 0
+    const dryG = fx.reverbMix > 0 ? 1 - fx.reverbMix * 0.35 : 1
+    fxDry.gain.setTargetAtTime(dryG, t, 0.05)
+    fxWet.gain.setTargetAtTime(wetG, t, 0.05)
+  }
+  if (fx.reverbMix > 0) ensureReverbIr()
+  if (fxSideLevel) fxSideLevel.gain.setTargetAtTime(fx.stereoWidth, t, 0.04)
+
+  // Balance
+  if (balanceNode) {
+    balanceNode.pan.setTargetAtTime(bypassState ? 0 : clampBalance(state.balance ?? 0), t, 0.03)
+  }
+
+  // Limiter
+  if (limiterNode) {
+    const p = !bypassState && state.limiterEnabled ? limiterEngagedParams() : limiterNeutralParams()
+    limiterNode.threshold.setTargetAtTime(p.threshold, t, 0.04)
+    limiterNode.knee.setTargetAtTime(p.knee, t, 0.04)
+    limiterNode.ratio.setTargetAtTime(p.ratio, t, 0.04)
+    limiterNode.attack.setTargetAtTime(p.attack, t, 0.04)
+    limiterNode.release.setTargetAtTime(p.release, t, 0.04)
+  }
+}
+
+/** Live Studio stage values as the engine holds them (tests / debug tooling). */
+export function getStudioSnapshot(): {
+  preampDb: number; balance: number; eqBands: number[]
+  limiter: { threshold: number; ratio: number }; bypass: boolean; eqEnabled: boolean
+} | null {
+  if (!preampNode || !balanceNode || !limiterNode) return null
+  return {
+    preampDb: 20 * Math.log10(preampNode.gain.value || 1e-6),
+    balance: balanceNode.pan.value,
+    eqBands: eqBands.map((b) => b.gain.value),
+    limiter: { threshold: limiterNode.threshold.value, ratio: limiterNode.ratio.value },
+    bypass: bypassState,
+    eqEnabled: eqEnabledState,
   }
 }

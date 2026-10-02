@@ -155,7 +155,10 @@ export function PlayerBar() {
             cadence never reaches this chrome (see PillSeek). */}
         <PillSeek />
 
-        <div className="h-full flex items-center gap-4 px-5 pt-2">
+        {/* pt-3 (v3.2.0): reserves the hover-timestamp lane under the seek
+            line, so the elapsed/remaining text no longer overlaps the artwork
+            or the transport row. The bar's overall 76px height is unchanged. */}
+        <div className="h-full flex items-center gap-4 px-5 pt-3">
 
           {/* ── Left: clickable song info → opens Now Playing ── */}
           <div
@@ -413,23 +416,30 @@ function PillSeek() {
         />
         <div
           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow opacity-0 group-hover/pill:opacity-100 transition-opacity pointer-events-none"
-          style={{ left: `${shownProgress * 100}%`, transform: 'translate(-50%, -50%)' }}
+          style={{ left: `${shownProgress * 100}%`, transform: 'translate(-50%, -50%)', boxShadow: '0 1px 4px rgba(0,0,0,0.4), 0 0 0 1px var(--border-strong)' }}
         />
       </div>
 
       {/* Hover time labels — flanking the seek line, revealed on pill
-          hover (and pinned while dragging) */}
+          hover (and pinned while dragging).
+          v3.2.0 tester fix (§1.1): the labels sat at top-2 in 10px faint
+          text and sank into the song/progress area. They now ride just
+          under the track (top-[5px]), one step larger and in the tertiary
+          ink with medium weight — more readable without becoming dominant —
+          and the right label shows REMAINING time (elapsed | remaining),
+          matching how the tester described the pair. Content row padding
+          was widened (pt-3) so the lane is clear; bar proportions kept. */}
       <div
-        className={`absolute top-2 left-7 text-[10px] tabular-nums pointer-events-none transition-opacity duration-200 ${isSeekDragging ? 'opacity-100' : 'opacity-0 group-hover/pill:opacity-100'}`}
-        style={{ color: 'var(--text-faint)' }}
+        className={`absolute top-[5px] left-7 text-[11px] leading-none font-medium tabular-nums pointer-events-none transition-opacity duration-200 ${isSeekDragging ? 'opacity-100' : 'opacity-0 group-hover/pill:opacity-100'}`}
+        style={{ color: 'var(--text-tertiary)' }}
       >
         {formatTime(shownProgress * duration)}
       </div>
       <div
-        className={`absolute top-2 right-7 text-[10px] tabular-nums pointer-events-none transition-opacity duration-200 ${isSeekDragging ? 'opacity-100' : 'opacity-0 group-hover/pill:opacity-100'}`}
-        style={{ color: 'var(--text-faint)' }}
+        className={`absolute top-[5px] right-7 text-[11px] leading-none font-medium tabular-nums pointer-events-none transition-opacity duration-200 ${isSeekDragging ? 'opacity-100' : 'opacity-0 group-hover/pill:opacity-100'}`}
+        style={{ color: 'var(--text-tertiary)' }}
       >
-        {formatTime(duration)}
+        {duration > 0 ? `−${formatTime(Math.max(0, (1 - shownProgress) * duration))}` : formatTime(duration)}
       </div>
     </>
   )

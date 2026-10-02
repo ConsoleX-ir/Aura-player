@@ -97,6 +97,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pushMiniState: (state) => ipcRenderer.send('mini:state', state),
   setMiniVisible: (visible) => ipcRenderer.send('mini:setVisible', !!visible),
   miniAction: (action) => ipcRenderer.send('mini:action', String(action)),
+  // ── Mini player seek + volume (v3.2.0) ────────────────────────────────
+  // The widget asks the MAIN window to seek/set volume — the playback
+  // element stays exclusively in the main renderer. Main clamps both values.
+  miniSeek: (fraction) => ipcRenderer.send('mini:seek', Number(fraction)),
+  setMiniVolume: (volume) => ipcRenderer.send('mini:setVolume', Number(volume)),
+  // Main window side: the widget's seek/volume/mute requests arrive here.
+  onMediaSeek: (cb) => {
+    const listener = (_e, fraction) => cb(fraction)
+    ipcRenderer.on('media:seek', listener)
+    return () => ipcRenderer.removeListener('media:seek', listener)
+  },
+  onMediaVolume: (cb) => {
+    const listener = (_e, volume) => cb(volume)
+    ipcRenderer.on('media:volume', listener)
+    return () => ipcRenderer.removeListener('media:volume', listener)
+  },
   onMiniState: (cb) => {
     const listener = (_e, state) => cb(state)
     ipcRenderer.on('mini:state', listener)

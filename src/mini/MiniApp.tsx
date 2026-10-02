@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Play, Pause, SkipBack, SkipForward, Maximize2, X, Music2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Play, Pause, SkipBack, SkipForward, Maximize2, X, Music2, Volume2, VolumeX } from 'lucide-react'
+import { formatTime } from '@/lib/utils'
 
 // ── Mini state contract ──────────────────────────────────────────────────────
 // Pushed by the MAIN window's useMiniPlayerBridge over 'mini:state'. Kept as a
@@ -10,13 +11,18 @@ export interface MiniState {
   artist: string
   coverArt: string | null
   isPlaying: boolean
-  /** 0..1 playback progress — drives the artwork progress ring. */
+  /** 0..1 playback progress — drives the artwork progress ring + seek bar. */
   progress: number
+  /** Track duration in seconds (0 when unknown) — elapsed/remaining labels. */
+  durationSec?: number
+  /** v3.2.0 — mirrored volume/mute so the widget's controls agree with the app. */
+  volume?: number
+  muted?: boolean
   /** 'dark' | 'light' — applied as data-theme so tokens resolve correctly. */
   appearance: 'dark' | 'light'
   /** Aura 3.0 — theme identity (data-aura-theme) + resolved accent vars. */
   theme?: string
-  accent?: { d1: string; d2: string; d3: string; glow: string }
+  accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
   /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
   nextTitle?: string | null
 }
@@ -28,6 +34,9 @@ const INITIAL: MiniState = {
   coverArt: null,
   isPlaying: false,
   progress: 0,
+  durationSec: 0,
+  volume: 1,
+  muted: false,
   appearance: 'dark',
 }
 
@@ -50,7 +59,8 @@ export function MiniApp() {
   // window does this via App.tsx; here the appearance AND the Aura 3.0 theme
   // identity ride the state push, plus the resolved accent vars so the
   // widget's accent lighting always matches the main window (artwork-aware
-  // on Now Playing, theme color everywhere else).
+  // on Now Playing, theme color everywhere else) — and v3.2.0 adds the
+  // adaptive on-accent ink.
   useEffect(() => {
     const root = document.documentElement
     root.dataset.theme = state.appearance
@@ -62,10 +72,11 @@ export function MiniApp() {
       root.style.setProperty('--color-dynamic-2', a.d2)
       root.style.setProperty('--color-dynamic-3', a.d3)
       root.style.setProperty('--color-dynamic-glow', a.glow)
+      if (a.onAccent) root.style.setProperty('--text-on-accent', a.onAccent)
     }
   }, [state.appearance, state.theme, state.accent])
 
-  const act = (action: 'togglePlay' | 'next' | 'previous' | 'restore' | 'close') =>
+  const act = (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') =>
     window.electronAPI?.miniAction?.(action)
 
   return (
@@ -134,7 +145,7 @@ export function MiniApp() {
           </div>
         </button>
 
-        {/* Title / artist + hover-revealed next-up strip (queue access) */}
+        {/* Title / artist + seek bar + times (v3.2.0) */}
         <div className="flex-1 min-w-0 relative">
           <p className="text-[12.5px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>
             {state.hasSong ? state.title : 'Nothing playing'}
@@ -159,10 +170,15 @@ export function MiniApp() {
               Next: {state.nextTitle}
             </button>
           )}
+
+          {/* Seek row — click/drag anywhere on the bar asks the MAIN window
+              to seek (media:seek). The artwork ring stays the at-a-glance
+              indicator; this is the precise control. */}
+          <MiniSeek progress={state.progress} durationSec={state.durationSec ?? 0} hasSong={state.hasSong} />
         </div>
 
-        {/* Transport — no-drag so clicks work inside the draggable card */}
-        <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        {/* Transport + volume — no-drag so clicks work inside the draggable card */}
+        <div className="flex items-center gap-0.5 shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <button
             onClick={() => act('previous')}
             title="Previous"
@@ -193,6 +209,13 @@ export function MiniApp() {
 
           <span className="w-px h-5 mx-1" style={{ background: 'var(--border-default)' }} />
 
+          {/* Volume (v3.2.0) — mute toggle + compact slider. Both mirror the
+              main window's state via the snapshot and act through the same
+              store funnels, so volume is one shared value everywhere. */}
+          <MiniVolume volume={state.volume ?? 1} muted={!!state.muted} />
+
+          <span className="w-px h-5 mx-1" style={{ background: 'var(--border-default)' }} />
+
           {/* Restore main window — never closes the app, just brings the big
               player back (and hides this widget). */}
           <button
@@ -215,6 +238,148 @@ export function MiniApp() {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── MiniSeek (v3.2.0) ────────────────────────────────────────────────────────
+// A thin seek bar with elapsed/remaining micro-labels. Pointer events are
+// captured so a drag that leaves the tiny bar still tracks; the fraction is
+// sent on every move for live scrubbing (the main renderer's seekTo already
+// coalesces by writing audio.currentTime directly). Progress keeps updating
+// from the snapshot while not dragging.
+function MiniSeek({ progress, durationSec, hasSong }: { progress: number; durationSec: number; hasSong: boolean }) {
+  const barRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [dragP, setDragP] = useState(0)
+  const dragPRef = useRef(0)
+
+  const fractionFrom = (clientX: number): number => {
+    const el = barRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+  }
+
+  const shown = dragging ? dragP : progress
+
+  const onDown = (e: React.PointerEvent) => {
+    if (!hasSong) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragging(true)
+    const f = fractionFrom(e.clientX)
+    dragPRef.current = f
+    setDragP(f)
+    window.electronAPI?.miniSeek?.(f)
+  }
+  const onMove = (e: React.PointerEvent) => {
+    if (!dragging) return
+    const f = fractionFrom(e.clientX)
+    dragPRef.current = f
+    setDragP(f)
+    window.electronAPI?.miniSeek?.(f)
+  }
+  const onUp = () => setDragging(false)
+
+  const elapsed = shown * durationSec
+  const remaining = Math.max(0, (1 - shown) * durationSec)
+
+  return (
+    <div
+      className="flex items-center gap-1.5 mt-1"
+      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      data-mini-seek
+    >
+      <span className="text-[9px] tabular-nums w-7 text-right shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+        {hasSong && durationSec > 0 ? formatTime(elapsed) : '–:––'}
+      </span>
+      <div
+        ref={barRef}
+        role="slider"
+        tabIndex={0}
+        aria-label="Seek"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(shown * 100)}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onKeyDown={(e) => {
+          if (!hasSong) return
+          if (e.key === 'ArrowRight') window.electronAPI?.miniSeek?.(Math.min(1, shown + 0.05))
+          if (e.key === 'ArrowLeft') window.electronAPI?.miniSeek?.(Math.max(0, shown - 0.05))
+        }}
+        className="relative flex-1 h-2.5 flex items-center cursor-pointer group/seek"
+        style={{ touchAction: 'none' }}
+      >
+        <div className="h-1 w-full rounded-full" style={{ background: 'var(--glass-3)' }} />
+        <div
+          className="absolute h-1 rounded-full pointer-events-none"
+          style={{
+            width: `${shown * 100}%`,
+            background: 'linear-gradient(90deg, var(--accent), var(--accent-strong))',
+            transition: dragging ? 'none' : 'width 0.15s linear',
+          }}
+        />
+        <div
+          className="absolute w-2 h-2 rounded-full opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+          style={{
+            left: `${shown * 100}%`,
+            transform: 'translate(-50%, -50%)',
+            background: 'var(--text-on-accent)',
+            boxShadow: '0 0 0 1px var(--border-strong)',
+          }}
+        />
+      </div>
+      <span className="text-[9px] tabular-nums w-7 shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+        {hasSong && durationSec > 0 ? `−${formatTime(remaining)}` : '–:––'}
+      </span>
+    </div>
+  )
+}
+
+// ── MiniVolume (v3.2.0) ──────────────────────────────────────────────────────
+// Mute toggle + a compact slider. While the user is dragging, a local value
+// leads (the store echo can take up to one heartbeat); on release the
+// snapshot becomes authoritative again.
+function MiniVolume({ volume, muted }: { volume: number; muted: boolean }) {
+  const [dragging, setDragging] = useState(false)
+  const [local, setLocal] = useState(volume)
+  useEffect(() => { if (!dragging) setLocal(volume) }, [volume, dragging])
+
+  const effective = muted ? 0 : (dragging ? local : volume)
+  const pct = Math.min(1, Math.max(0, effective)) * 100
+
+  return (
+    <div className="flex items-center gap-1" data-mini-volume>
+      <button
+        onClick={() => window.electronAPI?.miniAction?.('toggleMute')}
+        title={muted ? 'Unmute' : 'Mute'}
+        aria-label={muted ? 'Unmute' : 'Mute'}
+        className="p-1.5 rounded-lg icon-hover"
+        style={{ color: 'var(--text-tertiary)' }}
+      >
+        {effective === 0 ? <VolumeX size={13} /> : <Volume2 size={13} />}
+      </button>
+      <input
+        type="range"
+        min={0} max={1} step={0.01}
+        value={muted ? 0 : effective}
+        onPointerDown={() => setDragging(true)}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
+        onChange={(e) => {
+          const v = Number(e.target.value)
+          setLocal(v)
+          window.electronAPI?.setMiniVolume?.(v)
+        }}
+        aria-label="Volume"
+        className="w-12 h-1 rounded-full appearance-none cursor-pointer accent-[var(--accent)]"
+        style={{
+          background: `linear-gradient(to right, var(--accent) ${pct}%, var(--glass-3) ${pct}%)`,
+        }}
+      />
     </div>
   )
 }

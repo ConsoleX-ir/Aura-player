@@ -149,6 +149,76 @@
   --accent-2-border: rgba(250, 250, 250, 0.36);
 }
 
+/* ═════════════════════════════════════════════════════════════════════
+   V3.2.0 SPECIAL IDENTITIES — four additive first-class themes. Each one
+   remaps the same primitive ink scale + ambient cloud + secondary accent
+   trio as the eight above, so the ENTIRE semantic layer (surfaces,
+   borders, chrome, glass, status veils) resolves automatically — no
+   component branches anywhere (spec §4: centralized tokens, not per-
+   component theme switches). Persisted ids are new strings; existing
+   selections and the 'custom' accent path are untouched.
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ═══ ORCHID — plum-magenta bloom ═══════════════════════════════════ */
+[data-aura-theme='orchid'] {
+  --aura-ink-900: #120A11;
+  --aura-ink-800: #1A0F18;
+  --aura-ink-700: #22141F;
+  --aura-ink-600: #2C1A29;
+  --aura-cloud-500: #D9A6CE;
+  --cloud:       #D9A6CE;
+  --cloud-soft:  rgba(217, 166, 206, 0.15);
+  --cloud-glow:  rgba(217, 166, 206, 0.08);
+  --accent-2:        #EFA8DF;
+  --accent-2-veil:   rgba(239, 168, 223, 0.12);
+  --accent-2-border: rgba(239, 168, 223, 0.38);
+}
+
+/* ═══ INDIGO — deep blue-violet night ═════════════════════════════ */
+[data-aura-theme='indigo'] {
+  --aura-ink-900: #080A16;
+  --aura-ink-800: #0C0F20;
+  --aura-ink-700: #10142B;
+  --aura-ink-600: #151A38;
+  --aura-cloud-500: #A3AED9;
+  --cloud:       #A3AED9;
+  --cloud-soft:  rgba(163, 174, 217, 0.15);
+  --cloud-glow:  rgba(163, 174, 217, 0.08);
+  --accent-2:        #8F9FEF;
+  --accent-2-veil:   rgba(143, 159, 239, 0.12);
+  --accent-2-border: rgba(143, 159, 239, 0.38);
+}
+
+/* ═══ CHAMPAGNE — warm aged gold ═══════════════════════════════════ */
+[data-aura-theme='champagne'] {
+  --aura-ink-900: #110E08;
+  --aura-ink-800: #191409;
+  --aura-ink-700: #1F1910;
+  --aura-ink-600: #2A2116;
+  --aura-cloud-500: #D9CCA0;
+  --cloud:       #D9CCA0;
+  --cloud-soft:  rgba(217, 204, 160, 0.15);
+  --cloud-glow:  rgba(217, 204, 160, 0.08);
+  --accent-2:        #EFDFA8;
+  --accent-2-veil:   rgba(239, 223, 168, 0.12);
+  --accent-2-border: rgba(239, 223, 168, 0.38);
+}
+
+/* ═══ AURORA — boreal teal-green ═══════════════════════════════════ */
+[data-aura-theme='aurora'] {
+  --aura-ink-900: #060F0C;
+  --aura-ink-800: #0A1613;
+  --aura-ink-700: #0C1D19;
+  --aura-ink-600: #11251F;
+  --aura-cloud-500: #9AD9C8;
+  --cloud:       #9AD9C8;
+  --cloud-soft:  rgba(154, 217, 200, 0.15);
+  --cloud-glow:  rgba(154, 217, 200, 0.08);
+  --accent-2:        #7FE0C8;
+  --accent-2-veil:   rgba(127, 224, 200, 0.12);
+  --accent-2-border: rgba(127, 224, 200, 0.38);
+}
+
 /* ═══ LIGHT PAPERS — per-identity paper tint over the light foundation ══ */
 [data-aura-theme='ocean'][data-theme='light']     { --surface-base: #EFF3F8; --color-chrome-solid: #f6f9fc; }
 [data-aura-theme='amethyst'][data-theme='light']  { --surface-base: #F4F2F8; --color-chrome-solid: #faf9fc; }
@@ -157,3 +227,8 @@
 [data-aura-theme='crimson'][data-theme='light']   { --surface-base: #F8F2F3; --color-chrome-solid: #fbf7f8; }
 [data-aura-theme='sunset'][data-theme='light']    { --surface-base: #F8F4EE; --color-chrome-solid: #fcf9f5; }
 [data-aura-theme='mono'][data-theme='light']      { --surface-base: #F6F6F7; --color-chrome-solid: #fafafa; }
+/* v3.2.0 identities carry their own light papers too */
+[data-aura-theme='orchid'][data-theme='light']    { --surface-base: #F8F1F6; --color-chrome-solid: #fbf7fa; }
+[data-aura-theme='indigo'][data-theme='light']    { --surface-base: #F0F1F8; --color-chrome-solid: #f7f8fc; }
+[data-aura-theme='champagne'][data-theme='light'] { --surface-base: #F9F5EC; --color-chrome-solid: #fcf9f3; }
+[data-aura-theme='aurora'][data-theme='light']    { --surface-base: #EEF6F2; --color-chrome-solid: #f6fbf9; }

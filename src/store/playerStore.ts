@@ -9,6 +9,10 @@ import {
 } from '@/lib/queueEngine'
 import { eqPresetById, clampDb, isFlat, sanitizeGains } from '@/lib/eq'
 import { sanitizeFx, sanitizeUserPresets, NEUTRAL_FX, type AudioFxState, type FxUserPreset } from '@/lib/audioFx'
+import {
+  clampPreampDb, clampBalance, sanitizeEqUserPresets,
+  type EqUserPreset,
+} from '@/lib/audioStudio'
 import { appendSmartPicks, pruneSmartIds } from '@/lib/smartQueue'
 
 interface PlayerState {
@@ -184,6 +188,39 @@ interface PlayerState {
   fxUserPresets: FxUserPreset[]
   saveFxPreset: (name: string) => void
   deleteFxPreset: (name: string) => void
+  // v3.2.0 — full preset CRUD (spec §5.7): rename, duplicate.
+  renameFxPreset: (oldName: string, newName: string) => void
+  duplicateFxPreset: (name: string) => void
+
+  // ── Audio Studio 3.2 (v3.2.0 — the dedicated audio workspace) ───────
+  // Master-stage + gate state. Every stage keeps the zero-cost bypass
+  // contract (see lib/audioStudio.ts): transparent neutral values, param
+  // glides, no graph rebuilds. Runtime AudioNode objects NEVER live here —
+  // only serializable numbers/booleans (spec §5.8).
+  /** Input gain before the EQ chain, −12…+12 dB (0 = transparent). */
+  preampDb: number
+  setPreampDb: (v: number) => void
+  /** Stereo position, −1 hard left … +1 hard right (0 = center). */
+  balance: number
+  setBalance: (v: number) => void
+  /** Protection stage after the boost-capable stages. */
+  limiterEnabled: boolean
+  setLimiterEnabled: (v: boolean) => void
+  /** EQ gate — disabled flattens the bands but KEEPS the user's curve. */
+  eqEnabled: boolean
+  setEqEnabled: (v: boolean) => void
+  /** Whole-studio gate — neutralizes every stage while set. */
+  studioBypass: boolean
+  setStudioBypass: (v: boolean) => void
+  /** One-click reset of the entire studio to its neutral graph. */
+  resetStudio: () => void
+  /** User-saved EQ curves — full CRUD, persisted. */
+  eqUserPresets: EqUserPreset[]
+  saveEqPreset: (name: string) => void
+  renameEqPreset: (id: string, newName: string) => void
+  duplicateEqPreset: (id: string) => void
+  deleteEqPreset: (id: string) => void
+  applyEqUserPreset: (id: string) => void
 
   // Sleep Timer — a timestamp (ms) to auto-pause at, or null when off.
   // Deliberately NOT persisted: a timer left running from a previous session
@@ -626,6 +663,82 @@ export const usePlayerStore = create<PlayerState>()(
       deleteFxPreset: (name) => set((s) => ({
         fxUserPresets: s.fxUserPresets.filter((p) => p.name !== name),
       })),
+      renameFxPreset: (oldName, newName) => set((s) => {
+        const trimmed = newName.trim()
+        if (!trimmed || trimmed === oldName) return s
+        // Rename onto an existing name collapses both into one — overwrite.
+        return {
+          fxUserPresets: s.fxUserPresets.map((p) =>
+            p.name === oldName ? { ...p, name: trimmed } : p.name === trimmed ? null : p
+          ).filter((p): p is FxUserPreset => p !== null),
+        }
+      }),
+      duplicateFxPreset: (name) => set((s) => {
+        const src = s.fxUserPresets.find((p) => p.name === name)
+        if (!src) return s
+        let copy = `${src.name} copy`
+        let n = 2
+        while (s.fxUserPresets.some((p) => p.name === copy)) copy = `${src.name} copy ${n++}`
+        return { fxUserPresets: [...s.fxUserPresets, { name: copy, state: { ...src.state }, createdAt: Date.now() }] }
+      }),
+
+      // ── Audio Studio 3.2 ───────────────────────────────────────────
+      preampDb: 0,
+      setPreampDb: (v) => set({ preampDb: clampPreampDb(v) }),
+      balance: 0,
+      setBalance: (v) => set({ balance: clampBalance(v) }),
+      limiterEnabled: false,
+      setLimiterEnabled: (v) => set({ limiterEnabled: v }),
+      eqEnabled: true,
+      setEqEnabled: (v) => set({ eqEnabled: v }),
+      studioBypass: false,
+      setStudioBypass: (v) => set({ studioBypass: v }),
+      resetStudio: () => set({
+        eqGains: sanitizeGains(undefined),
+        eqPreset: 'flat',
+        eqEnabled: true,
+        audioFx: { ...NEUTRAL_FX },
+        preampDb: 0,
+        balance: 0,
+        limiterEnabled: false,
+        studioBypass: false,
+      }),
+      eqUserPresets: [],
+      saveEqPreset: (name) => set((s) => {
+        const trimmed = name.trim()
+        if (!trimmed) return s
+        const rest = s.eqUserPresets.filter((p) => p.name !== trimmed)
+        return {
+          eqUserPresets: [...rest, { id: `eq-${Date.now()}`, name: trimmed, gains: [...s.eqGains], createdAt: Date.now() }],
+          eqPreset: trimmed,
+        }
+      }),
+      renameEqPreset: (id, newName) => set((s) => {
+        const trimmed = newName.trim()
+        if (!trimmed) return s
+        return {
+          eqUserPresets: s.eqUserPresets.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+          eqPreset: s.eqPreset === s.eqUserPresets.find((p) => p.id === id)?.name ? trimmed : s.eqPreset,
+        }
+      }),
+      duplicateEqPreset: (id) => set((s) => {
+        const src = s.eqUserPresets.find((p) => p.id === id)
+        if (!src) return s
+        let copy = `${src.name} copy`
+        let n = 2
+        while (s.eqUserPresets.some((p) => p.name === copy)) copy = `${src.name} copy ${n++}`
+        return {
+          eqUserPresets: [...s.eqUserPresets, { id: `eq-${Date.now()}`, name: copy, gains: [...src.gains], createdAt: Date.now() }],
+        }
+      }),
+      deleteEqPreset: (id) => set((s) => ({
+        eqUserPresets: s.eqUserPresets.filter((p) => p.id !== id),
+      })),
+      applyEqUserPreset: (id) => set((s) => {
+        const preset = s.eqUserPresets.find((p) => p.id === id)
+        if (!preset) return s
+        return { eqGains: [...preset.gains], eqPreset: preset.name }
+      }),
 
       sleepTimerEndsAt: null,
       setSleepTimer: (minutes) => set({
@@ -686,6 +799,13 @@ export const usePlayerStore = create<PlayerState>()(
         // Aura 3.0 — effects state + user presets survive restarts.
         audioFx: s.audioFx,
         fxUserPresets: s.fxUserPresets,
+        // Aura 3.2 — Audio Studio state survives restarts.
+        preampDb: s.preampDb,
+        balance: s.balance,
+        limiterEnabled: s.limiterEnabled,
+        eqEnabled: s.eqEnabled,
+        studioBypass: s.studioBypass,
+        eqUserPresets: s.eqUserPresets,
         appearance: s.appearance,
         watchFolders: s.watchFolders,
         // Wave 0 — persistence stability: tombstones keep deleted songs
@@ -733,6 +853,13 @@ export const usePlayerStore = create<PlayerState>()(
           // or foreign snapshots before they can reach the engine.
           audioFx: sanitizeFx((p as { audioFx?: unknown }).audioFx),
           fxUserPresets: sanitizeUserPresets((p as { fxUserPresets?: unknown }).fxUserPresets),
+          // Aura 3.2 — Studio fields sanitized the same way.
+          preampDb: clampPreampDb(typeof (p as { preampDb?: unknown }).preampDb === 'number' ? (p as { preampDb: number }).preampDb : 0),
+          balance: clampBalance(typeof (p as { balance?: unknown }).balance === 'number' ? (p as { balance: number }).balance : 0),
+          limiterEnabled: (p as { limiterEnabled?: unknown }).limiterEnabled === true,
+          eqEnabled: (p as { eqEnabled?: unknown }).eqEnabled !== false, // default on
+          studioBypass: (p as { studioBypass?: unknown }).studioBypass === true,
+          eqUserPresets: sanitizeEqUserPresets((p as { eqUserPresets?: unknown }).eqUserPresets),
           queue,
           naturalQueue,
           currentSong,

@@ -37,7 +37,8 @@ export interface Playlist {
 
 export type RepeatMode = 'none' | 'one' | 'all'
 // 'rewind' = Aura Rewind (Wave 4) — the monthly listening-story destination.
-export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind' | 'explore' | 'smart' | 'artist' | 'album' | 'history'
+// 'studio' = Audio Studio (v3.2.0) — the dedicated audio workspace destination.
+export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind' | 'explore' | 'smart' | 'artist' | 'album' | 'history' | 'studio'
 
 // ── Folder watching (Wave 4) ─────────────────────────────────────────────
 // One change event per watched folder, already debounced in the main
@@ -191,7 +192,12 @@ export interface ElectronAPI {
   // launch attempt routed to the already-running instance.
   onFileOpened: (cb: (filePath: string) => void) => () => void
   // Global media keys and Windows taskbar thumbnail controls both arrive here.
-  onMediaCommand: (cb: (command: 'toggle' | 'next' | 'previous') => void) => () => void
+  // v3.2.0 — 'mute' joins the funnel (the mini player's mute button).
+  onMediaCommand: (cb: (command: 'toggle' | 'next' | 'previous' | 'mute') => void) => () => void
+  // v3.2.0 — the mini player's seek/volume requests arrive on their own
+  // narrow channels (values pre-clamped by the main process).
+  onMediaSeek: (cb: (fraction: number) => void) => () => void
+  onMediaVolume: (cb: (volume: number) => void) => () => void
   syncPlaybackState: (isPlaying: boolean) => void
   // ── Folder watching (Wave 4) ────────────────────────────────────────────
   // Replaces the live watcher set with exactly the given folders (recursive).
@@ -232,12 +238,15 @@ export interface ElectronAPI {
     appearance: 'dark' | 'light'
     /** Aura 3.0 — theme identity + resolved accent vars (artwork-aware). */
     theme?: string
-    accent?: { d1: string; d2: string; d3: string; glow: string }
+    accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
     /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
     nextTitle?: string | null
   }) => void
   setMiniVisible: (visible: boolean) => void
-  miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'restore' | 'close') => void
+  miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') => void
+  // v3.2.0 — widget-side seek + volume asks (main clamps and forwards).
+  miniSeek: (fraction: number) => void
+  setMiniVolume: (volume: number) => void
   onMiniState: (cb: (state: {
     hasSong: boolean
     title: string
@@ -247,7 +256,7 @@ export interface ElectronAPI {
     progress: number
     appearance: 'dark' | 'light'
     theme?: string
-    accent?: { d1: string; d2: string; d3: string; glow: string }
+    accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
     nextTitle?: string | null
   }) => void) => () => void
   onMiniVisibility: (cb: (visible: boolean) => void) => () => void

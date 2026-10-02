@@ -34,7 +34,29 @@ export function useMediaKeys() {
       if (command === 'toggle') usePlayerStore.getState().togglePlay()
       else if (command === 'next') usePlayerStore.getState().nextSong()
       else if (command === 'previous') usePlayerStore.getState().prevSong()
+      // v3.2.0 — the mini player's mute button rides the same funnel.
+      else if (command === 'mute') usePlayerStore.getState().toggleMute()
     })
+  }, [])
+
+  // ── Mini player seek + volume (v3.2.0) ─────────────────────────────
+  // The widget never touches the audio element; its asks arrive here and
+  // are executed against the SAME store actions every other surface uses —
+  // one authoritative playback pipeline, no parallel control paths.
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.onMediaSeek || !api?.onMediaVolume) return
+    const offSeek = api.onMediaSeek((fraction) => {
+      if (typeof fraction === 'number' && isFinite(fraction)) {
+        usePlayerStore.getState().seekTo(Math.min(1, Math.max(0, fraction)))
+      }
+    })
+    const offVolume = api.onMediaVolume((volume) => {
+      if (typeof volume === 'number' && isFinite(volume)) {
+        usePlayerStore.getState().setVolume(Math.min(1, Math.max(0, volume)))
+      }
+    })
+    return () => { offSeek(); offVolume() }
   }, [])
 
   // Push the thumbar icon state to main (existing v1.x integration).

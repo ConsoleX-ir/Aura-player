@@ -1,5 +1,5 @@
-import { motion, AnimatePresence } from 'framer-motion'
-import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, ChevronRight, Settings as SettingsIcon, History, Clock, Globe, Sparkles, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, ChevronRight, Settings as SettingsIcon, History, Clock, Globe, Sparkles, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
@@ -9,19 +9,22 @@ import { PlaylistModal } from '../Modals/PlaylistModal'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
 import { EmptyState } from '@/components/States/EmptyState'
 
-// ── Sidebar 3.0 (Aura 3.0 Wave 7) ───────────────────────────────────────────
-// The floating navigation card gains a REAL collapse: expanded (icons +
-// labels) ⇄ collapsed (icons only), persisted across restarts. The width
-// transition is a 200ms ease on the card itself — the main content resizes
-// with the same motion, so the layout reads as one deliberate movement.
-// Collapsed rows keep their tooltips (title attrs) and center their icons;
-// the playlists list folds away (the + button stays); the now-playing chip
-// degrades to artwork-only.
-//
-// Selection consistency fix (spec §10): the Library/Favorites rows no longer
-// stack a leading accent bar ON TOP of the gel pill — the travelling pill +
-// the accent-colored icon ARE the selected state, matching every other
-// destination row's language. No more nested/div-like double indication.
+// ── Sidebar 3.2 (Aura 3.2.0 — collapse polish + motion language) ────────────
+// v3.0 gave the sidebar a REAL collapse; 3.2 makes it feel designed:
+//   • The collapse control is a proper 26px chip (hover veil, press scale,
+//     animated icon crossfade) instead of a floating 13px glyph.
+//   • Destination rows (Explore/Smart/History/Rewind) now share the SAME
+//     travelling gel pill as Library/Favorites — one selection language,
+//     with the indicator physically animating between items.
+//   • Labels fade/slide out on collapse and back in on expand (Animate-
+//     Presence, opacity/transform only) so the width change, icon recenter
+//     and label fade read as ONE coordinated movement instead of a snap.
+//   • Icon colors transition via CSS (see [data-liquid-tabs] svg rule in
+//     index.css); hover/focus feedback rides the existing utilities.
+//   • All of it honors prefers-reduced-motion (per-animation here + the
+//     global <MotionConfig reducedMotion="user"> in App) and Performance
+//     Mode inherits the same stillness through liquid.ts's guards.
+// Selection consistency fix (spec §10) preserved: one indicator, no stacks.
 
 export function Sidebar() {
   // Narrow selectors — Sidebar is mounted almost the entire time the app is
@@ -38,6 +41,7 @@ export function Sidebar() {
   const libraryCount = usePlayerStore((s) => s.library.length)
   const collapsed = usePlayerStore((s) => s.sidebarCollapsed)
   const toggleCollapsed = usePlayerStore((s) => s.toggleSidebarCollapsed)
+  const reduceMotion = useReducedMotion()
   const { importFolder, importFiles, importing, progress } = useLibraryImport()
 
   const nav = [
@@ -48,13 +52,17 @@ export function Sidebar() {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
 
   // Destination rows — one consistent visual language (icon + label; selected
-  // = glass surface + accent icon; collapsed = centered icon + tooltip).
+  // = gel pill + accent icon). Rendered through LiquidTabs so the selection
+  // indicator TRAVELS between items (v3.2.0 motion spec §2.2); a value
+  // outside this group (e.g. playlist/settings) tucks the pill away.
   const destinations = [
-    { id: 'explore' as const, label: 'Explore', icon: Globe, title: 'Stream free music from Audius' },
-    { id: 'smart' as const, label: 'Smart Playlists', icon: Sparkles, title: 'Engine-built lists from your listening history — made on-device' },
-    { id: 'history' as const, label: 'Listening History', icon: Clock, title: 'Every session recorded on this device' },
-    { id: 'rewind' as const, label: 'Aura Rewind', icon: History, title: 'Your month, told by your own listening' },
+    { id: 'studio' as const, label: 'Audio Studio', title: 'The live audio workspace — EQ, effects, master stages', icon: SlidersHorizontal },
+    { id: 'explore' as const, label: 'Explore', title: 'Stream free music from Audius', icon: Globe },
+    { id: 'smart' as const, label: 'Smart Playlists', title: 'Engine-built lists from your listening history — made on-device', icon: Sparkles },
+    { id: 'history' as const, label: 'Listening History', title: 'Every session recorded on this device', icon: Clock },
+    { id: 'rewind' as const, label: 'Aura Rewind', title: 'Your month, told by your own listening', icon: History },
   ]
+  const destinationView = destinations.some((d) => d.id === activeView) ? (activeView as 'studio' | 'explore' | 'smart' | 'history' | 'rewind') : ('' as 'studio')
 
   return (
     /* ── Floating navigation card (v2.1.0, collapsible since 3.0) ────────
@@ -77,18 +85,31 @@ export function Sidebar() {
         boxShadow: 'var(--shadow-3), inset 0 1px 0 var(--border-emphasis)',
       }}
     >
-      {/* Collapse toggle — sits above the import action; right-aligned when
-          expanded (out of the button's way), centered in the rail. */}
-      <div className={collapsed ? 'flex justify-center pt-2.5 px-2' : 'flex justify-end pt-2.5 px-2.5'}>
+      {/* Collapse toggle — v3.2.0: a designed 26px chip in a fixed-height
+          header row (right-aligned expanded, centered in the rail), with a
+          crossfading icon so the control itself participates in the motion
+          instead of snapping between two glyphs. */}
+      <div className={collapsed ? 'flex justify-center pt-2 px-2' : 'flex justify-end pt-2 px-2.5'}>
         <button
           onClick={toggleCollapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-expanded={!collapsed}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="p-1 rounded-lg icon-hover"
+          className="w-[26px] h-[26px] rounded-lg icon-hover flex items-center justify-center"
           style={{ color: 'var(--text-faint)' }}
         >
-          {collapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />}
+          <AnimatePresence initial={false} mode="wait">
+            <motion.span
+              key={collapsed ? 'open' : 'close'}
+              initial={{ opacity: 0, rotate: reduceMotion ? 0 : collapsed ? -45 : 45, scale: 0.7 }}
+              animate={{ opacity: 1, rotate: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.7 }}
+              transition={{ duration: reduceMotion ? 0 : 0.14, ease: [0.4, 0, 0.2, 1] }}
+              className="flex"
+            >
+              {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+            </motion.span>
+          </AnimatePresence>
         </button>
       </div>
 
@@ -242,13 +263,29 @@ export function Sidebar() {
       {/* Now playing chip — artwork-only in the rail */}
       <SidebarNowPlaying collapsed={collapsed} />
 
-      {/* Destinations — one consistent row language, icons-only when collapsed */}
-      <div className={collapsed ? 'px-1.5 pt-3 space-y-0.5' : 'px-2.5 pt-3 space-y-0.5'}>
-        {destinations.map((d) => <DestinationRow key={d.id} d={d} collapsed={collapsed} />)}
+      {/* Destinations — v3.2.0: the travelling gel pill (LiquidTabs row),
+          icons-only when collapsed; the pill re-parks via the ResizeObserver.
+          Same selection language as Library/Favorites above. */}
+      <div className={collapsed ? 'px-1.5 pt-3' : 'px-2.5 pt-3'}>
+        <LiquidTabs<string>
+          variant="row"
+          hideLabels={collapsed}
+          items={destinations.map(({ id, label, title, icon: Icon }) => ({
+            id,
+            label,
+            title: collapsed ? label : title,
+            icon: <Icon size={15} className="transition-colors" style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
+          }))}
+          value={destinationView}
+          onChange={(id) => setActiveView(id as 'studio' | 'explore' | 'smart' | 'history' | 'rewind')}
+          ariaLabel="Destinations"
+        />
       </div>
 
-      {/* Settings — separated from the library nav since it's a different kind of view.
-          Inside the floating card the divider is an inset hairline, not an edge. */}
+      {/* Settings — separated from the nav groups since it's a different kind
+          of view. Inside the floating card the divider is an inset hairline.
+          The label rides the shared CollapseLabel motion (fade/slide with the
+          collapse, no mount pop). */}
       <div className={collapsed ? 'p-1.5 pt-2' : 'p-2.5 pt-2'}>
         <div className="mx-1 mb-2 h-px" style={{ background: 'var(--border-subtle)' }} />
         <button
@@ -266,8 +303,8 @@ export function Sidebar() {
           title={collapsed ? 'Settings' : undefined}
           aria-label={collapsed ? 'Settings' : undefined}
         >
-          <SettingsIcon size={15} style={activeView === 'settings' ? { color: 'var(--accent)' } : undefined} />
-          {!collapsed && <span>Settings</span>}
+          <SettingsIcon size={15} className="transition-colors" style={activeView === 'settings' ? { color: 'var(--accent)' } : undefined} />
+          {!collapsed && <CollapseLabel reduceMotion={!!reduceMotion}><span>Settings</span></CollapseLabel>}
         </button>
       </div>
 
@@ -277,38 +314,6 @@ export function Sidebar() {
         onClose={() => setShowPlaylistModal(false)}
       />
     </motion.aside>
-  )
-}
-
-// One destination row — Explore / Smart / History / Rewind all speak the same
-// selected-state language now (glass surface + accent icon), matching the
-// Library/Favorites gel pill rather than inventing per-row furniture.
-function DestinationRow({ d, collapsed }: {
-  d: { id: 'explore' | 'smart' | 'history' | 'rewind'; label: string; icon: typeof Globe; title: string }
-  collapsed: boolean
-}) {
-  const activeView = usePlayerStore((s) => s.activeView)
-  const setActiveView = usePlayerStore((s) => s.setActiveView)
-  const active = activeView === d.id
-  return (
-    <button
-      onClick={() => setActiveView(d.id)}
-      className={collapsed
-        ? 'w-full flex items-center justify-center py-2 rounded-xl text-sm transition-all'
-        : 'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all'}
-      style={{
-        transitionDuration: 'var(--dur-fast)',
-        color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-        background: active ? 'var(--glass-2)' : 'transparent',
-      }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--glass-1)' }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
-      title={collapsed ? d.label : d.title}
-      aria-label={collapsed ? d.label : undefined}
-    >
-      <d.icon size={15} style={active ? { color: 'var(--accent)' } : undefined} />
-      {!collapsed && <span className="flex-1 text-left">{d.label}</span>}
-    </button>
   )
 }
 
@@ -327,11 +332,35 @@ function SidebarMenuItem({ icon: Icon, label, onClick }: {
   )
 }
 
+// CollapseLabel — the coordinated fade for sidebar text that appears/
+// disappears with the collapse state (v3.2.0 motion language). Exit runs
+// during the first ~120ms of the 200ms width collapse (opacity + small
+// slide — compositor-only); enter is delayed ~80ms so the label arrives
+// as the card is still settling into its expanded width. Reduced motion
+// collapses both to instant placement — the state still changes, just
+// without the movement.
+function CollapseLabel({ children, reduceMotion }: { children: React.ReactNode; reduceMotion: boolean }) {
+  return (
+    <AnimatePresence initial={false}>
+      <motion.span
+        initial={reduceMotion ? false : { opacity: 0, x: -6 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -6 }}
+        transition={reduceMotion ? { duration: 0 } : { duration: 0.13, ease: [0.4, 0, 0.2, 1], delay: 0.06 }}
+        className="flex-1 min-w-0 flex"
+      >
+        {children}
+      </motion.span>
+    </AnimatePresence>
+  )
+}
+
 function SidebarNowPlaying({ collapsed }: { collapsed: boolean }) {
   const currentSong = usePlayerStore((s) => s.currentSong)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
+  const reduceMotion = useReducedMotion()
   if (!currentSong) return null
 
   return (
@@ -371,10 +400,12 @@ function SidebarNowPlaying({ collapsed }: { collapsed: boolean }) {
           )}
         </button>
         {!collapsed && (
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{currentSong.title}</p>
-            <p className="text-[11px] truncate" style={{ color: 'var(--text-tertiary)' }}>{currentSong.artist}</p>
-          </div>
+          <CollapseLabel reduceMotion={!!reduceMotion}>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{currentSong.title}</p>
+              <p className="text-[11px] truncate" style={{ color: 'var(--text-tertiary)' }}>{currentSong.artist}</p>
+            </div>
+          </CollapseLabel>
         )}
       </div>
     </motion.div>

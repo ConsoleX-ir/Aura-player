@@ -505,6 +505,20 @@ body {
   .aurora-rim { display: none; }
 }
 
+/* ── v3.2.0 Sidebar motion language (CSS half) ──────────────────────────────
+   The JS half lives in Sidebar.tsx (CollapseLabel + the collapse-chip
+   crossfade). This block owns the state transitions that are pure CSS:
+   icons inside the gel-tab rows get a color transition so the accent
+   "arrives" instead of snapping, and the rows keep hover transitions.
+   Compositor-friendly properties only; both rules go still under reduced
+   motion (Performance Mode already inherits liquid.ts guards). */
+[data-liquid-tabs] svg {
+  transition: color var(--dur-fast) var(--ease-smooth);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-liquid-tabs] svg { transition: none; }
+}
+
 /* ── Pill Play Bar responsive columns ───────────────────────────────────────
    The pill keeps 256px info + side columns down to ~960px; below that the
    side columns slim down, the hint line drops, extra panel buttons fold,

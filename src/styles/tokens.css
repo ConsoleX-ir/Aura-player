@@ -174,29 +174,41 @@
   --surface-base:    #F3F4F7;
   --surface-raised:  #FFFFFF;
   --surface-card:    #FFFFFF;
-  --surface-inset:   rgba(10, 10, 15, 0.03);
-  --surface-hover:   rgba(10, 10, 15, 0.045);
-  --surface-active:  rgba(10, 10, 15, 0.07);
-  --surface-selected: rgba(10, 10, 15, 0.10);
+  /* v3.2.0 LIGHT QUALITY PASS — the whole interaction ladder was re-tuned
+     against WCAG math (scripts/a32_contrast_check.mjs prints the table):
+     the old 0.045/0.07/0.10 hover ladder was near-invisible on paper
+     (the "elements almost disappear" complaint), while no value was
+     raised enough to read as harsh (the "too bright" complaint). */
+  --surface-inset:   rgba(10, 10, 15, 0.04);
+  --surface-hover:   rgba(10, 10, 15, 0.06);
+  --surface-active:  rgba(10, 10, 15, 0.09);
+  --surface-selected: rgba(10, 10, 15, 0.13);
   --surface-chrome:  rgba(255, 255, 255, 0.92);
   --surface-solid:   rgba(248, 248, 250, 0.98);
   /* Opaque equivalent of light --surface-chrome over light --surface-base */
   --color-chrome-solid: #fbfbfd;
 
-  --glass-1: rgba(10, 10, 15, 0.04);
-  --glass-2: rgba(10, 10, 15, 0.06);
-  --glass-3: rgba(10, 10, 15, 0.09);
+  --glass-1: rgba(10, 10, 15, 0.05);
+  --glass-2: rgba(10, 10, 15, 0.08);
+  --glass-3: rgba(10, 10, 15, 0.12);
 
+  /* Ink ladder — recomputed for AA: secondary ≥ 4.5:1 (was 4.16),
+     tertiary ≥ 4.5:1 (was 2.23 — the biggest offender: every settings
+     description and muted row used it), faint ≥ 3:1 (decorative micro-
+     labels). primary keeps its ~13:1 headroom. */
   --text-primary:   rgba(16, 16, 24, 0.92);
-  --text-secondary: rgba(16, 16, 24, 0.55);
-  --text-tertiary:  rgba(16, 16, 24, 0.38);
-  --text-faint:     rgba(16, 16, 24, 0.24);
+  --text-secondary: rgba(16, 16, 24, 0.68);
+  --text-tertiary:  rgba(16, 16, 24, 0.59);
+  --text-faint:     rgba(16, 16, 24, 0.46);
   --text-on-accent: #FFFFFF;
 
-  --border-subtle:   rgba(16, 16, 24, 0.06);
-  --border-default:  rgba(16, 16, 24, 0.09);
-  --border-strong:   rgba(16, 16, 24, 0.13);
-  --border-emphasis: rgba(16, 16, 24, 0.18);
+  /* Borders — one visible step up across the board (inputs, cards, menus
+     were disappearing into the paper) while staying far below the weight
+     that would read as harsh. */
+  --border-subtle:   rgba(16, 16, 24, 0.08);
+  --border-default:  rgba(16, 16, 24, 0.13);
+  --border-strong:   rgba(16, 16, 24, 0.18);
+  --border-emphasis: rgba(16, 16, 24, 0.24);
 
   --shadow-1: 0 1px 2px rgba(16, 16, 24, 0.08);
   --shadow-2: 0 8px 24px rgba(16, 16, 24, 0.10);
@@ -206,6 +218,11 @@
   --cloud:       #6B7488;
   --cloud-soft:  rgba(107, 116, 136, 0.16);
   --cloud-glow:  rgba(107, 116, 136, 0.10);
+
+  /* Focus ring — the raw accent can sit under 3:1 against paper for some
+     identities, so light mode darkens it toward ink; dark mode keeps the
+     pure accent (set in the dark block above). */
+  --focus-ring-color: color-mix(in srgb, var(--color-dynamic-1) 76%, var(--text-primary));
 }
 
 /* ── Layout constants (not theme-dependent — live on :root) ────────────── */
@@ -215,4 +232,27 @@
      breathing room) — content still reserves this space so nothing hides
      permanently beneath the pill. */
   --spacing-player:  96px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SPEC-VOCABULARY ALIASES (v3.2.0) — the same semantic layer, exposed
+   under the task spec's naming so future components can speak either
+   dialect. Pure aliases: they resolve through the tokens above and
+   therefore re-map automatically in light mode and every theme identity.
+   Nothing existing changes; nothing needs to adopt them.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  --background-page:      var(--surface-base);
+  --background-surface:   var(--surface-raised);
+  --background-elevated:  var(--surface-card);
+  --background-overlay:   var(--surface-chrome);
+  --text-muted:           var(--text-tertiary);
+  --text-disabled:        var(--text-faint);
+  --accent-hover:         var(--accent-strong);
+  --accent-active:        var(--accent);
+  --control-hover:        var(--surface-hover);
+  --control-active:       var(--surface-active);
+  --focus-ring:           var(--focus-ring-color);
+  --glass-background:     var(--surface-chrome);
+  --glass-border:         var(--border-strong);
 }

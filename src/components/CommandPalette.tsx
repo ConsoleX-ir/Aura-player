@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Music2, Heart, Settings as SettingsIcon, ListMusic, Play, Pause, SkipForward, SkipBack,
   Shuffle, Repeat, Volume2, VolumeX, Mic2, BarChart2, PictureInPicture2, History,
-  Gauge, SunMoon, Search, CornerDownLeft, Disc3, Radio, Clock,
+  Gauge, SunMoon, Search, CornerDownLeft, Disc3, Radio, Clock, SlidersHorizontal,
 } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { startSmartRadio } from '@/lib/smartRadioActions'
@@ -135,6 +135,7 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
       { id: 'nav.explore', group: 'Navigate', label: 'Go to Explore', hint: 'online music', icon: Search, run: () => s.setActiveView('explore') },
       { id: 'nav.smart', group: 'Navigate', label: 'Open Smart Playlists', hint: 'on-device picks', icon: Radio, run: () => s.setActiveView('smart') },
       { id: 'nav.history', group: 'Navigate', label: 'Open Listening History', hint: 'everything you played', icon: Clock, run: () => s.setActiveView('history') },
+      { id: 'nav.studio', group: 'Navigate', label: 'Open Audio Studio', hint: 'EQ · effects · master', icon: SlidersHorizontal, keywords: 'audio studio equalizer effects sound bass treble', run: () => s.setActiveView('studio') },
       { id: 'nav.settings', group: 'Navigate', label: 'Go to Settings', icon: SettingsIcon, run: () => s.setActiveView('settings') },
       ...s.playlists.map<Command>((pl) => ({
         id: `nav.pl.${pl.id}`, group: 'Navigate', label: `Open playlist — ${pl.name}`,
