@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 
 export interface LrcLine { time: number; text: string }
 
@@ -22,7 +22,7 @@ function cleanField(raw: string): string {
     .trim()
 }
 
-export function useLyrics(song: Song | null) {
+export function useLyrics(song: Track | null) {
   const [lines, setLines]   = useState<LrcLine[]>([])
   const [plain, setPlain]   = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -44,13 +44,13 @@ export function useLyrics(song: Song | null) {
     const artist = cleanField(song.artist)
     const title  = cleanField(song.title)
     const album  = cleanField(song.album)
-    const dur    = Math.round(song.duration)
+    const dur    = Math.round(song.durationSecs)
 
     const params = new URLSearchParams({
       artist_name: artist,
       track_name:  title,
       album_name:  album,
-      duration:    String(dur),
+      durationSecs:    String(dur),
     })
 
     fetch(`https://lrclib.net/api/get?${params}`)

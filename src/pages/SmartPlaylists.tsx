@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Play, RefreshCw, Sparkles, Compass, Heart, Loader2 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
@@ -8,7 +9,7 @@ import { assembleSmartContext } from '@/lib/smartRadioActions'
 import { buildSmartRadio, type SmartResult, type SmartContext } from '@/lib/smartEngine'
 import { formatTime, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 
 // ── Smart Playlists (Phase 8) ───────────────────────────────────────────────
 // Three built-in, engine-driven lists. They are NOT stored playlists — they
@@ -28,7 +29,7 @@ interface ListDef {
   title: string
   icon: React.ReactNode
   description: string
-  build: (ctx: SmartContext, nonce: number, favoriteSeed: Song | null) => SmartResult
+  build: (ctx: SmartContext, nonce: number, favoriteSeed: Track | null) => SmartResult
 }
 
 const LIST_DEFS: ListDef[] = [
@@ -56,7 +57,7 @@ const LIST_DEFS: ListDef[] = [
 ]
 
 export function SmartPlaylists() {
-  const library = usePlayerStore((s) => s.library)
+  const library = useCatalogStore(selectLibraryTracks)
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const [ctx, setCtx] = useState<SmartContext | null>(null)
   const [gathering, setGathering] = useState(true)
@@ -75,7 +76,7 @@ export function SmartPlaylists() {
 
   // Deterministic favorite of the day (favorites are ordered by when they
   // were hearted — the jitter key rotates among them daily).
-  const favoriteSeed = useMemo<Song | null>(() => {
+  const favoriteSeed = useMemo<Track | null>(() => {
     if (!ctx || ctx.favorites.length === 0) return null
     const day = new Date(ctx.now).toISOString().slice(0, 10)
     let h = 0
@@ -214,8 +215,8 @@ export function SmartPlaylists() {
                         >
                           <span className="text-[10px] tabular-nums w-5 text-right shrink-0" style={{ color: 'var(--text-faint)' }}>{i + 1}</span>
                           <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden" style={{ background: 'var(--glass-2)' }}>
-                            {song.coverArt
-                              ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                            {song.artworkUrl
+                              ? <img src={song.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                               : <ArtworkPlaceholder seed={song.id} size="sm" />}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -230,7 +231,7 @@ export function SmartPlaylists() {
                             )}
                           </div>
                           <span className="text-xs tabular-nums shrink-0" style={{ color: 'var(--text-faint)' }}>
-                            {song.duration ? formatTime(song.duration) : '—'}
+                            {song.durationSecs ? formatTime(song.durationSecs) : '—'}
                           </span>
                         </div>
                       )

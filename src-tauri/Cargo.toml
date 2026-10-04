@@ -1,0 +1,41 @@
+[package]
+name = "aura-player"
+version = "4.0.0-alpha.1"
+description = "Aura — a local-first desktop music player"
+authors = ["ConsoleX"]
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "aura_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2.8"
+tauri-plugin-single-instance = "2.5"
+tauri-plugin-global-shortcut = "2.4"
+tauri-plugin-opener = "2.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+rusqlite = { version = "0.40", features = ["bundled"] }
+lofty = "0.25"
+notify = "8"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
+futures = "0.3"
+log = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

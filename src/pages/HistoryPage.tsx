@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { getScrobblesInRange, getHistorySummary, type Scrobble } from '@/lib/scrobbleStore'
 import { useVirtualWindow, VIRTUALIZE_THRESHOLD } from '@/hooks/useVirtualWindow'
 import { formatTime, formatRuntime, cn } from '@/lib/utils'
@@ -31,7 +32,7 @@ export function HistoryPage() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [range, setRange] = useState<RangeFilter>('all')
 
-  const library = usePlayerStore((s) => s.library)
+  const library = useCatalogStore(selectLibraryTracks)
   const playSong = usePlayerStore((s) => s.playSong)
 
   useEffect(() => {
@@ -191,13 +192,13 @@ function HistoryRow({ scrobble, index, inLibrary, playSong }: {
   playSong: ReturnType<typeof usePlayerStore.getState>['playSong']
 }) {
   const r = scrobble
-  const song = usePlayerStore((s) => s.library.find((x) => x.id === r.songId))
+  const song = useCatalogStore((s) => s.tracks[r.songId])
   const d = new Date(r.startedAt)
   const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
   const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 
   const onClick = () => {
-    if (song) playSong(song, usePlayerStore.getState().library)
+    if (song) playSong(song, useCatalogStore.getState().tracks && selectLibraryTracks(useCatalogStore.getState()))
   }
 
   return (

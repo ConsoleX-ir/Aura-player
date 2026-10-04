@@ -1,13 +1,11 @@
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, ChevronRight, Settings as SettingsIcon, History, Clock, Globe, Sparkles, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from 'lucide-react'
+import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { Library as LibraryIcon, FolderOpen, FileAudio, Loader2, Settings as SettingsIcon, History, Clock, Globe, Sparkles, PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Disc3 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore } from '@/store/catalogStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 import { LiquidTabs } from '@/components/Explore/LiquidTabs'
-import { useState } from 'react'
-import { PlaylistModal } from '../Modals/PlaylistModal'
-import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
-import { EmptyState } from '@/components/States/EmptyState'
 
 // ── Sidebar 3.2 (Aura 3.2.0 — collapse polish + motion language) ────────────
 // v3.0 gave the sidebar a REAL collapse; 3.2 makes it feel designed:
@@ -32,37 +30,35 @@ export function Sidebar() {
   // re-rendered on every store mutation, including the progress tick that
   // fires ~4-10 times a second during playback, despite never displaying
   // progress at all.
-  const playlists = usePlayerStore((s) => s.playlists)
   const activeView = usePlayerStore((s) => s.activeView)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
-  const setSelectedPlaylistId = usePlayerStore((s) => s.setSelectedPlaylistId)
-  const selectedPlaylistId = usePlayerStore((s) => s.selectedPlaylistId)
-  const favoritesCount = usePlayerStore((s) => s.favorites.length)
-  const libraryCount = usePlayerStore((s) => s.library.length)
+  const libraryCount = useCatalogStore((s) => s.libraryIds.length)
   const collapsed = usePlayerStore((s) => s.sidebarCollapsed)
   const toggleCollapsed = usePlayerStore((s) => s.toggleSidebarCollapsed)
   const reduceMotion = useReducedMotion()
   const { importFolder, importFiles, importing, progress } = useLibraryImport()
 
+  // Aura 4 navigation (§20): the three music SOURCES lead; the curated
+  // collections (All Music / Favorites / Playlists / Recently Added) live
+  // INSIDE the Library destination as tabs — no competing sidebar entries.
   const nav = [
-    { id: 'library'   as const, label: 'Library',   icon: Music2, count: libraryCount },
-    { id: 'favorites' as const, label: 'Favorites',  icon: Heart,  count: favoritesCount },
+    { id: 'library'    as const, label: 'Library',     icon: LibraryIcon, count: libraryCount },
+    { id: 'localmusic' as const, label: 'Local Music', icon: FolderOpen,  count: null },
+    { id: 'explore'    as const, label: 'Explore',     icon: Globe,       count: null },
   ]
-
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false)
 
   // Destination rows — one consistent visual language (icon + label; selected
   // = gel pill + accent icon). Rendered through LiquidTabs so the selection
   // indicator TRAVELS between items (v3.2.0 motion spec §2.2); a value
   // outside this group (e.g. playlist/settings) tucks the pill away.
   const destinations = [
+    { id: 'nowplaying' as const, label: 'Now Playing', title: 'The immersive full-screen player', icon: Disc3 },
     { id: 'studio' as const, label: 'Audio Studio', title: 'The live audio workspace — EQ, effects, master stages', icon: SlidersHorizontal },
-    { id: 'explore' as const, label: 'Explore', title: 'Stream free music from Audius', icon: Globe },
     { id: 'smart' as const, label: 'Smart Playlists', title: 'Engine-built lists from your listening history — made on-device', icon: Sparkles },
     { id: 'history' as const, label: 'Listening History', title: 'Every session recorded on this device', icon: Clock },
     { id: 'rewind' as const, label: 'Aura Rewind', title: 'Your month, told by your own listening', icon: History },
   ]
-  const destinationView = destinations.some((d) => d.id === activeView) ? (activeView as 'studio' | 'explore' | 'smart' | 'history' | 'rewind') : ('' as 'studio')
+  const destinationView = destinations.some((d) => d.id === activeView) ? (activeView as 'studio' | 'nowplaying' | 'smart' | 'history' | 'rewind') : ('' as 'studio')
 
   return (
     /* ── Floating navigation card (v2.1.0, collapsible since 3.0) ────────
@@ -195,70 +191,20 @@ export function Sidebar() {
             id,
             label,
             icon: <Icon size={15} style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
-            trailing: !collapsed && count > 0 ? (
+            trailing: !collapsed && count !== null && count > 0 ? (
               <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{count}</span>
             ) : undefined,
           }))}
-          value={activeView}
-          onChange={(id) => { if (id === 'library' || id === 'favorites') setActiveView(id) }}
-          ariaLabel="Library navigation"
+          value={nav.some((n) => n.id === activeView) ? activeView : ''}
+          onChange={(id) => setActiveView(id as 'library' | 'localmusic' | 'explore')}
+          ariaLabel="Music sources"
         />
       </nav>
 
-      {/* Playlists — fold away entirely in the rail (a text list has no
-          icons-only form); the + action stays reachable. */}
-      {!collapsed && (
-        <div className="flex-1 overflow-y-auto px-2.5 py-3 mt-3 min-h-0">
-          <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-faint)', letterSpacing: 'var(--tracking-caps)' }}>
-              Playlists
-            </span>
-            <button onClick={() => setShowPlaylistModal(true)} aria-label="New playlist"
-              className="w-5 h-5 rounded flex items-center justify-center transition-all"
-              style={{ color: 'var(--text-faint)', transitionDuration: 'var(--dur-fast)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }}
-            >
-              <Plus size={12} />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {playlists.length === 0 && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <EmptyState
-                  compact
-                  icon={<ListMusic size={18} />}
-                  title="No playlists yet"
-                  hint="Hit + to group your music"
-                />
-              </motion.div>
-            )}
-            {playlists.map((pl) => {
-              const active = activeView === 'playlist' && selectedPlaylistId === pl.id
-              return (
-                <motion.button key={pl.id}
-                  initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
-                  onClick={() => { setActiveView('playlist'); setSelectedPlaylistId(pl.id) }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all"
-                  style={{
-                    transitionDuration: 'var(--dur-fast)',
-                    color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                    background: active ? 'var(--glass-2)' : 'transparent',
-                  }}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--glass-1)' }}
-                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
-                >
-                  <ListMusic size={13} style={active ? { color: 'var(--accent)' } : undefined} />
-                  <span className="flex-1 text-left truncate">{pl.name}</span>
-                  <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{pl.songIds.length}</span>
-                  <ChevronRight size={11} style={{ opacity: 0.3 }} />
-                </motion.button>
-              )
-            })}
-          </AnimatePresence>
-        </div>
-      )}
+      {/* (Playlists moved INTO the Library destination — Aura 4 §20 keeps
+          the core sources/collections model uncluttered. The flex-1 spacer
+          below keeps the bottom group anchored like the old list did.) */}
+      <div className="flex-1 min-h-0" />
 
       {/* Now playing chip — artwork-only in the rail */}
       <SidebarNowPlaying collapsed={collapsed} />
@@ -277,7 +223,7 @@ export function Sidebar() {
             icon: <Icon size={15} className="transition-colors" style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
           }))}
           value={destinationView}
-          onChange={(id) => setActiveView(id as 'studio' | 'explore' | 'smart' | 'history' | 'rewind')}
+          onChange={(id) => setActiveView(id as 'studio' | 'nowplaying' | 'smart' | 'history' | 'rewind')}
           ariaLabel="Destinations"
         />
       </div>
@@ -307,12 +253,6 @@ export function Sidebar() {
           {!collapsed && <CollapseLabel reduceMotion={!!reduceMotion}><span>Settings</span></CollapseLabel>}
         </button>
       </div>
-
-      <PlaylistModal
-        open={showPlaylistModal}
-        mode="create"
-        onClose={() => setShowPlaylistModal(false)}
-      />
     </motion.aside>
   )
 }
@@ -379,8 +319,8 @@ function SidebarNowPlaying({ collapsed }: { collapsed: boolean }) {
           className="relative shrink-0"
           aria-label={collapsed ? `Now playing: ${currentSong.title}` : undefined}
         >
-          {currentSong.coverArt
-            ? <img src={currentSong.coverArt} alt="" className="w-9 h-9 rounded-lg object-cover" />
+          {currentSong.artworkUrl
+            ? <img src={currentSong.artworkUrl} alt="" className="w-9 h-9 rounded-lg object-cover" />
             : <div className="w-9 h-9 rounded-lg overflow-hidden">
                 <ArtworkPlaceholder seed={currentSong.id} size="sm" />
               </div>

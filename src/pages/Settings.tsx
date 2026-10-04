@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer, Snowflake, Contrast, Flower2, MoonStar, Crown, Rainbow } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
+import { desktop } from '@/services/desktop'
 import { setAppearanceAnimated, setThemeAnimated } from '@/lib/appearance'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
@@ -43,14 +45,24 @@ export function Settings() {
   const appearance = usePlayerStore((s) => s.appearance)
   const watchFolders = usePlayerStore((s) => s.watchFolders)
   const setWatchFolders = usePlayerStore((s) => s.setWatchFolders)
-  const importedFolderCount = usePlayerStore((s) => s.importedFolders.length)
+  const importedFolderCount = useCatalogStore((s) => s.musicFolders.length)
   const crossfade = usePlayerStore((s) => s.crossfade)
   const setCrossfade = usePlayerStore((s) => s.setCrossfade)
-  const libraryCount = usePlayerStore((s) => s.library.length)
-  const library = usePlayerStore((s) => s.library)
-  const playlistsCount = usePlayerStore((s) => s.playlists.length)
-  const favoritesCount = usePlayerStore((s) => s.favorites.length)
-  const clearLibrary = usePlayerStore((s) => s.clearLibrary)
+  const library = useCatalogStore(selectLibraryTracks)
+  const libraryCount = library.length
+  const playlistsCount = useCatalogStore((s) => s.playlists.length)
+  const favoritesCount = useCatalogStore((s) => s.favorites.length)
+  // Clear everything the user curates: Library membership, playlists,
+  // favorites, folder tracking. Catalog rows vanish with their entries
+  // (the FILES stay — removal is never deletion).
+  const clearLibrary = async () => {
+    const catalog = useCatalogStore.getState()
+    const ids = [...catalog.libraryIds]
+    if (ids.length) await catalog.removeFromLibrary(ids)
+    for (const pl of catalog.playlists) await catalog.deletePlaylist(pl.id)
+    for (const f of catalog.musicFolders) await catalog.removeMusicFolder(f)
+    await desktop.library.syncAll().catch(() => {})
+  }
 
   // Library overview stats (Phase 1) — all derived locally from the library
   // array itself: distinct artists / albums / genres and the total runtime.
@@ -65,7 +77,7 @@ export function Settings() {
       if (s.artist) artists.add(s.artist)
       albums.add(`${s.album}|||${s.artist}`)
       if (s.genre && s.genre.trim()) genres.add(s.genre.trim())
-      totalSec += s.duration || 0
+      totalSec += s.durationSecs || 0
     }
     return { artists: artists.size, albums: albums.size, genres: genres.size, totalSec }
   }, [library])
@@ -254,7 +266,7 @@ export function Settings() {
         <Section title="Online Services">
           <SettingRow
             label="Find Info Online"
-            description="Song lookup (⋯ menu on any song) uses free public search APIs — Deezer, Apple Music, and MusicBrainz. No account or API token needed; only a text query is sent, never your files."
+            description="Track lookup (⋯ menu on any song) uses free public search APIs — Deezer, Apple Music, and MusicBrainz. No account or API token needed; only a text query is sent, never your files."
           >
             <KeylessBadge icon={<Globe size={11} />} />
           </SettingRow>
@@ -376,7 +388,7 @@ export function Settings() {
                   className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums"
                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
                 >
-                  v3.2.0
+                  v4.0.0-alpha.1
                 </span>
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>

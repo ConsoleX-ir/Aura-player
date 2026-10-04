@@ -1,0 +1,5 @@
+# Disk-constrained build environment: skip debug info (the linker strips
+# nothing for tests and the artifacts are multi-GB otherwise).
+[profile.dev]
+debug = 0
+incremental = false

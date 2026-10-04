@@ -1,42 +1,37 @@
 import { useEffect } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, effectiveCover } from '@/store/catalogStore'
+import { desktop } from '@/services/desktop'
 
 // ── OS-level media integration ──────────────────────────────────────────────
 // Wires up THREE Windows integrations, all fed by the same player state —
 // no duplicate playback logic, no new surfaces invented:
 //
 //  1. Hardware/global media keys (Play/Pause/Next/Previous) — registered in
-//     the main process (globalShortcut); work even when Aura isn't focused.
-//  2. Windows taskbar thumbnail controls — the small Previous/Play-Pause/
-//     Next buttons shown when hovering Aura's icon in the taskbar (main
-//     process setThumbarButtons; icon swap needs the isPlaying push below).
-//  3. Windows System Media Transport Controls — v2.1.0. The native media
-//     flyout (volume overlay, Win+K, lock screen) with track title, artist,
-//     album artwork and live playback state, driven through the standard
-//     navigator.mediaSession API. The main process enables Chromium's
-//     MediaSessionService feature (see main.cjs) so the OS actually sees the
-//     session. Handlers call the SAME store actions as every in-app control;
-//     with no song loaded the session is explicitly cleared so Windows stops
-//     advertising a stale track.
+//     Rust (global shortcut plugin); work even when Aura isn't focused.
+//  2. System Media Transport Controls (Windows SMTC / MPRIS on Linux where
+//     the webview exposes it): the native media flyout driven through the
+//     standard navigator.mediaSession API. Handlers call the SAME store
+//     actions as every in-app control; with no song loaded the session is
+//     explicitly cleared so the OS stops advertising a stale track.
+//  3. Mini player transport — v3.2. The widget's asks (seek/volume/mute)
+//     arrives on the same narrow channels (media://seek, media://volume).
 //
-// 1 and 2 funnel through the same 'media:command' channel from main.
-// The thumbar's Play/Pause icon needs the current isPlaying state to show
-// the right glyph, which main has no way to know on its own — this hook
-// pushes it up whenever it changes.
+// 1 and 3 funnel through the same media://command channel from Rust.
 export function useMediaKeys() {
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const currentSong = usePlayerStore((s) => s.currentSong)
 
   useEffect(() => {
-    if (!window.electronAPI?.onMediaCommand) return
-
-    return window.electronAPI.onMediaCommand((command) => {
+    if (!desktop.isDesktop()) return
+    const off = desktop.events.onMediaCommand((command) => {
       if (command === 'toggle') usePlayerStore.getState().togglePlay()
       else if (command === 'next') usePlayerStore.getState().nextSong()
       else if (command === 'previous') usePlayerStore.getState().prevSong()
       // v3.2.0 — the mini player's mute button rides the same funnel.
       else if (command === 'mute') usePlayerStore.getState().toggleMute()
     })
+    return () => { off.then((u) => u()).catch(() => {}) }
   }, [])
 
   // ── Mini player seek + volume (v3.2.0) ─────────────────────────────
@@ -44,25 +39,26 @@ export function useMediaKeys() {
   // are executed against the SAME store actions every other surface uses —
   // one authoritative playback pipeline, no parallel control paths.
   useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.onMediaSeek || !api?.onMediaVolume) return
-    const offSeek = api.onMediaSeek((fraction) => {
+    if (!desktop.isDesktop()) return
+    const offSeek = desktop.events.onMediaSeek((fraction) => {
       if (typeof fraction === 'number' && isFinite(fraction)) {
         usePlayerStore.getState().seekTo(Math.min(1, Math.max(0, fraction)))
       }
     })
-    const offVolume = api.onMediaVolume((volume) => {
+    const offVolume = desktop.events.onMediaVolume((volume) => {
       if (typeof volume === 'number' && isFinite(volume)) {
         usePlayerStore.getState().setVolume(Math.min(1, Math.max(0, volume)))
       }
     })
-    return () => { offSeek(); offVolume() }
+    return () => {
+      offSeek.then((u) => u()).catch(() => {})
+      offVolume.then((u) => u()).catch(() => {})
+    }
   }, [])
 
-  // Push the thumbar icon state to main (existing v1.x integration).
-  useEffect(() => {
-    window.electronAPI?.syncPlaybackState?.(isPlaying)
-  }, [isPlaying])
+  // (Aura 3's thumbar state push has no Tauri equivalent — the taskbar
+  // thumbnail controls were a Windows-only Electron API. Documented as a
+  // platform limitation; SMTC/mediaSession below still works everywhere.)
 
   // ── SMTC: action handlers — registered once, read state at call time ──
   useEffect(() => {
@@ -106,8 +102,8 @@ export function useMediaKeys() {
         title: currentSong.title,
         artist: currentSong.artist,
         album: currentSong.album || undefined,
-        artwork: currentSong.coverArt
-          ? [{ src: currentSong.coverArt, sizes: '512x512' }]
+        artwork: effectiveCover(useCatalogStore.getState().artworkOverrides, currentSong)
+          ? [{ src: effectiveCover(useCatalogStore.getState().artworkOverrides, currentSong) as string, sizes: '512x512' }]
           : [],
       })
     } catch { /* metadata is optional everywhere */ }

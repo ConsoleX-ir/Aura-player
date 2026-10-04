@@ -7,7 +7,7 @@
 //   • Everything derives from ONE walk over the month's rows. A user's month
 //     is at most a few thousand sessions, so a single pass with Maps is both
 //     the simple and the fast answer.
-//   • Song identity = scrobble.songId (stable file hash); display strings
+//   • Track identity = scrobble.songId (stable file hash); display strings
 //     come from the denormalized title/artist/album captured at play time,
 //     so history stays meaningful even after files are removed.
 //   • Streaks/heatmaps are computed in the month's LOCAL timezone — the
@@ -76,7 +76,7 @@ export function aggregateRewind(
     if (r.completed) completed++
     if (r.skipped) skipped++
 
-    // Song bucket — denormalized strings captured at play time.
+    // Track bucket — denormalized strings captured at play time.
     const s = songAgg.get(r.songId)
     if (s) { s.ms += r.playedMs || 0; s.plays++ }
     else songAgg.set(r.songId, { title: r.title || 'Unknown Title', artist: r.artist || 'Unknown Artist', album: r.album || 'Unknown Album', ms: r.playedMs || 0, plays: 1 })

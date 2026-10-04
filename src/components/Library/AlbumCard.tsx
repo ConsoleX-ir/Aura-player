@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion'
 import { Play, Disc3 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
 
 interface AlbumCardProps {
-  album: string; artist: string; songs: Song[]; coverArt: string | null; index: number
+  album: string; artist: string; songs: Track[]; artworkUrl: string | null; index: number
   // False for large libraries (see Library.tsx's ANIMATE_GRID_THRESHOLD) —
   // skips framer-motion's spring entrance animation entirely rather than
   // just setting its values to no-ops, since constructing 150+ concurrent
@@ -14,7 +14,7 @@ interface AlbumCardProps {
   animateIn?: boolean
 }
 
-export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = true }: AlbumCardProps) {
+export function AlbumCard({ album, artist, songs, artworkUrl, index, animateIn = true }: AlbumCardProps) {
   const playSong = usePlayerStore((s) => s.playSong)
   // Phase 9 — the card's own Open affordance: card click still plays (v1
   // behavior, unchanged), this jumps to the album page.
@@ -29,8 +29,8 @@ export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = t
   const content = (
     <>
       <div className="relative aspect-square overflow-hidden" style={{ background: 'var(--glass-1)' }}>
-        {coverArt
-          ? <img src={coverArt} alt={album} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600" loading="lazy" />
+        {artworkUrl
+          ? <img src={artworkUrl} alt={album} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600" loading="lazy" />
           // Missing artwork → the album's own generated aura (stable per
           // album key), not a dead gray box.
           : <ArtworkPlaceholder seed={`${album}|||${artist}`} size="lg" />

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ListPlus, Music2, Search, X, Check } from 'lucide-react'
-import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { formatTime } from '@/lib/utils'
-import type { Playlist, Song } from '@/types'
+import type { Playlist, Track } from '@/types'
 
 interface AddSongsModalProps {
   open: boolean
@@ -15,8 +15,8 @@ interface AddSongsModalProps {
 // playlist in one go. Complements the existing per-song "Add to {playlist}"
 // action in SongRow's dropdown, which only ever adds one song at a time.
 export function AddSongsModal({ open, playlist, onClose }: AddSongsModalProps) {
-  const library = usePlayerStore((s) => s.library)
-  const addToPlaylist = usePlayerStore((s) => s.addToPlaylist)
+  const library = selectLibraryTracks(useCatalogStore())
+  const addToPlaylist = useCatalogStore((s) => s.addToPlaylist)
 
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -133,7 +133,7 @@ export function AddSongsModal({ open, playlist, onClose }: AddSongsModalProps) {
                 </div>
               </div>
 
-              {/* Song list */}
+              {/* Track list */}
               <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
                 {results.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40 gap-2">
@@ -193,7 +193,7 @@ function SongPickRow({
   selected,
   onToggle,
 }: {
-  song: Song
+  song: Track
   alreadyInPlaylist: boolean
   selected: boolean
   onToggle: () => void
@@ -221,8 +221,8 @@ function SongPickRow({
 
       {/* Cover art */}
       <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden">
-        {song.coverArt ? (
-          <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
+        {song.artworkUrl ? (
+          <img src={song.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-[var(--color-glass-mid)] flex items-center justify-center">
             <Music2 size={12} className="text-ink-faint" />
@@ -239,7 +239,7 @@ function SongPickRow({
       {alreadyInPlaylist ? (
         <span className="text-[10px] text-ink-faint shrink-0">Added</span>
       ) : (
-        <span className="text-xs text-ink-faint tabular-nums shrink-0">{formatTime(song.duration)}</span>
+        <span className="text-xs text-ink-faint tabular-nums shrink-0">{formatTime(song.durationSecs)}</span>
       )}
     </button>
   )

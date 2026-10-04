@@ -1,30 +1,31 @@
 import { useEffect, useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore } from '@/store/catalogStore'
 import { useNotesStore } from '@/store/notesStore'
-import { useArtworkStore } from '@/store/artworkStore'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
-import { markHydrationComplete } from '@/lib/idbStorage'
+import { markHydrationComplete, cacheBootPrefs } from '@/lib/desktopPrefsStorage'
+import { desktop } from '@/services/desktop'
 
-/* ── Store hydration gate ────────────────────────────────────────────────────
-   Since Wave 1 the persisted store lives in IndexedDB (async) instead of
-   localStorage (sync). That means on cold boot there IS a window — a few
-   milliseconds on SSD, but real — where the store still holds its defaults
-   (library = []) before rehydration lands. Rendering the Library during that
-   window flashes the "Your library is empty" state for a frame.
+/* ── Boot sequence ───────────────────────────────────────────────────────────
+   Aura 4's durable state lives in SQLite (Rust-owned); the renderer stores
+   are mirrors. Boot order matters:
 
-   This hook reports when zustand's persist middleware has finished reading
-   storage; App.tsx holds the shell on a branded boot screen until it
-   returns true. After the first hydration everything is in-memory and this
-   is free.
+   1. desktop.library.snapshot() — ONE round trip carrying the catalog,
+      library membership, playlists, favorites, folders, notes, artwork
+      overrides AND every persisted preference row.
+   2. cacheBootPrefs(prefs) — the persist middleware's storage adapter reads
+      from this cache; hydrating the stores afterwards sees real values.
+   3. The persisted zustand stores rehydrate (player/notes/user-prefs).
+   4. markHydrationComplete() opens the pre-hydration write gate.
+   5. The persisted queue (id references) rebuilds against the catalog —
+      deleted tracks drop out honestly.
 
-   Aura 3.0 (Wave 1): the app now has FOUR persisted stores — the main
-   player store plus the notes / artwork / user-prefs domain stores. The
-   gate waits for ALL of them (cheap — same shared IndexedDB) so a view
-   can never observe a hydrated library but default-valued notes/prefs. */
+   The gate returns true only after EVERYTHING above, so no view can observe
+   a hydrated library with default-valued preferences (or vice versa). */
+
 const PERSISTED_STORES = [
   usePlayerStore,
   useNotesStore,
-  useArtworkStore,
   useUserPrefsStore,
 ] as const
 
@@ -33,26 +34,53 @@ function allHydrated(): boolean {
 }
 
 export function useStoreHydration(): boolean {
-  const [hydrated, setHydrated] = useState(allHydrated)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    if (allHydrated()) {
-      setHydrated(true)
-      // Opens the idbStorage pre-hydration write gate (Wave 0): from this
-      // point on, store writes describe complete, hydrated state and are
-      // safe to persist.
-      markHydrationComplete()
-      return
-    }
-    const unsubs = PERSISTED_STORES.map((s) =>
-      s.persist.onFinishHydration(() => {
-        if (allHydrated()) {
-          setHydrated(true)
-          markHydrationComplete()
+    let cancelled = false
+    let unsubs: (() => void)[] = []
+
+    const boot = async () => {
+      try {
+        if (desktop.isDesktop()) {
+          const snap = await desktop.library.snapshot()
+          if (cancelled) return
+          cacheBootPrefs(snap.prefs)
+          useCatalogStore.getState().hydrateFromSnapshot(snap)
         }
-      }),
-    )
-    return () => unsubs.forEach((u) => u())
+      } catch (err) {
+        console.error('Boot snapshot failed — starting with an empty catalog:', err)
+      }
+
+      // Wait for every persisted store to finish rehydrating (the storage
+      // adapter serves from the boot cache, so this resolves immediately).
+      if (allHydrated()) {
+        finish()
+        return
+      }
+      unsubs = PERSISTED_STORES.map((s) =>
+        s.persist.onFinishHydration(() => {
+          if (allHydrated()) finish()
+        }),
+      )
+    }
+
+    const finish = () => {
+      if (cancelled) return
+      markHydrationComplete()
+      // Queue rebuild happens last: preferences are in, the catalog is
+      // mirrored, so id references resolve against real tracks.
+      usePlayerStore.getState().consumePendingQueueRestore((id) =>
+        useCatalogStore.getState().tracks[id],
+      )
+      setHydrated(true)
+    }
+
+    void boot()
+    return () => {
+      cancelled = true
+      unsubs.forEach((u) => u())
+    }
   }, [])
 
   return hydrated

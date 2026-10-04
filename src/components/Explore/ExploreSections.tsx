@@ -1,6 +1,6 @@
 import { Flame, Sparkles, Gem, ListMusic, Globe, Mic2, BadgeCheck } from 'lucide-react'
 import type { OnlineTrack, AudiusArtist, AudiusPlaylist } from '@/services/providers/audius'
-import { toSong } from '@/services/providers/audius'
+import { toTrack } from '@/services/providers/audius'
 import { Section, TrackListSkeleton, ErrorBlock, EmptyBlock, type SectionState } from './ExploreStates'
 import { TrackList } from './ExploreTrackList'
 import { PlaylistCardLarge, TrackTile, HeroCard } from './ExploreCards'
@@ -29,7 +29,7 @@ export function TrendingSection({ state, tracks, onRetry }: { state: SectionStat
   // (#2…). Derived from the SAME list — songs for queue continuity computed
   // once. The hero takes track[0] and the rail starts at #2, so a title can
   // never appear twice on the page (a v2.16.1 test contract).
-  const songs = useMemo(() => tracks.map(toSong), [tracks])
+  const songs = useMemo(() => tracks.map(toTrack), [tracks])
   const hero = state.status === 'done' ? tracks[0] : undefined
   const rest = hero ? tracks.slice(1) : tracks
   return (
@@ -73,7 +73,7 @@ export function FreshSection({ state, tracks, onRetry }: { state: SectionState; 
 }
 
 export function UndergroundSection({ state, tracks, onRetry }: { state: SectionState; tracks: OnlineTrack[]; onRetry: () => void }) {
-  const songs = useMemo(() => tracks.map(toSong), [tracks])
+  const songs = useMemo(() => tracks.map(toTrack), [tracks])
   return (
     <Section title="Under the Radar" icon={<Gem size={11} />}>
       {state.status === 'loading' || state.status === 'idle' ? (

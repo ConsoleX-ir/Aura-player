@@ -1,3 +1,4 @@
+import { useCatalogStore } from '@/store/catalogStore'
 import { useEffect } from "react";
 import { usePlayerStore } from "@/store/playerStore";
 import { useUiStore } from "@/store/uiStore";
@@ -139,12 +140,12 @@ export function useMediaShortcuts() {
 
         // ❤️ Favorite — with visible confirmation
         case "KeyL": {
-          s.toggleFavorite(s.currentSong.id);
+          void useCatalogStore.getState().toggleFavorite(s.currentSong.id);
           // Re-read once; capture locally so TS knows the song is still there
           // right after the toggle.
           const song = usePlayerStore.getState().currentSong;
           if (!song) break;
-          const isFav = usePlayerStore.getState().favorites.includes(song.id);
+          const isFav = useCatalogStore.getState().favorites.includes(song.id);
           toast({
             kind: isFav ? "favorite-add" : "favorite-remove",
             title: isFav ? "Added to Favorites" : "Removed from Favorites",
@@ -172,7 +173,7 @@ export function useMediaShortcuts() {
                 ? "Repeat Off"
                 : repeat === "all"
                   ? "Repeat Queue"
-                  : "Repeat This Song",
+                  : "Repeat This Track",
           });
           break;
         }

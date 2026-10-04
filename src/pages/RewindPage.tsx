@@ -5,6 +5,7 @@ import {
   CalendarDays, Flame, MoonStar, Sun, Headphones, Disc3, Mic2, Trophy, ArrowLeft,
 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { toast } from '@/store/toastStore'
 import { getScrobblesInRange } from '@/lib/scrobbleStore'
 import {
@@ -44,15 +45,15 @@ export default function RewindPage() {
   const [loading, setLoading] = useState(true)
   const [cardBusy, setCardBusy] = useState(false)
   const performanceMode = usePlayerStore((s) => s.performanceMode)
-  const library = usePlayerStore((s) => s.library)
+  const library = useCatalogStore(selectLibraryTracks)
   const goBack = usePlayerStore((s) => s.goBack)
   const nowWindow = currentMonthWindow()
   const isCurrentMonth = anchor.year === nowWindow.year && anchor.month0 === nowWindow.month0
 
   // Wire the cover resolver once — aggregateRewind stays data-only.
   useEffect(() => {
-    setSongCoverResolver((songId) =>
-      usePlayerStore.getState().library.find((s) => s.id === songId)?.coverArt ?? null)
+    setSongCoverResolver((songId: string) =>
+      useCatalogStore.getState().tracks[songId]?.artworkUrl ?? null)
   }, [])
 
   // Escape = back out of where I am (same contract as the Properties page).

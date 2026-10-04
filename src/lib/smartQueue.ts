@@ -6,7 +6,7 @@
 // ever APPENDS marked recommendations when the queue is about to run dry and
 // repeat is off; explicit removals are respected (never silently re-added).
 
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 
 /** How close to the end continuation kicks in (tracks remaining). */
 export const CONTINUE_THRESHOLD = 3
@@ -27,7 +27,7 @@ export function shouldExtendQueue(
 }
 
 export interface SmartPickPayload {
-  song: Song
+  song: Track
   /** Most significant human-readable reason (for the queue badge tooltip). */
   reason: string
 }
@@ -39,10 +39,10 @@ export interface SmartPickPayload {
  * Returns null when there is nothing to change — the store can skip the set.
  */
 export function appendSmartPicks(
-  queue: Song[],
-  naturalQueue: Song[],
+  queue: Track[],
+  naturalQueue: Track[],
   picks: SmartPickPayload[],
-): { queue: Song[]; naturalQueue: Song[]; addedIds: string[]; reasons: Record<string, string> } | null {
+): { queue: Track[]; naturalQueue: Track[]; addedIds: string[]; reasons: Record<string, string> } | null {
   const existing = new Set(queue.map((s) => s.id))
   const added: SmartPickPayload[] = []
   for (const p of picks) {
@@ -63,7 +63,7 @@ export function appendSmartPicks(
 }
 
 /** Keep only the smart ids that are still actually in the queue. */
-export function pruneSmartIds(ids: string[], queue: Song[]): string[] {
+export function pruneSmartIds(ids: string[], queue: Track[]): string[] {
   const live = new Set(queue.map((s) => s.id))
   return ids.filter((id) => live.has(id))
 }

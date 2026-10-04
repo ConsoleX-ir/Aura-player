@@ -2,7 +2,14 @@ import {
   ProviderError,
   type ProviderErrorPayload,
 } from './types'
-import type { ProviderErrorLike } from '@/types'
+import { desktop } from '@/services/desktop'
+
+// The failure shape the Rust provider layer returns through provider_call.
+interface ProviderErrorLike {
+  kind: string
+  message: string
+  status?: number
+}
 
 // ── providerCall — the renderer's single door to online providers ───────────
 // Wraps the net:providerRequest IPC channel with:
@@ -52,8 +59,7 @@ export async function providerCall<T>(
   params: Record<string, unknown> = {},
   opts: ProviderCallOptions = {},
 ): Promise<T> {
-  const api = typeof window !== 'undefined' ? window.electronAPI : undefined
-  if (!api?.providerRequest || !api?.providerCancel) {
+  if (!desktop.isDesktop()) {
     throw new ProviderError({ kind: 'unavailable', message: 'Online providers need the Aura desktop app' })
   }
 
@@ -62,7 +68,7 @@ export async function providerCall<T>(
 
   const controller = new AbortController()
   const onAbort = () => {
-    try { api.providerCancel!(requestId) } catch { /* request already settled */ }
+    try { desktop.providers.cancel(requestId) } catch { /* request already settled */ }
   }
   if (opts.signal) {
     if (opts.signal.aborted) throw new ProviderError({ kind: 'network', message: 'cancelled' })
@@ -81,7 +87,7 @@ export async function providerCall<T>(
   pending.add(requestId)
 
   try {
-    const result = await api.providerRequest(requestId, providerId, op, params)
+    const result = await desktop.providers.call(requestId, providerId, op, params)
     if (isProviderErrorPayload(result)) {
       throw new ProviderError(normalizePayload(result as ProviderErrorPayload))
     }
@@ -107,10 +113,9 @@ export async function providerCall<T>(
 
 /** Best-effort cancel of everything still in flight (e.g. going offline). */
 export function cancelAllProviderCalls(): void {
-  const api = typeof window !== 'undefined' ? window.electronAPI : undefined
-  if (!api?.providerCancel) return
+  if (!desktop.isDesktop()) return
   for (const id of pending) {
-    try { api.providerCancel(id) } catch { /* already settled */ }
+    try { desktop.providers.cancel(id) } catch { /* already settled */ }
   }
   pending.clear()
 }

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Play, ArrowLeft, Disc3, User } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
@@ -14,7 +15,7 @@ import { formatRuntime } from '@/lib/utils'
 // Explore under their provider's name.
 
 export function AlbumPage() {
-  const library = usePlayerStore((s) => s.library)
+  const library = useCatalogStore(selectLibraryTracks)
   const selectedAlbum = usePlayerStore((s) => s.selectedAlbum)
   const setSelectedAlbum = usePlayerStore((s) => s.setSelectedAlbum)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
@@ -72,7 +73,7 @@ export function AlbumPage() {
     )
   }
 
-  const cover = tracks.find((t) => t.coverArt)?.coverArt ?? null
+  const cover = tracks.find((t) => t.artworkUrl)?.artworkUrl ?? null
   const runtime = totalRuntimeSec(tracks)
   const year = tracks.map((t) => t.year).find((y) => y != null) ?? null
 

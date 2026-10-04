@@ -36,6 +36,7 @@
 
 import { usePlayerStore } from '@/store/playerStore'
 import { safeAppendScrobble } from '@/lib/scrobbleStore'
+import { desktop } from '@/services/desktop'
 import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
 import { sanitizeFx, BASS_SHELF_HZ, TREBLE_SHELF_HZ, compressionParams } from '@/lib/audioFx'
@@ -358,7 +359,7 @@ export function initPlayback() {
   usePlayerStore.subscribe((state, prev) => {
     if (!audio || !ctx) return
 
-    // ── Song removed from the library / library cleared while playing ──
+    // ── Track removed from the library / library cleared while playing ──
     // removeFromLibrary + clearLibrary null currentSong; without this
     // branch the "song changed" and "play/pause" handlers below both skip
     // (they both require a non-null currentSong) and the AUDIO KEPT
@@ -376,7 +377,7 @@ export function initPlayback() {
       return
     }
 
-    // ── Song changed ────────────────────────────────────────────────────
+    // ── Track changed ────────────────────────────────────────────────────
     if (state.currentSong && state.currentSong.id !== currentSongId) {
       // Flush the previous song's session (unless 'ended' already did it —
       // flushListenSession self-guards by song id, so a double flush is
@@ -394,31 +395,26 @@ export function initPlayback() {
       playedMs = 0
       lastTickAt = 0
 
-      const isElectron = typeof window !== 'undefined' && !!window.electronAPI
-      // Phase 4 — online tracks carry an http(s) stream URL in `path` and it
-      // passes through untouched (the aura:// protocol handler only serves
-      // local files). Local files keep the aura:// wrap in Electron.
-      const isRemote = /^https?:\/\//i.test(state.currentSong.path)
-      // Phase 5 — CORS mode per stream. The analyser chain needs
-      // crossOrigin='anonymous' (aura:// sends ACAO; Audius sends ACAO:* —
-      // verified), but most RADIO streams send none: loading them with
-      // crossOrigin set fails outright, so it's dropped for those (the
-      // analyser reads silence — playback keeps working).
-      audio.crossOrigin = (state.currentSong.source === 'online' && state.currentSong.streamCors === false)
-        ? null
-        : 'anonymous'
-      const params = new URLSearchParams({ path: state.currentSong.path })
-      audio.src = isElectron && !isRemote ? `aura://local?${params.toString()}` : state.currentSong.path
-      audio.load()
-      audio.currentTime = 0
-
-      // Generation token: if another song is requested before this play()
-      // settles, this promise's rejection is stale and MUST NOT touch the
-      // store (v1.x bug: the aborted play of song A flipped isPlaying off
-      // while song B was loading).
+      // Aura 4 — source resolution goes through the desktop boundary: the
+      // opaque aura-media:// protocol serves local files (no raw paths in
+      // the renderer), and remote tracks get a FRESH provider stream URL at
+      // play time (stream endpoints rotate — never persisted).
+      // CORS mode per stream. The analyser chain needs crossOrigin=
+      // 'anonymous' (aura-media sends ACAO; Audius sends ACAO:* — verified),
+      // but most RADIO streams send none: loading them with crossOrigin set
+      // fails outright, so it's dropped for those (the analyser reads
+      // silence — playback keeps working).
       const gen = ++loadGeneration
       const doPlay = async () => {
         try {
+          const source = await desktop.playback.resolveSource(state.currentSong!.id)
+          // Superseded while resolving? Drop the load — a newer song is
+          // already in flight.
+          if (gen !== loadGeneration) return
+          audio!.crossOrigin = source.streamCors ? 'anonymous' : null
+          audio!.src = source.url
+          audio!.load()
+          audio!.currentTime = 0
           if (ctx!.state === 'suspended') await ctx!.resume()
           await audio!.play()
           if (gen === loadGeneration) applyFadeEnvelope()

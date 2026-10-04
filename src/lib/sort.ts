@@ -1,4 +1,4 @@
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 
 // ── Library sorting (v2.1.0) ────────────────────────────────────────────────
 // Pure, React-free, unit-testable. The Library view owns the UI; this module
@@ -46,7 +46,7 @@ export type ListenStatsMap = Map<string, ListenSortStats>
 // insensitive ("aurora" and "Aurora" tie), numeric ("Track 2" < "Track 10").
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
 
-function addedTime(s: Song): number {
+function addedTime(s: Track): number {
   // Songs imported before addedAt existed (and Folder-Sync-touched files)
   // fall back to their file mtime; songs with neither sink to the bottom of
   // "asc" and lead "desc"... deliberately: MAX means "oldest possible" so
@@ -57,14 +57,14 @@ function addedTime(s: Song): number {
 
 /** Returns a NEW sorted array — the input is never mutated. */
 export function sortSongs(
-  songs: Song[],
+  songs: Track[],
   key: SortKey,
   dir: SortDir,
   listen?: ListenStatsMap,
-): Song[] {
+): Track[] {
   const sorted = [...songs]
   const flip = dir === 'desc' ? -1 : 1
-  const statsOf = (s: Song): ListenSortStats | undefined => listen?.get(s.id)
+  const statsOf = (s: Track): ListenSortStats | undefined => listen?.get(s.id)
   switch (key) {
     case 'added':
       sorted.sort((a, b) => (addedTime(a) - addedTime(b)) * flip)
@@ -89,7 +89,7 @@ export function sortSongs(
       )
       break
     case 'duration':
-      sorted.sort((a, b) => (a.duration - b.duration) * flip)
+      sorted.sort((a, b) => (a.durationSecs - b.durationSecs) * flip)
       break
     case 'recentlyPlayed': {
       // Never-played songs always sink to the bottom — "recently played"

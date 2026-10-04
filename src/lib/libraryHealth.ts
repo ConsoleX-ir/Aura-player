@@ -1,4 +1,4 @@
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 
 // ── Aura Library Health (Phase 1 — Library 2.0) ─────────────────────────────
 // Pure, React-free analysis of library entries against filesystem reality.
@@ -26,11 +26,11 @@ export interface LibraryHealthReport {
   /** Entries with an existing, readable file — the healthy majority. */
   ok: number
   /** Files that no longer exist on disk. */
-  missing: Song[]
+  missing: Track[]
   /** Files that exist but produced no playable duration at import time. */
-  invalid: Song[]
+  invalid: Track[]
   /** Groups of distinct paths that look like the same recording. */
-  duplicateGroups: Song[][]
+  duplicateGroups: Track[][]
 }
 
 /** Two recordings under 3s apart are the same track; more is a different take. */
@@ -47,9 +47,9 @@ function normText(s: string): string {
  * more than one member are reported. O(n log n): signature bucket, then a
  * duration-ordered walk inside each bucket.
  */
-export function findDuplicateGroups(songs: Song[], durationToleranceSec = DUPLICATE_DURATION_TOLERANCE_SEC): Song[][] {
+export function findDuplicateGroups(songs: Track[], durationToleranceSec = DUPLICATE_DURATION_TOLERANCE_SEC): Track[][] {
   // Bucket by text signature first — cheap, collision-free for real music.
-  const buckets = new Map<string, Song[]>()
+  const buckets = new Map<string, Track[]>()
   for (const song of songs) {
     const key = `${normText(song.title)}|||${normText(song.artist)}|||${normText(song.album)}`
     const arr = buckets.get(key)
@@ -57,18 +57,18 @@ export function findDuplicateGroups(songs: Song[], durationToleranceSec = DUPLIC
     else buckets.set(key, [song])
   }
 
-  const groups: Song[][] = []
+  const groups: Track[][] = []
   for (const bucket of buckets.values()) {
     if (bucket.length < 2) continue
     // Within a signature, cluster by duration. Zero durations (unreadable
     // files) must never equal each other — a missing duration is NOT a match.
-    const withDuration = bucket.filter((s) => s.duration > 0).sort((a, b) => a.duration - b.duration)
-    const zeroDuration = bucket.filter((s) => s.duration <= 0)
+    const withDuration = bucket.filter((s) => s.durationSecs > 0).sort((a, b) => a.durationSecs - b.durationSecs)
+    const zeroDuration = bucket.filter((s) => s.durationSecs <= 0)
 
-    const clusters: Song[][] = []
-    let cluster: Song[] = []
+    const clusters: Track[][] = []
+    let cluster: Track[] = []
     for (const song of withDuration) {
-      if (cluster.length === 0 || song.duration - cluster[cluster.length - 1].duration <= durationToleranceSec) {
+      if (cluster.length === 0 || song.durationSecs - cluster[cluster.length - 1].durationSecs <= durationToleranceSec) {
         cluster.push(song)
       } else {
         clusters.push(cluster)
@@ -97,13 +97,13 @@ export function findDuplicateGroups(songs: Song[], durationToleranceSec = DUPLIC
  * a path missing from the map is treated as existing (the caller couldn't
  * check it — never flag what we don't know).
  */
-export function analyzeLibraryHealth(songs: Song[], checks: Map<string, PathCheck>): LibraryHealthReport {
-  const missing: Song[] = []
-  const invalid: Song[] = []
+export function analyzeLibraryHealth(songs: Track[], checks: Map<string, PathCheck>): LibraryHealthReport {
+  const missing: Track[] = []
+  const invalid: Track[] = []
   let ok = 0
 
   for (const song of songs) {
-    const check = checks.get(song.path)
+    const check = song.path ? checks.get(song.path) : undefined
     if (check && !check.exists) {
       missing.push(song)
       continue
@@ -112,7 +112,7 @@ export function analyzeLibraryHealth(songs: Song[], checks: Map<string, PathChec
     // produces duration 0 with fallback metadata; a REAL audio file virtually
     // always has a positive duration, so duration 0 = "couldn't actually
     // read this file's audio".
-    if (song.duration <= 0) {
+    if (song.durationSecs <= 0) {
       invalid.push(song)
       continue
     }

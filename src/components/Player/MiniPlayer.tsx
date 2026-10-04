@@ -52,8 +52,8 @@ export function MiniPlayer() {
           className="relative w-[68px] h-[68px] shrink-0 group/mini rounded-2xl overflow-hidden"
           style={{ background: 'var(--glass-2)' }}
         >
-          {currentSong?.coverArt ? (
-            <img src={currentSong.coverArt} alt="" className="w-full h-full object-cover" />
+          {currentSong?.artworkUrl ? (
+            <img src={currentSong.artworkUrl} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Music2 size={20} style={{ color: 'var(--text-faint)' }} />

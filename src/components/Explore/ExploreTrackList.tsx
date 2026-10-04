@@ -3,7 +3,7 @@ import { ExternalLink, Pause, Play } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
 import { formatTime, cn } from '@/lib/utils'
-import { toSong, type OnlineTrack } from '@/services/providers/audius'
+import { toTrack, type OnlineTrack } from '@/services/providers/audius'
 
 // ── Explore track rows (v2.16.1) ─────────────────────────────────────────────
 // Provider-agnostic: the queue plays these like local songs through the ONE
@@ -12,12 +12,12 @@ import { toSong, type OnlineTrack } from '@/services/providers/audius'
 
 interface RowProps {
   track: OnlineTrack
-  song: ReturnType<typeof toSong>
+  song: ReturnType<typeof toTrack>
   active: boolean
   playing: boolean
   /** Rows are identical save for the active flag — group re-render only on change. */
-  onPlay: (song: ReturnType<typeof toSong>, list: ReturnType<typeof toSong>[]) => void
-  songs: ReturnType<typeof toSong>[]
+  onPlay: (song: ReturnType<typeof toTrack>, list: ReturnType<typeof toTrack>[]) => void
+  songs: ReturnType<typeof toTrack>[]
 }
 
 const TrackRow = memo(function TrackRow({ track, song, active, playing, onPlay, songs }: RowProps) {
@@ -83,7 +83,7 @@ export function TrackList({ tracks }: { tracks: OnlineTrack[] }) {
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
 
-  const songs = useMemo(() => tracks.map(toSong), [tracks])
+  const songs = useMemo(() => tracks.map(toTrack), [tracks])
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>

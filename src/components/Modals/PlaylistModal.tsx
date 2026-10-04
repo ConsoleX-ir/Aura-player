@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ListMusic, X } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore } from '@/store/catalogStore'
 import type { Playlist } from '@/types'
 
 interface PlaylistModalProps {
@@ -23,8 +24,8 @@ export function PlaylistModal({
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const createPlaylist = usePlayerStore((s) => s.createPlaylist)
-  const renamePlaylist = usePlayerStore((s) => s.renamePlaylist)
+  const createPlaylist = useCatalogStore((s) => s.createPlaylist)
+  const renamePlaylist = useCatalogStore((s) => s.renamePlaylist)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
   const setSelectedPlaylistId = usePlayerStore(
     (s) => s.setSelectedPlaylistId
@@ -68,24 +69,20 @@ useEffect(() => {
     if (!value) return
 
     if (mode === 'create') {
-      const id = createPlaylist(value)
-
-      if (!id) {
-        setError(`A playlist named "${value}" already exists.`)
-        return
-      }
-
-      setSelectedPlaylistId(id)
-      setActiveView('playlist')
+      void createPlaylist(value).then((id) => {
+        if (!id) {
+          setError(`A playlist named "${value}" already exists.`)
+          return
+        }
+        setSelectedPlaylistId(id)
+        setActiveView('playlist')
+      })
     } else {
       if (!playlist) return
 
-      const ok = renamePlaylist(playlist.id, value)
-
-      if (!ok) {
-        setError(`A playlist named "${value}" already exists.`)
-        return
-      }
+      void renamePlaylist(playlist.id, value).then((ok) => {
+        if (!ok) setError(`A playlist named "${value}" already exists.`)
+      })
     }
 
     setName('')

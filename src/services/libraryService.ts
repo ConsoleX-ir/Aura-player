@@ -1,253 +1,157 @@
 // ── Aura LibraryService ─────────────────────────────────────────────────────
-// All library ingestion + reconciliation business logic in ONE plain-TS
-// module: importing files/folders, drag-and-drop resolution, and Folder
-// Sync. React hooks stay thin UI wrappers (loading/progress state only) —
-// the logic itself no longer lives inside components (locked rule #3), and
-// Wave 4's folder watcher can call these same functions directly from an
-// Electron event instead of simulating a UI flow.
+// Thin orchestration over the desktop boundary. The heavy lifting — scanning,
+// metadata parsing, reconciliation, tombstones — lives in Rust now (Aura 4
+// §3/§7); this module shapes the few UI-facing flows: dialogs, progress
+// state, and drag-and-drop resolution.
 //
-// Behavior is intentionally byte-for-byte identical to the v1.x hook logic
-// this was extracted from (useLibraryImport.importPaths / importFolder /
-// importFiles / importDroppedPaths, useLibrarySync.syncAll).
+// Explicit imports clear tombstones on the Rust side (a conscious re-import
+// is a restore, not a resurrect). Folder Sync never bypasses that rule.
 
-import { usePlayerStore } from '@/store/playerStore'
-import { hashStr } from '@/lib/utils'
-import { analyzeLibraryHealth, type LibraryHealthReport, type PathCheck } from '@/lib/libraryHealth'
-import type { Song } from '@/types'
+import { desktop } from '@/services/desktop'
+import type { SyncResult } from '@/services/desktop'
+import { useCatalogStore } from '@/store/catalogStore'
 
 export interface ImportProgress { done: number; total: number }
-export interface SyncResult { added: number; removed: number; updated: number }
+export type { SyncResult }
 type ProgressCb = (p: ImportProgress) => void
 
-/**
- * Parses metadata for whichever of the given files aren't already in the
- * library (song IDs are a hash of the file path, so this is a cheap check)
- * and adds the results. Skipping known paths BEFORE parsing — not just
- * deduping after — matters for folder re-imports and Folder Sync:
- * re-parsing thousands of unchanged files would be wasted I/O and CPU.
- * Returns the number of songs actually added.
- */
+function applyResult(result: SyncResult) {
+  const catalog = useCatalogStore.getState()
+  if (result.upsertedTracks.length > 0) catalog.upsertTracks(result.upsertedTracks)
+  if (result.removedTrackIds.length > 0) catalog.removeTrackIds(result.removedTrackIds)
+  // Import results already carry Library membership on the DB side; mirror
+  // the ids locally (additions = upserted tracks that are now members).
+  const known = new Set(catalog.libraryIds)
+  const additions = result.upsertedTracks
+    .filter((t) => !known.has(t.id))
+    .map((t) => t.id)
+  if (additions.length > 0) {
+    useCatalogStore.setState((s) => ({
+      libraryIds: [...s.libraryIds, ...additions.filter((id) => !s.libraryIds.includes(id))],
+    }))
+  }
+}
+
+/** Import explicit file paths (dialog picks, file-association launches). */
 export async function importFiles(
-  files: { path: string; mtimeMs?: number }[],
+  paths: string[],
   onProgress?: ProgressCb,
 ): Promise<number> {
-  if (!window.electronAPI || files.length === 0) return 0
-
-  const existingIds = new Set(usePlayerStore.getState().library.map((s) => s.id))
-  const candidates = files
-    .map((f) => ({ path: f.path, mtimeMs: f.mtimeMs, id: hashStr(f.path) }))
-    .filter((c) => !existingIds.has(c.id))
-
-  if (candidates.length === 0) return 0
-
-  // Explicit import intent: anything the user deliberately adds through a
-  // picker / drag-drop / file association is a conscious re-import, so
-  // clear any tombstone those files carry (Wave 0). Folder Sync never calls
-  // importFiles — its own inline path is the ONLY way to re-add files —
-  // so tombstone clearing can't be bypassed by a mere library scan.
-  usePlayerStore.getState().restoreImportedPaths(candidates.map((c) => c.path))
-
-  onProgress?.({ done: 0, total: candidates.length })
-  const unsubscribe = window.electronAPI.onMetadataProgress((done, total) => {
-    onProgress?.({ done, total })
-  })
-
+  if (!desktop.isDesktop() || paths.length === 0) return 0
+  const unsubscribe = await desktop.events.onScanProgress((p) => onProgress?.(p))
   try {
-    const metas = await window.electronAPI.parseMetadataBatch(candidates.map((c) => c.path))
-    const songs: Song[] = candidates.map((c, i) => ({
-      id: c.id,
-      path: c.path,
-      mtimeMs: c.mtimeMs,
-      ...metas[i],
-    }))
-    usePlayerStore.getState().addToLibrary(songs)
-    return songs.length
+    const result = await desktop.library.importFiles(paths)
+    applyResult(result)
+    return result.added
   } finally {
     unsubscribe()
     onProgress?.({ done: 0, total: 0 })
   }
 }
 
-/** Native folder picker → recursive scan → import → register for Folder Sync. */
+/** Native folder picker → recursive scan + import → register for Folder Sync. */
 export async function importFolderViaDialog(onProgress?: ProgressCb): Promise<void> {
-  if (!window.electronAPI) return
-  const folderPath = await window.electronAPI.openFolder()
-  if (!folderPath) return
+  if (!desktop.isDesktop()) return
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const selected = await open({ directory: true, title: 'Select Music Folder' })
+  if (typeof selected !== 'string') return
 
-  const files = await window.electronAPI.scanFolder(folderPath)
-  await importFiles(files, onProgress)
-  // Tracked so Folder Sync (Settings → Library) can re-scan this folder
-  // later without the user having to pick it again.
-  usePlayerStore.getState().addImportedFolder(folderPath)
+  await importFiles([selected], onProgress)
+  await useCatalogStore.getState().addMusicFolder(selected)
 }
 
 /** Native file picker → import (no folder registration — loose files only). */
 export async function importFilesViaDialog(onProgress?: ProgressCb): Promise<void> {
-  if (!window.electronAPI) return
-  const filePaths = await window.electronAPI.openFiles()
-  if (filePaths.length === 0) return
-  await importFiles(filePaths.map((path) => ({ path })), onProgress)
+  if (!desktop.isDesktop()) return
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const selected = await open({
+    multiple: true,
+    title: 'Select Songs',
+    filters: [{ name: 'Audio Files', extensions: ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'aac', 'opus', 'wma'] }],
+  })
+  const paths = Array.isArray(selected) ? selected : selected ? [selected] : []
+  if (paths.length === 0) return
+  await importFiles(paths, onProgress)
 }
 
 /**
  * Drag-and-drop entry point: dropped items can be a mix of individual audio
- * files and whole folders (Explorer hands both back as plain paths the same
- * way). Any dropped folder is registered for Folder Sync too, exactly like
- * picking it via "Add Folder...".
+ * files and whole folders (paths arrive from the Tauri drag-drop event, so
+ * they are real filesystem paths). Any dropped folder is registered for
+ * Folder Sync too, exactly like picking it via "Add Folder...".
  */
 export async function importDroppedPaths(paths: string[], onProgress?: ProgressCb): Promise<void> {
-  if (!window.electronAPI || paths.length === 0) return
-  const { files, folders } = await window.electronAPI.resolveDroppedPaths(paths)
-  await importFiles(files, onProgress)
-  folders.forEach((f) => usePlayerStore.getState().addImportedFolder(f))
+  if (!desktop.isDesktop() || paths.length === 0) return
+  const unsubscribe = await desktop.events.onScanProgress((p) => onProgress?.(p))
+  try {
+    const result = await desktop.library.importDropped(paths)
+    applyResult(result)
+    // Dropped folders join Folder Sync (mirrored by applyResult's absence —
+    // the Rust side already added them; pull the fresh folder list).
+    const snap = await desktop.library.snapshot()
+    useCatalogStore.setState({ musicFolders: snap.musicFolders })
+    await desktop.library.watchFolders()
+  } finally {
+    unsubscribe()
+    onProgress?.({ done: 0, total: 0 })
+  }
 }
 
 /**
- * Folder Sync — for every folder the user has previously imported
- * (tracked in importedFolders), re-scan it and reconcile the library:
- *   • files on disk with no matching library entry        → added
- *   • library entries under this folder no longer on disk → removed
- *   • files whose mtime changed since last import/sync    → re-parsed, updated
- *   • everything else                                     → left untouched
+ * Folder Sync — re-scan every tracked folder and reconcile the database:
+ *   • files on disk with no matching catalog entry        → added
+ *   • catalog entries under this folder no longer on disk → removed
+ *   • files whose mtime changed since last scan           → re-parsed
  *   • paths the user DELETED from the library (tombstones) → never re-added
- *
- * The mtime check keeps this fast on large libraries: a folder scan is a
- * directory walk + stat per file (cheap), so re-syncing an unchanged folder
- * costs almost nothing — full tag parsing only runs for new/changed files.
+ * The watcher triggers the same reconciliation per folder automatically.
  */
 export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResult> {
-  const result: SyncResult = { added: 0, removed: 0, updated: 0 }
-  if (!window.electronAPI) return result
-
-  const { importedFolders } = usePlayerStore.getState()
-  if (importedFolders.length === 0) return result
-
-  for (const folder of importedFolders) {
-    const scanned = await window.electronAPI.scanFolder(folder)
-    const scannedByPath = new Map(scanned.map((f) => [f.path, f]))
-
-    // Tombstone maintenance (Wave 0): paths under this folder the user
-    // removed from the library while the file still exists must NOT come
-    // back below; and once a tombstoned file disappears from disk, the
-    // tombstone has done its job — drop it so a future file re-created at
-    // the same path is treated as fresh import material.
-    const tombstones = usePlayerStore.getState().removedPaths
-    if (tombstones.length > 0) {
-      const staleTombstones = tombstones.filter(
-        (p) => p.startsWith(folder) && !scannedByPath.has(p)
-      )
-      if (staleTombstones.length > 0) {
-        usePlayerStore.getState().restoreImportedPaths(staleTombstones)
-      }
-    }
-    const tombstonedPaths = new Set(
-      usePlayerStore.getState().removedPaths
-    )
-
-    const library = usePlayerStore.getState().library
-    const librarySongsInFolder = library.filter((s) => s.path.startsWith(folder))
-    const existingByPath = new Map(librarySongsInFolder.map((s) => [s.path, s]))
-
-    // A folder that previously had songs but now scans back completely
-    // empty has most likely been deleted or unmounted (moved drive,
-    // removed directory) rather than had every file individually deleted.
-    // Stop tracking it so future syncs don't keep re-scanning a path that
-    // no longer exists.
-    if (scanned.length === 0 && librarySongsInFolder.length > 0) {
-      usePlayerStore.getState().removeImportedFolder(folder)
-    }
-
-    // Deleted: was in the library under this folder, isn't on disk anymore.
-    const deletedIds = librarySongsInFolder
-      .filter((s) => !scannedByPath.has(s.path))
-      .map((s) => s.id)
-
-    // New or changed: not in the library at all, or mtime moved on.
-    // Tombstoned paths (user-deleted from the library) are skipped — that
-    // is the whole point of the tombstone: sync reconciles the library
-    // with disk, but it must never override an explicit removal decision.
-    const toParse: { path: string; id: string; mtimeMs: number; isUpdate: boolean }[] = []
-    for (const file of scanned) {
-      if (tombstonedPaths.has(file.path)) continue
-      const existing = existingByPath.get(file.path)
-      if (!existing) {
-        toParse.push({ path: file.path, id: hashStr(file.path), mtimeMs: file.mtimeMs, isUpdate: false })
-      } else if (existing.mtimeMs !== file.mtimeMs) {
-        toParse.push({ path: file.path, id: existing.id, mtimeMs: file.mtimeMs, isUpdate: true })
-      }
-    }
-
-    if (deletedIds.length > 0) {
-      usePlayerStore.getState().removeSongsFromLibrary(deletedIds)
-      result.removed += deletedIds.length
-    }
-
-    if (toParse.length > 0) {
-      onProgress?.({ done: 0, total: toParse.length })
-      const unsubscribe = window.electronAPI.onMetadataProgress((done, total) => {
-        onProgress?.({ done, total })
-      })
-
-      let metas: Omit<Song, 'id' | 'path'>[]
-      try {
-        metas = await window.electronAPI.parseMetadataBatch(toParse.map((c) => c.path))
-      } finally {
-        unsubscribe()
-      }
-
-      const newSongs: Song[] = []
-      const changedSongs: Song[] = []
-      const now = Date.now()
-      toParse.forEach((c, i) => {
-        // addedAt (v2.1.0): when the song entered the library — powers the
-        // Library's "Recently Added" sort. Set only on first import; a
-        // re-parse of a changed file must not refresh it (that would reshuffle
-        // the user's Recently Added view on every Folder Sync touch). Songs
-        // from before this field existed fall back to mtimeMs at sort time.
-        const song: Song = { id: c.id, path: c.path, mtimeMs: c.mtimeMs, addedAt: now, ...metas[i] }
-        if (c.isUpdate) changedSongs.push(song)
-        else newSongs.push(song)
-      })
-
-      if (newSongs.length > 0) {
-        usePlayerStore.getState().addToLibrary(newSongs)
-        result.added += newSongs.length
-      }
-      if (changedSongs.length > 0) {
-        usePlayerStore.getState().updateSongs(changedSongs)
-        result.updated += changedSongs.length
-      }
-    }
+  if (!desktop.isDesktop()) {
+    return { added: 0, removed: 0, updated: 0, upsertedTracks: [], removedTrackIds: [], untrackedFolders: [] }
   }
-
-  return result
+  const unsubscribe = await desktop.events.onScanProgress((p) => onProgress?.(p))
+  try {
+    const result = await desktop.library.syncAll()
+    applyResult(result)
+    // Untracked folders (vanished drives) drop out of the mirror too.
+    if (result.untrackedFolders.length > 0) {
+      const snap = await desktop.library.snapshot()
+      useCatalogStore.setState({ musicFolders: snap.musicFolders })
+    }
+    return result
+  } finally {
+    unsubscribe()
+    onProgress?.({ done: 0, total: 0 })
+  }
 }
 
 /**
- * Library Health (Phase 1 — Library 2.0): verifies every library entry
- * against the filesystem and analyzes the whole collection for duplicate
- * recordings. Pure judgment lives in lib/libraryHealth (unit-tested); this
- * wrapper only gathers the filesystem facts and shapes the report.
- *
- * Without an electronAPI (plain browser / tests without a mock) the scan
- * degrades honestly: every entry counts as checked-and-present, duplicates
- * are still analyzed, and nothing is flagged missing.
+ * Library Health: verify every library entry against the filesystem and
+ * analyze the collection for duplicate recordings. Pure judgment lives in
+ * lib/libraryHealth (unit-tested); this wrapper only gathers filesystem
+ * facts and shapes the report.
  */
-export async function runLibraryHealthCheck(): Promise<LibraryHealthReport> {
-  const songs = usePlayerStore.getState().library
+export async function runLibraryHealthCheck() {
+  const { analyzeLibraryHealth } = await import('@/lib/libraryHealth')
+  const catalog = useCatalogStore.getState()
+  const tracks = selectAllLocal(catalog)
+  const paths = tracks.map((t) => t.path).filter((p): p is string => !!p)
 
-  if (!window.electronAPI?.checkPaths || songs.length === 0) {
-    return analyzeLibraryHealth(songs, new Map())
-  }
-
-  let checks: PathCheck[]
+  let checks
   try {
-    checks = await window.electronAPI.checkPaths(songs.map((s) => s.path))
+    checks = paths.length > 0 ? await desktop.library.checkPaths(paths) : []
   } catch {
-    // IPC itself failed — report what we know (nothing about the disk)
-    // rather than fabricating a sea of "missing" flags.
-    return analyzeLibraryHealth(songs, new Map())
+    return analyzeLibraryHealth(
+      tracks as never,
+      new Map(),
+    )
   }
   const byPath = new Map(checks.map((c) => [c.path, c]))
-  return analyzeLibraryHealth(songs, byPath)
+  return analyzeLibraryHealth(tracks as never, byPath)
 }
+
+
+function selectAllLocal(catalog: ReturnType<typeof useCatalogStore.getState>) {
+  return Object.values(catalog.tracks).filter((t) => t.kind === 'local' && t.path)
+}
+

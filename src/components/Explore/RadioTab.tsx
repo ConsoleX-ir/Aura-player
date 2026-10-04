@@ -23,7 +23,7 @@ import { filterMusicStations, filterMusicFacets } from '@/lib/radioMusic'
 //   • Facet lists ride the 10-minute TTL cache — reopening the tab no
 //     longer refetches them.
 //
-// Playing: the station becomes a one-item queue of a live Song — duration 0
+// Playing: the station becomes a one-item queue of a live Track — duration 0
 // (progress idles, seek is a no-op), streamCors:false so the engine drops its
 // CORS mode and the stream can actually load. A citizenship click-ping fires
 // fire-and-forget. If a station's stream is dead anyway, the playback-error

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, X, Music2, Volume2, VolumeX } from 'lucide-react'
 import { formatTime } from '@/lib/utils'
+import { desktop } from '@/services/desktop'
 
 // ── Mini state contract ──────────────────────────────────────────────────────
 // Pushed by the MAIN window's useMiniPlayerBridge over 'mini:state'. Kept as a
@@ -9,7 +10,7 @@ export interface MiniState {
   hasSong: boolean
   title: string
   artist: string
-  coverArt: string | null
+  artworkUrl: string | null
   isPlaying: boolean
   /** 0..1 playback progress — drives the artwork progress ring + seek bar. */
   progress: number
@@ -31,7 +32,7 @@ const INITIAL: MiniState = {
   hasSong: false,
   title: 'Nothing playing',
   artist: 'Aura mini-player',
-  coverArt: null,
+  artworkUrl: null,
   isPlaying: false,
   progress: 0,
   durationSec: 0,
@@ -48,11 +49,11 @@ export function MiniApp() {
   const [state, setState] = useState<MiniState>(INITIAL)
 
   useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.onMiniState) return
-    return api.onMiniState((s: MiniState) => {
+    if (!desktop.isDesktop()) return
+    const off = desktop.events.onMiniState((s: MiniState) => {
       setState({ ...INITIAL, ...s })
     })
+    return () => { off.then((u) => u()).catch(() => {}) }
   }, [])
 
   // Theme tokens resolve under [data-theme] on the root element. The main
@@ -77,7 +78,7 @@ export function MiniApp() {
   }, [state.appearance, state.theme, state.accent])
 
   const act = (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') =>
-    window.electronAPI?.miniAction?.(action)
+    desktop.windows.mini.action(action)
 
   return (
     <div className="fixed inset-0 p-2">
@@ -118,8 +119,8 @@ export function MiniApp() {
           className="relative w-[60px] h-[60px] shrink-0 group/mini rounded-[15px] overflow-hidden"
           style={{ background: 'var(--glass-2)', WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          {state.coverArt ? (
-            <img src={state.coverArt} alt="" className="w-full h-full object-cover" draggable={false} />
+          {state.artworkUrl ? (
+            <img src={state.artworkUrl} alt="" className="w-full h-full object-cover" draggable={false} />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Music2 size={18} style={{ color: 'var(--text-faint)' }} />
@@ -270,14 +271,14 @@ function MiniSeek({ progress, durationSec, hasSong }: { progress: number; durati
     const f = fractionFrom(e.clientX)
     dragPRef.current = f
     setDragP(f)
-    window.electronAPI?.miniSeek?.(f)
+    desktop.windows.mini.seek(f)
   }
   const onMove = (e: React.PointerEvent) => {
     if (!dragging) return
     const f = fractionFrom(e.clientX)
     dragPRef.current = f
     setDragP(f)
-    window.electronAPI?.miniSeek?.(f)
+    desktop.windows.mini.seek(f)
   }
   const onUp = () => setDragging(false)
 
@@ -307,8 +308,8 @@ function MiniSeek({ progress, durationSec, hasSong }: { progress: number; durati
         onPointerCancel={onUp}
         onKeyDown={(e) => {
           if (!hasSong) return
-          if (e.key === 'ArrowRight') window.electronAPI?.miniSeek?.(Math.min(1, shown + 0.05))
-          if (e.key === 'ArrowLeft') window.electronAPI?.miniSeek?.(Math.max(0, shown - 0.05))
+          if (e.key === 'ArrowRight') desktop.windows.mini.seek(Math.min(1, shown + 0.05))
+          if (e.key === 'ArrowLeft') desktop.windows.mini.seek(Math.max(0, shown - 0.05))
         }}
         className="relative flex-1 h-2.5 flex items-center cursor-pointer group/seek"
         style={{ touchAction: 'none' }}
@@ -354,7 +355,7 @@ function MiniVolume({ volume, muted }: { volume: number; muted: boolean }) {
   return (
     <div className="flex items-center gap-1" data-mini-volume>
       <button
-        onClick={() => window.electronAPI?.miniAction?.('toggleMute')}
+        onClick={() => desktop.windows.mini.action('toggleMute')}
         title={muted ? 'Unmute' : 'Mute'}
         aria-label={muted ? 'Unmute' : 'Mute'}
         className="p-1.5 rounded-lg icon-hover"
@@ -372,7 +373,7 @@ function MiniVolume({ volume, muted }: { volume: number; muted: boolean }) {
         onChange={(e) => {
           const v = Number(e.target.value)
           setLocal(v)
-          window.electronAPI?.setMiniVolume?.(v)
+          desktop.windows.mini.setVolume(v)
         }}
         aria-label="Volume"
         className="w-12 h-1 rounded-full appearance-none cursor-pointer accent-[var(--accent)]"

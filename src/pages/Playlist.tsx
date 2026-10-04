@@ -1,5 +1,6 @@
 import { ArrowLeft, Play, Shuffle, Music2, Trash2, Pencil, ListPlus, Download, Loader2 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { useState } from 'react'
 import { PlaylistModal } from '@/components/Modals/PlaylistModal'
@@ -12,14 +13,14 @@ import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
 export function PlaylistPage() {
   // Narrow selectors — avoids re-rendering the whole page on unrelated store
   // mutations like the playback progress tick.
-  const playlists = usePlayerStore((s) => s.playlists)
+  const playlists = useCatalogStore((s) => s.playlists)
   const selectedPlaylistId = usePlayerStore((s) => s.selectedPlaylistId)
-  const library = usePlayerStore((s) => s.library)
+  const library = useCatalogStore(selectLibraryTracks)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
   const setSelectedPlaylistId = usePlayerStore((s) => s.setSelectedPlaylistId)
   const playSong = usePlayerStore((s) => s.playSong)
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle)
-  const deletePlaylist = usePlayerStore((s) => s.deletePlaylist)
+  const deletePlaylist = useCatalogStore((s) => s.deletePlaylist)
 
   const playlist = playlists.find((p) => p.id === selectedPlaylistId)
   const songs = (playlist?.songIds ?? []).map((id) => library.find((s) => s.id === id)).filter(Boolean) as typeof library
@@ -43,7 +44,7 @@ export function PlaylistPage() {
     setSelectedPlaylistId(null)
   }
 
-  const coverArt = songs.find((s) => s.coverArt)?.coverArt ?? null
+  const coverArt = songs.find((s) => s.artworkUrl)?.artworkUrl ?? null
 
   return (
     <div className="flex flex-col h-full">
@@ -149,7 +150,7 @@ export function PlaylistPage() {
         </div>
       </div>
 
-      {/* Song list — its own bounded scroll region, separate from the hero above */}
+      {/* Track list — its own bounded scroll region, separate from the hero above */}
       <div className="flex-1 min-h-0">
         {songs.length === 0 ? (
           <div className="h-full flex items-center justify-center pb-10">

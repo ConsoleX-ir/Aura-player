@@ -7,18 +7,19 @@
 // stores. Here we only orchestrate.
 
 import { usePlayerStore } from '@/store/playerStore'
+import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { toast } from '@/store/toastStore'
 import { getListenAggregates, getScrobblesInRange } from '@/lib/scrobbleStore'
 import { buildSmartRadio, type SmartResult } from '@/lib/smartEngine'
 import { CONTINUE_COUNT } from '@/lib/smartQueue'
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 
 /** Scrobble window used for the hour-of-day context signal. */
 const CONTEXT_WINDOW_MS = 60 * 24 * 60 * 60 * 1000 // 60 days
 
 export interface StartRadioOptions {
   /** Seed song — null builds a taste mix instead of a radio. */
-  seed?: Song | null
+  seed?: Track | null
   /** Skip playing immediately (used by Phase 8 queue continuation). */
   play?: boolean
 }
@@ -29,18 +30,19 @@ export interface StartRadioOptions {
  * Shared by the radio actions (Phase 7), the queue continuation and the
  * Smart Playlists page (Phase 8) — ONE gather path, no duplicated logic.
  */
-export async function assembleSmartContext(seed?: Song | null) {
-  const s = usePlayerStore.getState()
-  if (s.library.length === 0) return null
+export async function assembleSmartContext(seed?: Track | null) {
+  const catalog = useCatalogStore.getState()
+  const library = selectLibraryTracks(catalog)
+  if (library.length === 0) return null
   const now = Date.now()
   const [aggregates, scrobbles] = await Promise.all([
     getListenAggregates(),
     getScrobblesInRange(now - CONTEXT_WINDOW_MS, now).catch(() => []),
   ])
   return {
-    seed: s.library.some((x) => x.id === seed?.id) ? seed! : null,
-    library: s.library,
-    favorites: s.favorites,
+    seed: library.some((x) => x.id === seed?.id) ? seed! : null,
+    library,
+    favorites: catalog.favorites,
     listens: aggregates,
     recentScrobbles: scrobbles.map((sc) => ({ songId: sc.songId, startedAt: sc.startedAt })),
     now,
@@ -52,17 +54,17 @@ export async function assembleSmartContext(seed?: Song | null) {
  * result so callers (Smart Queue UI in Phase 8) can surface reasons.
  */
 export async function buildSmartList(options: StartRadioOptions = {}): Promise<SmartResult | null> {
-  const s = usePlayerStore.getState()
+  const library = selectLibraryTracks(useCatalogStore.getState())
   const seed = options.seed ?? null
 
   // Local songs only — online/radio tracks have no history and leave the
   // library untouched by design.
-  if (s.library.length === 0) {
+  if (library.length === 0) {
     toast({ kind: 'smart-radio', title: 'Smart Radio', subtitle: 'Your library is empty — import some music first.' })
     return null
   }
 
-  if (seed && !s.library.some((x) => x.id === seed.id)) {
+  if (seed && !library.some((x: Track) => x.id === seed.id)) {
     // Seed is an online/radio track or was removed — degrade to taste mix.
     toast({ kind: 'smart-radio', title: 'Smart Radio', subtitle: 'The seed is not a library track — building from your taste instead.' })
   }
@@ -84,7 +86,7 @@ export async function buildSmartList(options: StartRadioOptions = {}): Promise<S
  * explicitly removed by the user. Returns raw payloads for the store's
  * append action (or null when there is nothing worth adding).
  */
-export async function buildContinuation(currentSong: Song, excludeIds: string[]): Promise<{ song: Song; reason: string }[] | null> {
+export async function buildContinuation(currentSong: Track, excludeIds: string[]): Promise<{ song: Track; reason: string }[] | null> {
   const ctx = await assembleSmartContext(currentSong)
   if (!ctx) return null
   const result = buildSmartRadio({
@@ -101,7 +103,7 @@ export async function buildContinuation(currentSong: Song, excludeIds: string[])
 }
 
 /** Build + start playing a smart radio (seeded) or taste mix (unseeded). */
-export async function startSmartRadio(seed: Song | null): Promise<void> {
+export async function startSmartRadio(seed: Track | null): Promise<void> {
   const result = await buildSmartList({ seed, play: true })
   if (!result || result.picks.length === 0) return
 

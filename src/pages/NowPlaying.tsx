@@ -9,7 +9,7 @@ import * as Slider from '@radix-ui/react-slider'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLyrics } from '@/hooks/useLyrics'
 import { VisualStage } from '@/components/NowPlaying/VisualStage'
-import { useArtworkStore } from '@/store/artworkStore'
+import { useCatalogStore } from '@/store/catalogStore'
 import { useVirtualWindow } from '@/hooks/useVirtualWindow'
 import { formatTime } from '@/lib/utils'
 
@@ -36,8 +36,8 @@ export function NowPlaying() {
   const volume = usePlayerStore((s) => s.volume)
   const shuffle = usePlayerStore((s) => s.shuffle)
   const repeat = usePlayerStore((s) => s.repeat)
-  const favorites = usePlayerStore((s) => s.favorites)
-  const toggleFavorite = usePlayerStore((s) => s.toggleFavorite)
+  const favorites = useCatalogStore((s) => s.favorites)
+  const toggleFavorite = useCatalogStore((s) => s.toggleFavorite)
   const togglePlay = usePlayerStore((s) => s.togglePlay)
   const nextSong = usePlayerStore((s) => s.nextSong)
   const prevSong = usePlayerStore((s) => s.prevSong)
@@ -81,7 +81,7 @@ export function NowPlaying() {
   // state — a view mood, not a preference.
   const [npStage, setNpStage] = useState<'lyrics' | 'visualizer'>('lyrics')
   // Aura 3.0 — custom artwork override (Wave 11) drives the hero + backdrop.
-  const coverOverride = useArtworkStore((s) => (s.overrides[currentSong?.id ?? '']?.url ?? null))
+  const coverOverride = useCatalogStore((s) => (s.artworkOverrides[currentSong?.id ?? '']?.url ?? null))
 
   // Active lyric line index + auto-scroll now live inside <NowPlayingLyrics/>
   // (they tick with progress; this page doesn't need to know).
@@ -98,10 +98,10 @@ export function NowPlaying() {
     >
       {/* Blurred album art background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {(coverOverride ?? currentSong.coverArt) && (
+        {(coverOverride ?? currentSong.artworkUrl) && (
           <motion.img
             key={currentSong.id}
-            src={(coverOverride ?? currentSong.coverArt)!}
+            src={(coverOverride ?? currentSong.artworkUrl)!}
             alt=""
             initial={{ opacity: 0, scale: 1.08 }}
             animate={{ opacity: 1, scale: 1.1 }}
@@ -210,9 +210,9 @@ export function NowPlaying() {
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
               className="relative"
             >
-              {(coverOverride ?? currentSong.coverArt) ? (
+              {(coverOverride ?? currentSong.artworkUrl) ? (
                 <img
-                  src={(coverOverride ?? currentSong.coverArt)!}
+                  src={(coverOverride ?? currentSong.artworkUrl)!}
                   alt={currentSong.title}
                   className="w-64 h-64 rounded-3xl object-cover"
                   style={{
@@ -243,7 +243,7 @@ export function NowPlaying() {
             </motion.div>
           </AnimatePresence>
 
-          {/* Song info — display-font title, keyed morph per track */}
+          {/* Track info — display-font title, keyed morph per track */}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSong.id}
@@ -463,8 +463,8 @@ export function NowPlaying() {
                       />
                     )}
                     {queueVirtualized ? null : null}
-                    {song.coverArt
-                      ? <img src={song.coverArt} alt="" className="w-7 h-7 rounded-md object-cover shrink-0" />
+                    {song.artworkUrl
+                      ? <img src={song.artworkUrl} alt="" className="w-7 h-7 rounded-md object-cover shrink-0" />
                       : <div className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>
                     }
                     <div className="flex-1 min-w-0">

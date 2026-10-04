@@ -1,7 +1,8 @@
 import type { ProviderInfo } from './types'
 
 // ── Provider registry — the list the UI may iterate ─────────────────────────
-// Metadata mirrors what main process registers (electron/providers/*.cjs).
+// Metadata mirrors what the Rust provider registry registers
+// (src-tauri/src/providers/mod.rs).
 // Keep both in sync — a unit test (scripts/phase3_core.test.ts) requires the
 // CJS modules and asserts every registered provider/op is declared here, so
 // drift fails CI instead of surfacing as a broken panel.
@@ -14,7 +15,7 @@ export const PROVIDERS: ProviderInfo[] = [
     id: 'findinfo',
     name: 'Find Info Online',
     kind: 'metadata',
-    description: 'Song metadata lookup across Deezer, Apple Music (iTunes), and MusicBrainz — used by the song ⋯ menu.',
+    description: 'Track metadata lookup across Deezer, Apple Music (iTunes), and MusicBrainz — used by the song ⋯ menu.',
     capabilities: { search: true, artistSearch: false, trending: false, stream: false, radioBrowse: false },
     keyless: true,
   },

@@ -1,3 +1,4 @@
+import { desktop } from '@/services/desktop'
 import { useRef, useState } from 'react'
 import { AudioLines, Download, Upload } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
@@ -62,9 +63,14 @@ export function AudioFxCard({ bypassed }: { bypassed: boolean }) {
       ],
     }
     try {
-      const path = await window.electronAPI?.savePlaylistFile?.('aura-fx-presets.json')
-      if (path === null || path === undefined) return // user cancelled
-      await window.electronAPI?.writeTextFile?.(path, JSON.stringify(payload, null, 2))
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const path = await save({
+        title: 'Export FX Presets',
+        defaultPath: 'aura-fx-presets.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (!path) return // cancelled
+      await desktop.system.exportFile(path, JSON.stringify(payload, null, 2), 'text')
       flash('Presets exported')
     } catch {
       flash('Export failed — check the save location')

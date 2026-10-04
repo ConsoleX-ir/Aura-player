@@ -1,6 +1,6 @@
 import { providerCall } from './client'
 import { cachedProviderCall } from './cache'
-import type { Song } from '@/types'
+import type { Track } from '@/types'
 import type { RadioStation } from '@/store/radioStore'
 
 // ── Radio Browser provider — renderer bindings (Phase 5, v2.16.1 cache) ─────
@@ -58,22 +58,28 @@ export function clickStation(stationId: string): void {
     .catch(() => { /* deliberately ignored */ })
 }
 
-// ── Station → Song ──────────────────────────────────────────────────────────
-// Stations are live: durationSec null → Song.duration 0 (progress bar idles,
+// ── Station → Track ──────────────────────────────────────────────────────────
+// Stations are live: durationSec null → Track.duration 0 (progress bar idles,
 // seek is a no-op), queue of one, and `streamCors: false` tells the engine to
 // drop the CORS mode — most radio streams don't send ACAO headers, and
 // forcing crossOrigin would make them fail to load entirely.
 
-export function toStationSong(station: RadioStation): Song {
+// Stations are live: durationSecs 0 (progress bar idles, seek is a no-op),
+// and the engine drops crossOrigin for radio streams — most don't send ACAO
+// headers, and forcing it would make them fail to load entirely. The stream
+// URL resolves fresh at play time through playback_resolve_source.
+export function toStationTrack(station: RadioStation): Track {
   return {
-    id: `radio.${station.id}`,
-    path: station.streamUrl ?? '',
+    id: `p:radiobrowser:${station.id}`,
+    kind: 'remote',
+    provider: 'radiobrowser',
+    providerTrackId: station.id,
     title: station.title,
     artist: station.artist || 'Radio',
     album: station.subtitle || 'Live Radio',
-    duration: 0,
-    coverArt: station.artworkUrl,
-    source: 'online',
-    streamCors: false,
+    durationSecs: 0,
+    artworkUrl: station.artworkUrl,
+    addedAt: Date.now(),
+    updatedAt: Date.now(),
   }
 }
