@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Play, ArrowLeft, Radio, Disc3, User } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
@@ -19,7 +18,7 @@ import { formatRuntime } from '@/lib/utils'
 // reuses the Smart Music Engine with the artist's most-played track as seed.
 
 export function ArtistPage() {
-  const library = useCatalogStore(selectLibraryTracks)
+  const library = usePlayerStore((s) => s.library)
   const selectedArtist = usePlayerStore((s) => s.selectedArtist)
   const setSelectedArtist = usePlayerStore((s) => s.setSelectedArtist)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
@@ -79,7 +78,7 @@ export function ArtistPage() {
     )
   }
 
-  const covers = [...new Set(tracks.map((t) => t.artworkUrl).filter(Boolean))].slice(0, 4) as string[]
+  const covers = [...new Set(tracks.map((t) => t.coverArt).filter(Boolean))].slice(0, 4) as string[]
   const runtime = totalRuntimeSec(tracks)
 
   return (
@@ -141,7 +140,7 @@ export function ArtistPage() {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {albums.map((a) => {
-                const cover = a.songs.find((s) => s.artworkUrl)?.artworkUrl ?? null
+                const cover = a.songs.find((s) => s.coverArt)?.coverArt ?? null
                 return (
                   <button
                     key={`${a.key.normArtist}||${a.key.normAlbum}`}

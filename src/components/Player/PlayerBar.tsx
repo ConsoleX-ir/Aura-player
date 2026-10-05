@@ -10,7 +10,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
 import { formatTime } from '@/lib/utils'
 import { AuraPulse } from './AuraPulse'
-import { useCatalogStore } from '@/store/catalogStore'
+import { useArtworkStore } from '@/store/artworkStore'
 
 // ── Playbar 3.0 (Aura 3.0 Wave 5) ───────────────────────────────────────────
 // Aura's signature transport, redesigned: the v2 floating CAPSULE becomes a
@@ -35,7 +35,7 @@ export function PlayerBar() {
   // plays. Previously every tick re-rendered the entire pill.
   const currentSong = usePlayerStore((s) => s.currentSong)
   // Aura 3.0 — the user's artwork override wins over embedded/provider art.
-  const coverOverride = useCatalogStore((s) => (s.artworkOverrides[currentSong?.id ?? '']?.url ?? null))
+  const coverOverride = useArtworkStore((s) => (s.overrides[currentSong?.id ?? '']?.url ?? null))
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -176,9 +176,9 @@ export function PlayerBar() {
                   transition={{ type: 'spring', stiffness: 380, damping: 26 }}
                   className="relative shrink-0"
                 >
-                  {(coverOverride ?? currentSong.artworkUrl)
+                  {(coverOverride ?? currentSong.coverArt)
                     ? <img
-                        src={(coverOverride ?? currentSong.artworkUrl)!}
+                        src={(coverOverride ?? currentSong.coverArt)!}
                         alt=""
                         className="w-12 h-12 rounded-xl object-cover"
                         style={{

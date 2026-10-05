@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { ListMusic, Mic2, BadgeCheck, Pause, Play, ExternalLink } from 'lucide-react'
 import type { AudiusArtist, AudiusPlaylist, OnlineTrack } from '@/services/providers/audius'
-import { toTrack } from '@/services/providers/audius'
+import { toSong } from '@/services/providers/audius'
 import { usePlayerStore } from '@/store/playerStore'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
 import { formatTime } from '@/lib/utils'
@@ -73,11 +73,11 @@ export function PlaylistCard({ playlist, onOpen }: { playlist: AudiusPlaylist; o
 // action right on it. Plays the section's full list (queue continues into
 // the chart below). Rendered ONCE per page — the section row starts at #2,
 // so a title can never appear twice (a v2.16.1 test contract).
-export function HeroCard({ track, songs }: { track: OnlineTrack; songs: ReturnType<typeof toTrack>[] }) {
+export function HeroCard({ track, songs }: { track: OnlineTrack; songs: ReturnType<typeof toSong>[] }) {
   const playSong = usePlayerStore((s) => s.playSong)
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
-  const song = toTrack(track)
+  const song = toSong(track)
   const playable = track.isStreamable && !!track.streamUrl
   const active = currentSongId === song.id
   return (
@@ -154,12 +154,12 @@ export function HeroCard({ track, songs }: { track: OnlineTrack; songs: ReturnTy
 export const TrackTile = memo(function TrackTile({ track, rank, songs }: {
   track: OnlineTrack
   rank: number
-  songs: ReturnType<typeof toTrack>[]
+  songs: ReturnType<typeof toSong>[]
 }) {
   const playSong = usePlayerStore((s) => s.playSong)
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
-  const song = toTrack(track)
+  const song = toSong(track)
   const playable = track.isStreamable && !!track.streamUrl
   const active = currentSongId === song.id
   return (

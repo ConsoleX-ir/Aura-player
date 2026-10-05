@@ -1,10 +1,9 @@
-import { desktop } from '@/services/desktop'
 import { useEffect, useState } from 'react'
 import {
   Loader2, ExternalLink, Check, SearchX, Music2, Search, Globe, BadgeCheck,
 } from 'lucide-react'
-import type { Track, OnlineMatch } from '@/types'
-import { useCatalogStore } from '@/store/catalogStore'
+import type { Song, OnlineMatch } from '@/types'
+import { usePlayerStore } from '@/store/playerStore'
 import { formatTime, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
 
@@ -43,8 +42,8 @@ function cleanSearchTerm(raw: string): string {
     .trim()
 }
 
-export function FindInfoPanel({ song, onApplied }: { song: Track; onApplied: () => void }) {
-  const updateSongs = useCatalogStore((s) => s.upsertTracks)
+export function FindInfoPanel({ song, onApplied }: { song: Song; onApplied: () => void }) {
+  const updateSongs = usePlayerStore((s) => s.updateSongs)
 
   // Editable search terms, prefilled from the song's (possibly wrong) tags —
   // cleaned so junk suffixes don't poison the query.
@@ -64,15 +63,15 @@ export function FindInfoPanel({ song, onApplied }: { song: Track; onApplied: () 
     setPhase('loading')
     setFindError(null)
     try {
-      const result = await desktop.providers.findMetadata({
+      const result = await window.electronAPI?.findMetadata({
         title: queryTitle,
         artist: queryArtist,
         album: song.album ?? '',
-        duration: song.durationSecs ?? 0,
+        duration: song.duration ?? 0,
       })
       if (!result) { setPhase('error'); setFindError('network_error'); return }
       if (result.ok) {
-        setCandidates(result.candidates as OnlineMatch[])
+        setCandidates(result.candidates)
         setSelIdx(0)
         setSelected({ title: true, artist: true, album: true, year: true, genre: true, artwork: true })
         setPhase('success')
@@ -116,12 +115,12 @@ export function FindInfoPanel({ song, onApplied }: { song: Track; onApplied: () 
     if (!cand) return
     setApplying(true)
     try {
-      let coverArt = song.artworkUrl
+      let coverArt = song.coverArt
       // Artwork goes through the main process so it lands in the same disk
       // cache as embedded covers — persistent and served via aura://.
       if (selected.artwork && cand.artworkUrl) {
-        const cached = await desktop.library.artwork.cacheRemote(cand.artworkUrl)
-        if (cached?.url) coverArt = cached.url
+        const cached = await window.electronAPI?.cacheArtwork(cand.artworkUrl)
+        if (cached) coverArt = cached
       }
       updateSongs([{
         ...song,
@@ -130,7 +129,7 @@ export function FindInfoPanel({ song, onApplied }: { song: Track; onApplied: () 
         album:  selected.album  && cand.album  ? cand.album  : song.album,
         year:   selected.year   && cand.year   ? cand.year   : song.year,
         genre:  selected.genre  && cand.genre  ? cand.genre  : song.genre,
-        artworkUrl: coverArt,
+        coverArt,
       }])
       toast({ kind: 'metadata-updated', title: 'Metadata Updated', subtitle: cand.title ?? song.title })
       onApplied()
@@ -285,7 +284,7 @@ export function FindInfoPanel({ song, onApplied }: { song: Track; onApplied: () 
                     onChange={(v) => setSelected({ ...selected, artwork: v })}
                   />
                   <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Apply album art</span>
-                  {!song.artworkUrl && <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>(fills the missing art)</span>}
+                  {!song.coverArt && <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>(fills the missing art)</span>}
                 </label>
               </div>
             )}

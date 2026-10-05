@@ -1,66 +1,78 @@
-import { useEffect } from 'react'
-import { useCatalogStore } from '@/store/catalogStore'
+import { useEffect, useRef } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
-import { desktop } from '@/services/desktop'
+import { syncAllFolders } from '@/services/libraryService'
 import { toast } from '@/store/toastStore'
 
-// ── Folder watching (§7) ────────────────────────────────────────────────────
-// The renderer side of the live library. The WATCHER is only a change
-// trigger: Rust debounces events per folder, rescans, diffs the database,
-// and pushes the resulting SyncResult here — the renderer just applies the
-// diff to its mirror. This hook also keeps the Rust watch set in sync with
-// (musicFolders x watchFolders).
+// ── Folder watching (Wave 4) ─────────────────────────────────────────────────
+// The renderer side of the live library: keeps the main process's watcher set
+// in sync with (importedFolders × watchFolders), and reconciles the library
+// through the EXISTING Folder Sync pipeline when the main process reports a
+// debounced change. No new sync logic is invented here — the watcher simply
+// pulls the same lever the Settings button pulls, so behavior is identical
+// by construction (add / remove / mtime-update, playlists+queue cleanup).
 //
-// Cost profile: zero polling — the watcher is event-driven; the renderer
-// only re-invokes watchFolders when the folder list or the toggle changes.
+// Cost profile: zero polling — fs.watch is event-driven; this hook only
+// re-invokes watchFolders when the folder list or the toggle actually
+// changes, and one reconciliation per real change burst (already debounced
+// 1.2s in main). A quiet library costs literally nothing.
 export function useFolderWatcher() {
-  const musicFolders = useCatalogStore((s) => s.musicFolders)
+  // One reactive subscription per input, matching the narrow-selector house
+  // style — this hook lives as long as the app and must not re-run on
+  // unrelated store churn (the ~4-10Hz progress tick above all).
+  const importedFolders = usePlayerStore((s) => s.importedFolders)
   const watchFolders = usePlayerStore((s) => s.watchFolders)
+  const syncingRef = useRef(false)
 
-  const key = watchFolders ? musicFolders.join('\n') : ''
-
-  useEffect(() => {
-    if (!desktop.isDesktop()) return
-    const folders = watchFolders ? useCatalogStore.getState().musicFolders : []
-    desktop.library.watchFolders().catch(() => {})
-    void folders
-  }, [key, watchFolders])
+  const key = watchFolders ? importedFolders.join('\n') : ''
 
   useEffect(() => {
-    if (!desktop.isDesktop()) return
-    const off = desktop.events.onLibraryChanged((result) => {
-      // Apply the database diff straight into the mirror.
-      const catalog = useCatalogStore.getState()
-      if (result.upsertedTracks.length > 0) catalog.upsertTracks(result.upsertedTracks)
-      if (result.removedTrackIds.length > 0) catalog.removeTrackIds(result.removedTrackIds)
-      if (result.added > 0) {
-        const known = new Set(catalog.libraryIds)
-        const additions = result.upsertedTracks
-          .filter((t) => !known.has(t.id))
-          .map((t) => t.id)
-        if (additions.length > 0) {
-          useCatalogStore.setState((s) => ({
-            libraryIds: [...s.libraryIds, ...additions.filter((id) => !s.libraryIds.includes(id))],
-          }))
-        }
-      }
-      if (result.untrackedFolders.length > 0) {
-        useCatalogStore.setState((s) => ({
-          musicFolders: s.musicFolders.filter((f) => !result.untrackedFolders.includes(f)),
-        }))
-      }
-      if (result.added || result.removed || result.updated) {
-        const parts: string[] = []
-        if (result.added) parts.push(`+${result.added} added`)
-        if (result.removed) parts.push(`−${result.removed} removed`)
-        if (result.updated) parts.push(`${result.updated} updated`)
-        toast({
-          kind: 'library-synced',
-          title: 'Library updated',
-          subtitle: parts.join(' · '),
+    const api = window.electronAPI
+    // Method-level guard, not just API-level: the watcher is a Wave 4
+    // addition, so anything that predates it (test mocks, exotic embedded
+    // webviews) must degrade to a silent no-op rather than crash the shell.
+    if (!api?.watchFolders || !api?.onWatchChange) return
+
+    const folders = watchFolders ? usePlayerStore.getState().importedFolders : []
+    let disposed = false
+
+    // Fire-and-forget: a watcher failure must never break the app. The main
+    // process per-folder try/catch already isolates vanishing folders.
+    if (folders.length > 0) {
+      api.watchFolders(folders).catch(() => {})
+    } else {
+      api.watchFolders([]).catch(() => {})
+    }
+
+    const onWatchChange = api.onWatchChange((change) => {
+      if (disposed || syncingRef.current) return
+      syncingRef.current = true
+      // Reconcile quietly; surface a toast only when something actually
+      // changed — silence for a no-op scan keeps the feature invisible.
+      syncAllFolders()
+        .then((result) => {
+          if (disposed) return
+          if (result.added || result.removed || result.updated) {
+            const parts: string[] = []
+            if (result.added) parts.push(`+${result.added} added`)
+            if (result.removed) parts.push(`−${result.removed} removed`)
+            if (result.updated) parts.push(`${result.updated} updated`)
+            toast({
+              kind: 'library-synced',
+              title: 'Library updated',
+              subtitle: parts.join(' · '),
+            })
+          }
         })
-      }
+        .catch(() => {})
+        .finally(() => { syncingRef.current = false })
+      void change
     })
-    return () => { off.then((u) => u()).catch(() => {}) }
-  }, [])
+
+    return () => {
+      disposed = true
+      onWatchChange()
+    }
+    // `key` collapses (folders × toggle) into one dependency that only
+    // changes when the watch set genuinely needs to change.
+  }, [key, watchFolders])
 }

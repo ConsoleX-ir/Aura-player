@@ -1,14 +1,12 @@
 import { useState, useMemo, useDeferredValue } from 'react'
 import { motion } from 'framer-motion'
-import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUpDown, ArrowUp, ArrowDown, Check, AudioLines, Sparkles, ListMusic, Plus, Clock } from 'lucide-react'
+import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUpDown, ArrowUp, ArrowDown, Check, AudioLines, Sparkles } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore, selectLibraryTracks, selectFavoritesTracks } from '@/store/catalogStore'
 import { useUiStore } from '@/store/uiStore'
 import { useNotesStore } from '@/store/notesStore'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
-import { PlaylistModal } from '@/components/Modals/PlaylistModal'
 import { useListenAggregates } from '@/hooks/useListenAggregates'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { AlbumCard } from '@/components/Library/AlbumCard'
@@ -16,7 +14,6 @@ import { EmptyState, SongListSkeleton } from '@/components/States/EmptyState'
 import { useStoreHydration } from '@/hooks/useStoreHydration'
 import { sortSongs, SORT_KEYS, defaultDirFor } from '@/lib/sort'
 import { searchLibrary } from '@/lib/search'
-import type { Track, LibraryTab } from '@/types'
 
 // Above this many albums, skip the framer-motion entrance animation on grid
 // cards entirely (see AlbumCard's animateIn prop) — same threshold VirtualSongList
@@ -29,24 +26,9 @@ export function Library() {
   // Narrow selectors — avoids re-rendering the whole library view (and its
   // useMemo recomputation of songs/albums) on unrelated store mutations
   // like the playback progress tick.
-  // The curated collection comes from the catalog mirror (SQLite-backed).
-  const libraryTracks = useCatalogStore(selectLibraryTracks)
-  const favoriteTracks = useCatalogStore(selectFavoritesTracks)
-  const playlists = useCatalogStore((s) => s.playlists)
-  const libraryTab = usePlayerStore((s) => s.libraryTab)
-  const setLibraryTab = usePlayerStore((s) => s.setLibraryTab)
-  const setSelectedPlaylistId = usePlayerStore((s) => s.setSelectedPlaylistId)
-  const setActiveView = usePlayerStore((s) => s.setActiveView)
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false)
-
-  // Which pool the tabs operate on: Favorites is its own collection tab;
-  // Everything else works over the whole library (Recent re-sorts below).
-  const basePool: Track[] =
-    libraryTab === 'favorites'
-      ? favoriteTracks
-      : libraryTab === 'recent'
-        ? [...libraryTracks].sort((a, b) => b.addedAt - a.addedAt)
-        : libraryTracks
+  const library = usePlayerStore((s) => s.library)
+  const activeView = usePlayerStore((s) => s.activeView)
+  const favorites = usePlayerStore((s) => s.favorites)
   const { importFolder, importing } = useLibraryImport()
   // Wave 0 persistence: sort key/direction and view mode live in the
   // persisted store (they used to be session-local useState, resetting on
@@ -81,11 +63,11 @@ export function Library() {
   const [genreFilter, setGenreFilter] = useState<string | null>(null)
   const genres = useMemo(() => {
     const set = new Set<string>()
-    for (const s of libraryTracks) {
+    for (const s of library) {
       if (s.genre && s.genre.trim()) set.add(s.genre.trim())
     }
     return Array.from(set).sort(new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }).compare)
-  }, [libraryTracks])
+  }, [library])
 
   // The input itself stays bound to `search` so typing is always instant —
   // only the expensive part (filtering the whole library + regrouping into
@@ -94,7 +76,7 @@ export function Library() {
   const deferredSearch = useDeferredValue(search)
 
   const searchResult = useMemo(() => {
-    let src = basePool
+    let src = activeView === 'favorites' ? library.filter((s) => favorites.includes(s.id)) : library
     // Filter order: genre → search → sort. Each stage shrinks the set the
     // next one walks, and the sort only ever runs on what's visible.
     if (genreFilter) src = src.filter((s) => (s.genre ?? '').trim() === genreFilter)
@@ -103,7 +85,7 @@ export function Library() {
     // Aura 3.0: the user's track notes are part of the free-text net (and
     // the note: operator) — spec §21, zero-latency map reads.
     return searchLibrary(src, deferredSearch, 40, notes)
-  }, [basePool, genreFilter, deferredSearch, notes])
+  }, [library, activeView, favorites, genreFilter, deferredSearch, notes])
 
   const songs = useMemo(() =>
     // Sort last, on the filtered set only. sortSongs copies once — the
@@ -114,16 +96,16 @@ export function Library() {
 
   const albums = useMemo(() => {
     if (viewMode !== 'grid') return []
-    const map = new Map<string, { songs: Track[]; artworkUrl: string | null; artist: string }>()
+    const map = new Map<string, { songs: typeof library; coverArt: string | null; artist: string }>()
     for (const song of songs) {
       const key = `${song.album}|||${song.artist}`
-      if (!map.has(key)) map.set(key, { songs: [], artworkUrl: song.artworkUrl ?? null, artist: song.artist })
+      if (!map.has(key)) map.set(key, { songs: [], coverArt: song.coverArt, artist: song.artist })
       map.get(key)!.songs.push(song)
     }
     return Array.from(map.entries()).map(([key, val]) => ({ album: key.split('|||')[0], ...val }))
   }, [songs, viewMode])
 
-  const isFavorites = libraryTab === 'favorites'
+  const isFavorites = activeView === 'favorites'
 
   return (
     <div className="flex flex-col h-full">
@@ -141,7 +123,7 @@ export function Library() {
               className="text-2xl font-semibold tracking-tight"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}
             >
-              Library
+              {isFavorites ? 'Favorites' : 'Library'}
             </h1>
             {username ? (
               <p className="text-xs mt-1" style={{ color: 'var(--accent)' }} data-welcome-greeting>
@@ -328,43 +310,6 @@ export function Library() {
           )}
         </div>
 
-        {/* Library collection tabs (Aura 4 §20): All Music / Favorites /
-            Playlists / Recently Added — the curated collection model lives
-            HERE, not as competing top-level sidebar entries. */}
-        <div className="flex items-center gap-1 mt-3 -mb-1" role="tablist" aria-label="Library collections">
-          {([
-            { id: 'all', label: 'All Music', icon: null, count: libraryTracks.length },
-            { id: 'favorites', label: 'Favorites', icon: Heart, count: favoriteTracks.length },
-            { id: 'playlists', label: 'Playlists', icon: ListMusic, count: playlists.length },
-            { id: 'recent', label: 'Recently Added', icon: Clock, count: null },
-          ] as { id: LibraryTab; label: string; icon: typeof Heart | null; count: number | null }[]).map(({ id, label, icon: Icon, count }) => {
-            const active = libraryTab === id
-            return (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={active}
-                onClick={() => setLibraryTab(id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
-                style={{
-                  transitionDuration: 'var(--dur-fast)',
-                  color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  background: active ? 'var(--glass-2)' : 'transparent',
-                  border: `1px solid ${active ? 'var(--border-default)' : 'transparent'}`,
-                }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = 'var(--text-secondary)' }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = 'var(--text-tertiary)' }}
-              >
-                {Icon && <Icon size={12} style={active ? { color: 'var(--accent)' } : undefined} />}
-                <span>{label}</span>
-                {count !== null && count > 0 && (
-                  <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-faint)' }}>{count}</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
         {/* Phase 2 — fuzzy fallback notice: when exact matching found nothing
             and these are close matches, SAY so (honest result presentation). */}
         {searchResult.fuzzy && songs.length > 0 && (
@@ -383,10 +328,10 @@ export function Library() {
       <div className="flex-1 min-h-0 flex flex-col">
         {/* Cold-boot rehydration — brief skeleton in the library's own rhythm
             (the app-level boot screen covers the very first paint). */}
-        {!hydrated && libraryTracks.length === 0 && <SongListSkeleton />}
+        {!hydrated && library.length === 0 && <SongListSkeleton />}
 
         {/* Empty state — the app's front door */}
-        {hydrated && libraryTracks.length === 0 && (
+        {hydrated && library.length === 0 && (
           <div className="overflow-y-auto pb-6">
             <EmptyState
               icon={
@@ -429,7 +374,7 @@ export function Library() {
         {/* Favorites empty state — distinct from "no search results" below,
             since showing 'No results for ""' when you just have zero
             favorites (not a failed search) would be a confusing message. */}
-        {hydrated && libraryTracks.length > 0 && isFavorites && songs.length === 0 && !search && (
+        {hydrated && library.length > 0 && isFavorites && songs.length === 0 && !search && (
           <div className="overflow-y-auto pb-6">
             <EmptyState
               compact
@@ -442,7 +387,7 @@ export function Library() {
 
         {/* No results — covers both a failed search and an over-narrow
             genre filter (the two ways this list can legitimately empty out). */}
-        {hydrated && libraryTracks.length > 0 && songs.length === 0 && (!!search || !!genreFilter) && (
+        {hydrated && library.length > 0 && songs.length === 0 && (!!search || !!genreFilter) && (
           <div className="overflow-y-auto pb-6">
             <EmptyState
               compact
@@ -468,49 +413,7 @@ export function Library() {
         )}
 
         {/* List view */}
-        {/* Playlists tab: the curated-lists grid (compact cards, honest
-            counts, one obvious + action). Clicking opens the playlist view. */}
-        {libraryTab === 'playlists' && (
-          <div className="h-full overflow-y-auto px-7 pb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-2">
-              <button
-                onClick={() => setShowPlaylistModal(true)}
-                className="aspect-square rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                style={{
-                  background: 'var(--glass-1)',
-                  border: '1px dashed var(--border-default)',
-                  color: 'var(--text-tertiary)',
-                  transitionDuration: 'var(--dur-fast)',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
-              >
-                <Plus size={20} />
-                <span className="text-xs font-medium">New Playlist</span>
-              </button>
-              {playlists.map((pl, i) => (
-                <PlaylistCard
-                  key={pl.id}
-                  name={pl.name}
-                  count={pl.songIds.length}
-                  index={i}
-                  onOpen={() => { setSelectedPlaylistId(pl.id); setActiveView('playlist') }}
-                />
-              ))}
-            </div>
-            {playlists.length === 0 && (
-              <EmptyState
-                compact
-                icon={<ListMusic size={20} />}
-                title="No playlists yet"
-                hint="Hit New Playlist to group your music"
-              />
-            )}
-          </div>
-        )}
-
-        {/* The track lists only apply to the track tabs (not Playlists). */}
-        {libraryTab !== 'playlists' && viewMode === 'list' && songs.length > 0 && (
+        {viewMode === 'list' && songs.length > 0 && (
           <VirtualSongList
             songs={songs}
             queue={songs}
@@ -536,25 +439,19 @@ export function Library() {
         )}
 
         {/* Grid view */}
-        {libraryTab !== 'playlists' && viewMode === 'grid' && albums.length > 0 && (
+        {viewMode === 'grid' && albums.length > 0 && (
           <div className="h-full overflow-y-auto px-7 pb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-1">
               {albums.map((album, i) => (
                 <AlbumCard key={`${album.album}-${album.artist}`}
                   album={album.album} artist={album.artist}
-                  songs={album.songs} artworkUrl={album.artworkUrl} index={i}
+                  songs={album.songs} coverArt={album.coverArt} index={i}
                   animateIn={albums.length <= ANIMATE_GRID_THRESHOLD} />
               ))}
             </div>
           </div>
         )}
       </div>
-
-      <PlaylistModal
-        open={showPlaylistModal}
-        mode="create"
-        onClose={() => setShowPlaylistModal(false)}
-      />
     </div>
   )
 }
@@ -579,40 +476,5 @@ function ViewToggleButton({ active, onClick, label, children }: {
     >
       {children}
     </button>
-  )
-}
-
-
-function PlaylistCard({ name, count, index, onOpen }: {
-  name: string; count: number; index: number; onOpen: () => void
-}) {
-  return (
-    <motion.button
-      onClick={onOpen}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.3) }}
-      className="aspect-square rounded-2xl flex flex-col items-center justify-center gap-2.5 px-3 text-center transition-all active:scale-[0.98]"
-      style={{
-        background: 'var(--glass-1)',
-        border: '1px solid var(--border-default)',
-        transitionDuration: 'var(--dur-fast)',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--glass-2)'; e.currentTarget.style.borderColor = 'var(--accent-border)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-1)'; e.currentTarget.style.borderColor = 'var(--border-default)' }}
-    >
-      <div
-        className="w-11 h-11 rounded-xl flex items-center justify-center"
-        style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}
-      >
-        <ListMusic size={18} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{name}</p>
-        <p className="text-[11px] tabular-nums mt-0.5" style={{ color: 'var(--text-faint)' }}>
-          {count} {count === 1 ? 'song' : 'songs'}
-        </p>
-      </div>
-    </motion.button>
   )
 }

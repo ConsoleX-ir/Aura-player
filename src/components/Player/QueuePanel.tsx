@@ -140,8 +140,8 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
               title={isActive ? 'Now playing' : `Play ${song.title}`}
             >
               <div className="w-7 h-7 rounded-md overflow-hidden shrink-0" style={{ background: 'var(--glass-2)' }}>
-                {song.artworkUrl
-                  ? <img src={song.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                {song.coverArt
+                  ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
                   : <div className="w-full h-full flex items-center justify-center"><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>}
               </div>
               <div className="flex-1 min-w-0">

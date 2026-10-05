@@ -1,22 +1,21 @@
-import { desktop } from '@/services/desktop'
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ChevronLeft, Info, Sparkles, FolderOpen, Loader2, Play, Pause, Heart,
   Music2, Clock3, CheckCircle2, SkipForward, History,
 } from 'lucide-react'
-import type { Track, SongListenStats, SongFileStats } from '@/types'
+import type { Song, SongListenStats, SongFileStats } from '@/types'
+import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
 import { getSongStats } from '@/lib/scrobbleStore'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { FindInfoPanel } from '@/components/Properties/FindInfoPanel'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
-import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore } from '@/store/catalogStore'
+import { useArtworkStore } from '@/store/artworkStore'
 import { ImageIcon } from 'lucide-react'
 import { PersonalTab } from '@/components/Properties/PersonalTab'
 
-// ── Track Properties — a full page, Windows-Media-Player style (Wave 3) ──────
+// ── Song Properties — a full page, Windows-Media-Player style (Wave 3) ──────
 // The v1.x properties dialog did its job, but it floated over the app as a
 // cramped modal. Aura 2 turns "Properties" into a real destination: the big
 // album art leads, metadata sits in wide grouped cards the way WMP's classic
@@ -39,8 +38,8 @@ export function PropertiesPage() {
   // Look the song up from the live library — the page renders whatever the
   // library currently holds, so metadata applied on the Find tab shows up
   // instantly without any local mirroring.
-  const song: Track | null = useCatalogStore((s) =>
-    songId ? s.tracks[songId] ?? null : null
+  const song: Song | null = usePlayerStore((s) =>
+    songId ? s.library.find((x) => x.id === songId) ?? null : null
   )
 
   const [tab, setTab] = useState<Tab>(initialFind ? 'find' : 'info')
@@ -90,7 +89,7 @@ export function PropertiesPage() {
             className="text-[10px] font-semibold uppercase hidden sm:block"
             style={{ color: 'var(--text-faint)', letterSpacing: 'var(--tracking-caps)' }}
           >
-            Track Properties
+            Song Properties
           </span>
 
           <div className="flex gap-1 ml-auto p-1 rounded-full" style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}>
@@ -120,20 +119,20 @@ export function PropertiesPage() {
 }
 
 // ── Hero: artwork + identity + quick actions ────────────────────────────────
-function SongHero({ song }: { song: Track }) {
-  const overrideUrl = useCatalogStore((s) => s.artworkOverrides[song.id]?.url ?? null)
+function SongHero({ song }: { song: Song }) {
+  const overrideUrl = useArtworkStore((s) => s.overrides[song.id]?.url ?? null)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const isActive = usePlayerStore((s) => s.currentSong?.id === song.id)
-  const isFav = useCatalogStore((s) => s.favorites.includes(song.id))
+  const isFav = usePlayerStore((s) => s.favorites.includes(song.id))
   const togglePlay = usePlayerStore((s) => s.togglePlay)
   const playSong = usePlayerStore((s) => s.playSong)
-  const toggleFavorite = useCatalogStore((s) => s.toggleFavorite)
+  const toggleFavorite = usePlayerStore((s) => s.toggleFavorite)
 
   return (
     <div className="flex items-center gap-6 mb-6 p-5 rounded-3xl" style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}>
       <div className="w-28 h-28 rounded-2xl overflow-hidden shrink-0" style={{ boxShadow: 'var(--shadow-2)' }}>
-        {overrideUrl ?? song.artworkUrl
-          ? <img src={(overrideUrl ?? song.artworkUrl)!} alt="" className="w-full h-full object-cover" />
+        {overrideUrl ?? song.coverArt
+          ? <img src={(overrideUrl ?? song.coverArt)!} alt="" className="w-full h-full object-cover" />
           : <ArtworkPlaceholder seed={song.id} size="lg" />
         }
       </div>
@@ -179,7 +178,7 @@ function SongHero({ song }: { song: Track }) {
           </button>
 
           <button
-            onClick={() => desktop.system.revealPath(song.path ?? '')}
+            onClick={() => window.electronAPI?.showItemInFolder(song.path)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium active:scale-95 transition-all"
             style={{ background: 'var(--glass-2)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', transitionDuration: 'var(--dur-fast)' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--glass-3)' }}
@@ -193,7 +192,7 @@ function SongHero({ song }: { song: Track }) {
             className="ml-auto px-3 py-1.5 rounded-full text-xs tabular-nums shrink-0"
             style={{ background: 'var(--glass-2)', color: 'var(--text-tertiary)' }}
           >
-            {formatTime(song.durationSecs)}
+            {formatTime(song.duration)}
           </span>
         </div>
       </div>
@@ -202,12 +201,12 @@ function SongHero({ song }: { song: Track }) {
 }
 
 // ── Info tab: media info / file facts / local listening stats ───────────────
-function InfoTab({ song }: { song: Track }) {
-  const playlists = useCatalogStore((s) => s.playlists)
-  const favorites = useCatalogStore((s) => s.favorites)
+function InfoTab({ song }: { song: Song }) {
+  const playlists = usePlayerStore((s) => s.playlists)
+  const favorites = usePlayerStore((s) => s.favorites)
 
   const isFav = favorites.includes(song.id)
-  const inPlaylists = playlists.filter((p: { songIds: string[]; name: string }) => p.songIds.includes(song.id))
+  const inPlaylists = playlists.filter((p) => p.songIds.includes(song.id))
 
   // Technical stats, fetched only while the page is open
   const [stats, setStats] = useState<SongFileStats | null>(null)
@@ -216,7 +215,7 @@ function InfoTab({ song }: { song: Track }) {
   useEffect(() => {
     let cancelled = false
     setStatsLoading(true)
-    desktop.library.fileStats(song.path ?? '')
+    window.electronAPI?.getFileStats(song.path)
       .then((s) => { if (!cancelled) setStats(s) })
       .catch(() => { /* stats stay null → the section shows dashes */ })
       .finally(() => { if (!cancelled) setStatsLoading(false) })
@@ -234,7 +233,7 @@ function InfoTab({ song }: { song: Track }) {
           <Row label="Year"   value={song.year ? song.year.toString() : null} />
           <Row label="Genre"  value={song.genre ?? null} />
           <Row label="Track"  value={song.trackNumber ? song.trackNumber.toString() : null} />
-          <Row label="Duration" value={formatTime(song.durationSecs)} />
+          <Row label="Duration" value={formatTime(song.duration)} />
           <Row
             label="Favorite"
             value={isFav ? 'Yes' : 'No'}
@@ -242,7 +241,7 @@ function InfoTab({ song }: { song: Track }) {
           />
           <Row
             label="Playlists"
-            value={inPlaylists.length ? inPlaylists.map((p: { name: string }) => p.name).join(', ') : null}
+            value={inPlaylists.length ? inPlaylists.map((p) => p.name).join(', ') : null}
           />
         </Section>
 
@@ -270,7 +269,7 @@ function InfoTab({ song }: { song: Track }) {
               <Row label="Channels"    value={stats?.channels ? stats.channels === 2 ? 'Stereo' : stats.channels === 1 ? 'Mono' : stats.channels.toString() : null} />
             </>
           )}
-          <Row label="Path" value={song.path ?? null} mono />
+          <Row label="Path" value={song.path} mono />
         </Section>
       </div>
 

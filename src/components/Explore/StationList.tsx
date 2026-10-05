@@ -1,11 +1,11 @@
 import { Radio, Heart, Play, Pause, Signal } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useRadioStore, type RadioStation } from '@/store/radioStore'
-import { clickStation, toStationTrack } from '@/services/providers/radiobrowser'
+import { clickStation, toStationSong } from '@/services/providers/radiobrowser'
 import { cn } from '@/lib/utils'
 
 // ── StationList (v2.16.1) — live radio rows ──────────────────────────────────
-// Playing a station makes it a ONE-item queue of a live Track (duration 0 —
+// Playing a station makes it a ONE-item queue of a live Song (duration 0 —
 // progress idles, seek is a no-op; streamCors:false so CORS-less streams
 // load). The live-state UI never shows misleading playback progress for a
 // stream. Favorites ride the persisted radioStore and render offline.
@@ -20,7 +20,7 @@ export function StationList({ stations }: { stations: RadioStation[] }) {
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
       {stations.map((station, i) => {
-        const song = toStationTrack(station)
+        const song = toStationSong(station)
         const isActive = currentSongId === song.id
         const playable = station.isStreamable && !!station.streamUrl
         const isFav = favorites.some((f) => f.id === station.id)

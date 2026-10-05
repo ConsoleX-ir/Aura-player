@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { TrackNote } from '../types'
-import { desktopPrefsStorage } from '../lib/desktopPrefsStorage'
+import { idbStorage } from '../lib/idbStorage.ts'
 
 // ── Track Notes domain store (Aura 3.0 Wave 1/2) ────────────────────────────
 // User-authored notes attached to library tracks. Persisted as its OWN
@@ -44,7 +44,7 @@ export const useNotesStore = create<NotesState>()(
     }),
     {
       name: 'aura-notes',
-      storage: createJSONStorage(() => desktopPrefsStorage),
+      storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ notes: s.notes }),
     },
   ),

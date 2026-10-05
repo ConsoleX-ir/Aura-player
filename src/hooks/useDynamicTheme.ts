@@ -116,7 +116,7 @@ function getDominantColor(src: string): Promise<[number, number, number]> {
 }
 
 export function useDynamicTheme(
-  artworkUrl: string | null,
+  coverArt: string | null,
   theme: string,
   customAccentColor: string,
   // True only on the Now Playing view — everywhere else the app sticks to
@@ -133,7 +133,7 @@ export function useDynamicTheme(
       ? customAccentColor
       : (PRESET_COLORS_BY_ID.get(theme) ?? PRESET_COLORS_BY_ID.get(DEFAULT_THEME_ID)!)
 
-    if (!useAlbumArtColor || !artworkUrl) {
+    if (!useAlbumArtColor || !coverArt) {
       // Everywhere except Now Playing (or Now Playing with no song loaded):
       // always the chosen theme's color, regardless of whether music is
       // currently playing.
@@ -142,7 +142,7 @@ export function useDynamicTheme(
       document.documentElement.style.setProperty('--text-on-accent', onAccentInk(themeHex))
       return
     }
-    getDominantColor(artworkUrl)
+    getDominantColor(coverArt)
       .then(([r, g, b]) => {
         // Boost saturation a bit so muted album art still produces a visible glow
         const max = Math.max(r, g, b)
@@ -166,5 +166,5 @@ export function useDynamicTheme(
         applyVars(v.d1, v.d2, v.d3, v.glow)
         document.documentElement.style.setProperty('--text-on-accent', onAccentInk(themeHex))
       })
-  }, [artworkUrl, theme, customAccentColor, useAlbumArtColor])
+  }, [coverArt, theme, customAccentColor, useAlbumArtColor])
 }

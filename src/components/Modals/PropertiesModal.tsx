@@ -1,16 +1,15 @@
-import { desktop } from '@/services/desktop'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   X, Info, Sparkles, FolderOpen, Loader2, ExternalLink, Check,
   SearchX, Heart, Music2, Search, Globe, BadgeCheck,
 } from 'lucide-react'
-import type { Track, OnlineMatch, SongFileStats } from '@/types'
-import { useCatalogStore } from '@/store/catalogStore'
+import type { Song, OnlineMatch, SongFileStats } from '@/types'
+import { usePlayerStore } from '@/store/playerStore'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
 
-// ── Track Properties + "Find Info Online" (keyless) ──────────────────────────
+// ── Song Properties + "Find Info Online" (keyless) ──────────────────────────
 // Two tabs in one dialog:
 //   Info — song tags, technical file stats (fetched on demand via IPC), path.
 //   Find — online metadata lookup against free, keyless sources (Deezer,
@@ -22,7 +21,7 @@ import { toast } from '@/store/toastStore'
 // Opened from the "..." menu on any song row ("Properties" / "Find Info Online").
 
 interface PropertiesModalProps {
-  song: Track
+  song: Song
   open: boolean
   /** Open directly on the Find tab (via the "Find Info Online" menu item). */
   initialFind?: boolean
@@ -56,8 +55,8 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
   }, [open, onClose])
 
   // ── shared store reads ──
-  const playlists = useCatalogStore((s) => s.playlists)
-  const favorites = useCatalogStore((s) => s.favorites)
+  const playlists = usePlayerStore((s) => s.playlists)
+  const favorites = usePlayerStore((s) => s.favorites)
 
   const isFav = favorites.includes(song.id)
   const inPlaylists = playlists.filter((p) => p.songIds.includes(song.id))
@@ -70,7 +69,7 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
     if (!open) return
     let cancelled = false
     setStatsLoading(true)
-    desktop.library.fileStats(song.path ?? '')
+    window.electronAPI?.getFileStats(song.path)
       .then((s) => { if (!cancelled) setStats(s) })
       .catch(() => { /* stats stay null → the dialog shows dashes */ })
       .finally(() => { if (!cancelled) setStatsLoading(false) })
@@ -100,8 +99,8 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
               {/* Header */}
               <div className="flex items-center gap-3 p-5 border-b border-[var(--color-border)] shrink-0">
                 <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 bg-[var(--color-glass-mid)] flex items-center justify-center">
-                  {song.artworkUrl
-                    ? <img src={song.artworkUrl} alt="" className="w-full h-full object-cover" />
+                  {song.coverArt
+                    ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" />
                     : <Sparkles size={16} className="text-white/20" />}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -134,7 +133,7 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
                       <Row label="Year"   value={song.year ? song.year.toString() : null} />
                       <Row label="Genre"  value={song.genre ?? null} />
                       <Row label="Track"  value={song.trackNumber ? song.trackNumber.toString() : null} />
-                      <Row label="Duration" value={formatTime(song.durationSecs)} />
+                      <Row label="Duration" value={formatTime(song.duration)} />
                       <Row
                         label="Favorite"
                         value={isFav ? 'Yes' : 'No'}
@@ -167,9 +166,9 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
                           <Row label="Channels"    value={stats?.channels ? stats.channels === 2 ? 'Stereo' : stats.channels === 1 ? 'Mono' : stats.channels.toString() : null} />
                         </>
                       )}
-                      <Row label="Path" value={song.path ?? null} mono />
+                      <Row label="Path" value={song.path} mono />
                       <button
-                        onClick={() => desktop.system.revealPath(song.path ?? '')}
+                        onClick={() => window.electronAPI?.showItemInFolder(song.path)}
                         className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-glass)] border border-[var(--color-border)] text-white/60 hover:text-white/90 text-xs active:scale-95 transition-all"
                       >
                         <FolderOpen size={12} />
@@ -212,11 +211,11 @@ function cleanSearchTerm(raw: string): string {
 function FindTab({
   song, hidden, onApplied,
 }: {
-  song: Track
+  song: Song
   hidden: boolean
   onApplied: () => void
 }) {
-  const updateSongs = useCatalogStore((s) => s.upsertTracks)
+  const updateSongs = usePlayerStore((s) => s.updateSongs)
 
   // Editable search terms, prefilled from the song's (possibly wrong) tags —
   // cleaned so junk suffixes don't poison the query.
@@ -236,15 +235,15 @@ function FindTab({
     setPhase('loading')
     setFindError(null)
     try {
-      const result = await desktop.providers.findMetadata({
+      const result = await window.electronAPI?.findMetadata({
         title: queryTitle,
         artist: queryArtist,
         album: song.album ?? '',
-        duration: song.durationSecs ?? 0,
+        duration: song.duration ?? 0,
       })
       if (!result) { setPhase('error'); setFindError('network_error'); return }
       if (result.ok) {
-        setCandidates(result.candidates as OnlineMatch[])
+        setCandidates(result.candidates)
         setSelIdx(0)
         setSelected({ title: true, artist: true, album: true, year: true, genre: true, artwork: true })
         setPhase('success')
@@ -288,12 +287,12 @@ function FindTab({
     if (!cand) return
     setApplying(true)
     try {
-      let coverArt = song.artworkUrl
+      let coverArt = song.coverArt
       // Artwork goes through the main process so it lands in the same disk
       // cache as embedded covers — persistent and served via aura://.
       if (selected.artwork && cand.artworkUrl) {
-        const cached = await desktop.library.artwork.cacheRemote(cand.artworkUrl)
-        if (cached?.url) coverArt = cached.url
+        const cached = await window.electronAPI?.cacheArtwork(cand.artworkUrl)
+        if (cached) coverArt = cached
       }
       updateSongs([{
         ...song,
@@ -302,7 +301,7 @@ function FindTab({
         album:  selected.album  && cand.album  ? cand.album  : song.album,
         year:   selected.year   && cand.year   ? cand.year   : song.year,
         genre:  selected.genre  && cand.genre  ? cand.genre  : song.genre,
-        artworkUrl: coverArt,
+        coverArt,
       }])
       toast({ kind: 'metadata-updated', title: 'Metadata Updated', subtitle: cand.title ?? song.title })
       onApplied()
@@ -456,7 +455,7 @@ function FindTab({
                     onChange={(v) => setSelected({ ...selected, artwork: v })}
                   />
                   <span className="text-xs text-white/70">Apply album art</span>
-                  {!song.artworkUrl && <span className="text-[10px] text-white/25">(fills the missing art)</span>}
+                  {!song.coverArt && <span className="text-[10px] text-white/25">(fills the missing art)</span>}
                 </label>
               </div>
             )}

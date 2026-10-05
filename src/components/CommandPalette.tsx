@@ -3,11 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Music2, Heart, Settings as SettingsIcon, ListMusic, Play, Pause, SkipForward, SkipBack,
   Shuffle, Repeat, Volume2, VolumeX, Mic2, BarChart2, PictureInPicture2, History,
-  Gauge, SunMoon, Search, CornerDownLeft, Disc3, Radio, Clock, SlidersHorizontal, FolderOpen} from 'lucide-react'
+  Gauge, SunMoon, Search, CornerDownLeft, Disc3, Radio, Clock, SlidersHorizontal,
+} from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
 import { startSmartRadio } from '@/lib/smartRadioActions'
 import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
 import { setAppearanceAnimated } from '@/lib/appearance'
 import { fuzzyScore, searchLibrary } from '@/lib/search'
 import { cn } from '@/lib/utils'
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
 //   • Zero new dependencies. The fuzzy scorer and the library search engine
 //     live in lib/search (Phase 2 — shared with the Library view: one parser,
 //     one matcher, one scorer, so search behaves identically everywhere).
-//     Track results understand the Library's field operators, exact-miss
+//     Song results understand the Library's field operators, exact-miss
 //     queries fall back to the same fuzzy close-matches (shown as a
 //     "Close Matches" group), and a "Search library for …" row hands the
 //     query to the Library view prefilled — navigation, not a dead end.
@@ -118,10 +118,8 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
 
   const playSong = (songId: string) => {
     const s = usePlayerStore.getState()
-    const catalog = useCatalogStore.getState()
-    const library = selectLibraryTracks(catalog)
-    const song = library.find((x) => x.id === songId)
-    if (song) s.playSong(song, library)
+    const song = s.library.find((x) => x.id === songId)
+    if (song) s.playSong(song, s.library)
   }
 
   // ── The command set (built fresh per mount; cheap — static shape) ─────────
@@ -131,8 +129,7 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
 
     const nav: Command[] = [
       { id: 'nav.library', group: 'Navigate', label: 'Go to Library', icon: Music2, run: () => s.setActiveView('library') },
-            { id: 'nav.favorites', group: 'Navigate', label: 'Go to Favorites', icon: Heart, run: () => { usePlayerStore.getState().setLibraryTab('favorites'); s.setActiveView('library') } },
-      { id: 'nav.localmusic', group: 'Navigate', label: 'Go to Local Music', hint: 'folders & imports', icon: FolderOpen, run: () => s.setActiveView('localmusic') },
+      { id: 'nav.favorites', group: 'Navigate', label: 'Go to Favorites', icon: Heart, run: () => s.setActiveView('favorites') },
       { id: 'nav.nowplaying', group: 'Navigate', label: 'Go to Now Playing', icon: Disc3, run: () => { if (s.currentSong) s.setActiveView('nowplaying') } },
       { id: 'nav.rewind', group: 'Navigate', label: 'Open Aura Rewind', hint: 'listening story', icon: History, run: () => s.setActiveView('rewind') },
       { id: 'nav.explore', group: 'Navigate', label: 'Go to Explore', hint: 'online music', icon: Search, run: () => s.setActiveView('explore') },
@@ -140,7 +137,7 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
       { id: 'nav.history', group: 'Navigate', label: 'Open Listening History', hint: 'everything you played', icon: Clock, run: () => s.setActiveView('history') },
       { id: 'nav.studio', group: 'Navigate', label: 'Open Audio Studio', hint: 'EQ · effects · master', icon: SlidersHorizontal, keywords: 'audio studio equalizer effects sound bass treble', run: () => s.setActiveView('studio') },
       { id: 'nav.settings', group: 'Navigate', label: 'Go to Settings', icon: SettingsIcon, run: () => s.setActiveView('settings') },
-      ...useCatalogStore.getState().playlists.map<Command>((pl) => ({
+      ...s.playlists.map<Command>((pl) => ({
         id: `nav.pl.${pl.id}`, group: 'Navigate', label: `Open playlist — ${pl.name}`,
         hint: `${pl.songIds.length}`, icon: ListMusic, run: () => {
           usePlayerStore.getState().setSelectedPlaylistId(pl.id)
@@ -158,7 +155,7 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
       { id: 'pb.mute', group: 'Playback', label: s.muted ? 'Unmute' : 'Mute', hint: 'M', icon: s.muted ? Volume2 : VolumeX, keywords: 'mute sound volume', run: () => usePlayerStore.getState().toggleMute() },
       // Phase 7 — Smart Music Engine surfaces.
       { id: 'pb.smartmix', group: 'Playback', label: 'Play something for me', hint: 'smart mix', icon: Radio, keywords: 'smart radio mix recommend discover', run: () => { void startSmartRadio(null) } },
-      ...(s.currentSong && s.currentSong.kind === 'local'
+      ...(s.currentSong && !s.currentSong.source
         ? [{ id: 'pb.smartradio', group: 'Playback', label: `Start Radio from “${s.currentSong.title}”`, hint: 'smart radio', icon: Radio, keywords: 'smart radio seed similar', run: () => { void startSmartRadio(s.currentSong!) } }]
         : []),
     ]
@@ -182,7 +179,8 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
   // fallback), capped, fuzzy hits labeled as their own group.
   const songResults = useMemo(() => {
     if (query.trim().length < 1) return []
-    const { matches, fuzzy } = searchLibrary(selectLibraryTracks(useCatalogStore.getState()), query, 8)
+    const s = usePlayerStore.getState()
+    const { matches, fuzzy } = searchLibrary(s.library, query, 8)
     return matches.slice(0, 8).map<Command>((song) => ({
       id: `song.${song.id}`,
       group: fuzzy ? 'Close Matches' : 'Songs',

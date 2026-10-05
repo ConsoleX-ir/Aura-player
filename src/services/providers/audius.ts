@@ -1,14 +1,14 @@
 import { providerCall } from './client'
 import { cachedProviderCall } from './cache'
 import type { ProviderTrack } from './types'
-import type { Track } from '@/types'
+import type { Song } from '@/types'
 
 // ── Audius provider — renderer bindings (Phase 4, v2.16.1 cache layer) ──────
 // Thin typed wrappers over providerCall('audius', …) plus the mapping from
-// the provider-agnostic track shape to Aura's Track shape so online tracks can
+// the provider-agnostic track shape to Aura's Song shape so online tracks can
 // ride the SAME queue / playback engine / mini player as local files.
 //
-// The Rust core owns the network (src-tauri/src/providers/audius.rs); this
+// The main process owns the network (electron/providers/audius.cjs); this
 // module never sees URLs to fetch — only normalized results back.
 //
 // Caching policy (services/providers/cache.ts): discovery lists and
@@ -90,35 +90,30 @@ export function playlistTracks(playlistId: string, opts?: { signal?: AbortSignal
   return call('playlistTracks', { playlistId, limit: 100 }, opts, DETAIL_TTL)
 }
 
-// ── Online track → Track ─────────────────────────────────────────────────────
+// ── Online track → Song ─────────────────────────────────────────────────────
 // Online tracks are NOT library entries: no tombstones, no favorites, no
 // playlists. They exist to be queued and played through the same engine.
 // `path` carries the stream URL; playbackController passes http(s) URLs
 // through untouched (verified: Audius streams CORS `*`, so the Web Audio
 // graph keeps receiving samples for the visualizer and Aura Pulse).
 
-// Remote identity: `p:<provider>:<provider track id>` — the stream URL is
-// resolved FRESH at play time via the provider layer, never persisted.
-export function onlineTrackId(track: OnlineTrack): string {
-  return `p:audius:${track.id}`
+export function onlineSongId(track: OnlineTrack): string {
+  return `audius.${track.id}`
 }
 
-export function toTrack(track: OnlineTrack): Track {
+export function toSong(track: OnlineTrack): Song {
   return {
-    id: onlineTrackId(track),
-    kind: 'remote',
-    provider: 'audius',
-    providerTrackId: track.id,
+    id: onlineSongId(track),
+    path: track.streamUrl ?? '',
     title: track.title,
     artist: track.artist,
     album: track.subtitle || 'Audius',
-    durationSecs: track.durationSec ?? 0,
-    artworkUrl: track.artworkUrl,
-    addedAt: Date.now(),
-    updatedAt: Date.now(),
+    duration: track.durationSec ?? 0,
+    coverArt: track.artworkUrl,
+    source: 'online',
   }
 }
 
-export function isOnlineTrack(track: Track | null | undefined): boolean {
-  return track?.kind === 'remote' || (!!track && track.id.startsWith('p:'))
+export function isOnlineSong(song: Song | null | undefined): boolean {
+  return song?.source === 'online' || (!!song && song.id.startsWith('audius.'))
 }

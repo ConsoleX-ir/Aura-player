@@ -1,6 +1,6 @@
 import { SongRow } from './SongRow'
 import { useVirtualWindow, VIRTUALIZE_THRESHOLD } from '@/hooks/useVirtualWindow'
-import type { Track } from '@/types'
+import type { Song } from '@/types'
 import type { ReactNode } from 'react'
 
 // Must match SongRow's actual rendered height (px-3 py-2 padding + 36px cover art).
@@ -9,8 +9,8 @@ import type { ReactNode } from 'react'
 const ROW_HEIGHT = 52
 
 interface VirtualSongListProps {
-  songs: Track[]
-  queue: Track[]
+  songs: Song[]
+  queue: Song[]
   playlistId?: string
   /** Must include a bounded height and overflow-y-auto (e.g. 'h-full overflow-y-auto
    *  px-7 pb-4') — this element IS the scroll container the windowing math measures. */

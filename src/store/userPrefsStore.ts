@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { UserPrefs } from '../types'
-import { desktopPrefsStorage } from '../lib/desktopPrefsStorage'
+import { idbStorage } from '../lib/idbStorage.ts'
 
 // ── User Preferences domain store (Aura 3.0 Wave 1/2) ───────────────────────
 // Small, local-only preferences that are about the USER (not playback):
@@ -34,7 +34,7 @@ export const useUserPrefsStore = create<UserPrefsState>()(
     }),
     {
       name: 'aura-prefs',
-      storage: createJSONStorage(() => desktopPrefsStorage),
+      storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({
         username: s.username,
         onboarded: s.onboarded,

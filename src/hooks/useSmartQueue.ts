@@ -28,7 +28,7 @@ export function useSmartQueueContinuation(): void {
 
   useEffect(() => {
     if (!smartQueue || repeat !== 'none') return
-    if (!currentSong || currentSong.kind !== 'local') return
+    if (!currentSong || currentSong.source) return
     if (!shouldExtendQueue(queue.length, queueIndex, repeat, true)) return
 
     const key = `${queue.length}:${queueIndex}:${currentSong.id}`

@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { AppView } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
-import { desktop } from '@/services/desktop'
 
 // Ephemeral UI state that outlives any single component but doesn't belong
 // in playerStore (not playback data) and shouldn't be persisted.
@@ -69,9 +68,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
     // Show/hide the real desktop window. Main broadcasts the authoritative
     // visibility back on every actual change (see useMiniPlayerBridge), so a
     // missed IPC or a double-toggle self-corrects instead of desyncing.
-    try {
-      if (desktop.isDesktop()) v ? desktop.windows.mini.show() : desktop.windows.mini.hide()
-    } catch { /* non-desktop */ }
+    try { window.electronAPI?.setMiniVisible?.(v) } catch { /* non-Electron */ }
   },
 
   openPanel: null,

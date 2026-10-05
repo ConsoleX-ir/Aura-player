@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ImagePlus, RotateCcw, StickyNote, Check } from 'lucide-react'
-import type { Track } from '@/types'
-import { useCatalogStore } from '@/store/catalogStore'
+import type { Song } from '@/types'
+import { useArtworkStore } from '@/store/artworkStore'
 import { useNotesStore } from '@/store/notesStore'
 import { downscaleToCoverDataUrl, isImageFile } from '@/lib/imageTools'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
@@ -22,10 +22,10 @@ import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
 // Both live in their OWN persisted stores, deliberately outside the main
 // player snapshot — re-importing or removing files never touches them.
 
-export function PersonalTab({ song }: { song: Track }) {
-  const overrideUrl = useCatalogStore((s) => s.artworkOverrides[song.id]?.url ?? null)
-  const setOverride = useCatalogStore((s) => s.setArtworkOverride)
-  const removeOverride = useCatalogStore((s) => s.removeArtworkOverride)
+export function PersonalTab({ song }: { song: Song }) {
+  const overrideUrl = useArtworkStore((s) => s.overrides[song.id]?.url ?? null)
+  const setOverride = useArtworkStore((s) => s.setOverride)
+  const removeOverride = useArtworkStore((s) => s.removeOverride)
   const note = useNotesStore((s) => s.notes[song.id])
   const setNote = useNotesStore((s) => s.setNote)
 
@@ -37,7 +37,7 @@ export function PersonalTab({ song }: { song: Track }) {
   const lastSavedRef = useRef(note?.text ?? '')
 
   useEffect(() => {
-    // Track switch: re-sync the editor with the stored note.
+    // Song switch: re-sync the editor with the stored note.
     setText(note?.text ?? '')
     lastSavedRef.current = note?.text ?? ''
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,8 +107,8 @@ export function PersonalTab({ song }: { song: Track }) {
             className="w-28 h-28 rounded-xl overflow-hidden shrink-0"
             style={{ background: 'var(--glass-2)', border: overrideUrl ? '1.5px solid var(--accent-border)' : '1px solid var(--border-default)', boxShadow: 'var(--shadow-2)' }}
           >
-            {(overrideUrl ?? song.artworkUrl)
-              ? <img src={(overrideUrl ?? song.artworkUrl)!} alt="Track artwork preview" className="w-full h-full object-cover" />
+            {(overrideUrl ?? song.coverArt)
+              ? <img src={(overrideUrl ?? song.coverArt)!} alt="Track artwork preview" className="w-full h-full object-cover" />
               : <ArtworkPlaceholder seed={song.id} size="lg" />}
           </div>
 

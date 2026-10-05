@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ShieldCheck, ShieldAlert, Trash2, RefreshCw, ChevronDown, ChevronUp, Copy, AlertTriangle } from 'lucide-react'
-import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
+import { usePlayerStore } from '@/store/playerStore'
 import { toast } from '@/store/toastStore'
 import { runLibraryHealthCheck } from '@/services/libraryService'
 import type { LibraryHealthReport } from '@/lib/libraryHealth'
@@ -23,8 +23,9 @@ import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 type ScanState = 'idle' | 'running' | 'done'
 
 export function LibraryHealthCard() {
-  const libraryCount = useCatalogStore(selectLibraryTracks).length
-  const removeFromLibrary = useCatalogStore((s) => s.removeFromLibrary)
+  const libraryCount = usePlayerStore((s) => s.library.length)
+  const removeFromLibrary = usePlayerStore((s) => s.removeFromLibrary)
+  const removeSongsFromLibrary = usePlayerStore((s) => s.removeSongsFromLibrary)
 
   const [scanState, setScanState] = useState<ScanState>('idle')
   const [report, setReport] = useState<LibraryHealthReport | null>(null)
@@ -52,13 +53,13 @@ export function LibraryHealthCard() {
 
   async function removeMissing() {
     if (!report || report.missing.length === 0) return
-    await removeFromLibrary(report.missing.map((s) => s.id))
+    removeSongsFromLibrary(report.missing.map((s) => s.id))
     setConfirmRemoveMissing(false)
     await runCheck()
   }
 
   async function removeOne(songId: string) {
-    await removeFromLibrary([songId])
+    removeFromLibrary(songId)
     await runCheck()
   }
 
@@ -136,7 +137,7 @@ export function LibraryHealthCard() {
               }
             >
               {report.missing.map((s) => (
-                <HealthRow key={s.id} title={s.title} subtitle={s.artist} path={s.path ?? ''} onRemove={() => removeOne(s.id)} />
+                <HealthRow key={s.id} title={s.title} subtitle={s.artist} path={s.path} onRemove={() => removeOne(s.id)} />
               ))}
             </HealthSection>
           )}
@@ -147,7 +148,7 @@ export function LibraryHealthCard() {
               title={`Unreadable entries (${report.invalid.length})`}
             >
               {report.invalid.map((s) => (
-                <HealthRow key={s.id} title={s.title} subtitle={s.artist} path={s.path ?? ''} onRemove={() => removeOne(s.id)} />
+                <HealthRow key={s.id} title={s.title} subtitle={s.artist} path={s.path} onRemove={() => removeOne(s.id)} />
               ))}
             </HealthSection>
           )}
@@ -166,8 +167,8 @@ export function LibraryHealthCard() {
                     <HealthRow
                       key={s.id}
                       title={s.title}
-                      subtitle={`${s.artist} · ${formatTime(s.durationSecs)}`}
-                      path={s.path ?? ''}
+                      subtitle={`${s.artist} · ${formatTime(s.duration)}`}
+                      path={s.path}
                       onRemove={group.length > 1 ? () => removeOne(s.id) : undefined}
                       keeper={si === 0}
                     />

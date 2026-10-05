@@ -86,7 +86,7 @@ export interface ProviderTrack {
   /** Extra display line — album, or radio station country, etc. */
   subtitle?: string
   durationSec: number | null
-  /** Remote artwork URL (renderer caches via desktop.library.artwork.cacheRemote when persistence is wanted). */
+  /** Remote artwork URL (renderer loads via electronAPI.cacheArtwork when persistence is wanted). */
   artworkUrl: string | null
   /** Streamable: an <audio>-playable URL (redirect-following is fine). */
   streamUrl: string | null

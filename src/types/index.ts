@@ -1,34 +1,31 @@
-// ── Aura 4 domain types ─────────────────────────────────────────────────────
-// One normalized Track model for local files AND online tracks (mirrors the
-// Rust `domain::Track` 1:1 — see src-tauri/src/domain.rs). Remote tracks
-// never carry their stream URL as identity; sources resolve at play time
-// through the provider layer (desktop.playback.resolveSource).
-
-export interface Track {
-  /** Local: "l:<path-hash>". Remote: "p:<provider>:<provider track id>". */
+export interface Song {
   id: string
-  kind: 'local' | 'remote'
+  path: string
   title: string
   artist: string
   album: string
-  /** Seconds. 0 when unknown (live radio). */
-  durationSecs: number
-  // ── local-only ──
-  path?: string
-  sizeBytes?: number
-  mtimeMs?: number
-  missing?: boolean
-  // ── remote-only ──
-  provider?: string
-  providerTrackId?: string
-  // ── shared ──
+  duration: number
+  coverArt: string | null
   year?: number | null
   genre?: string | null
   trackNumber?: number | null
-  /** aura-media://art/<file> for cached covers, or an https URL. */
-  artworkUrl?: string | null
-  addedAt: number
-  updatedAt: number
+  // File modification time at the point this song was last (re-)imported —
+  // lets Folder Sync detect changed files with a cheap stat instead of
+  // re-parsing every file's metadata on every sync.
+  mtimeMs?: number
+  // Epoch ms when the song first entered the library (v2.1.0) — powers the
+  // "Recently Added" sort. Optional because every song imported before
+  // v2.1.0 lacks it; those fall back to mtimeMs at sort time (see lib/sort).
+  addedAt?: number
+  // Phase 4 — online tracks are NOT library entries: `path` holds a stream
+  // URL (passed through untouched by the playback engine — no aura:// wrap),
+  // and they are excluded from favorites/playlists/health. Local songs
+  // simply omit this field.
+  source?: 'local' | 'online'
+  // Phase 5 — radio streams usually DON'T send CORS headers; the engine must
+  // drop its crossOrigin mode for them or they fail to load entirely (the
+  // analyser then reads silence — an honest, invisible trade for playback).
+  streamCors?: boolean
 }
 
 export interface Playlist {
@@ -39,29 +36,22 @@ export interface Playlist {
 }
 
 export type RepeatMode = 'none' | 'one' | 'all'
+// 'rewind' = Aura Rewind (Wave 4) — the monthly listening-story destination.
+// 'studio' = Audio Studio (v3.2.0) — the dedicated audio workspace destination.
+export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind' | 'explore' | 'smart' | 'artist' | 'album' | 'history' | 'studio'
 
-// Views. The three music SOURCES are library / localmusic / explore; the
-// Library destination hosts the curated-collection tabs (All Music,
-// Favorites, Playlists, Recently Added).
-export type AppView =
-  | 'library'
-  | 'localmusic'
-  | 'explore'
-  | 'playlist'
-  | 'nowplaying'
-  | 'settings'
-  | 'properties'
-  | 'rewind'
-  | 'smart'
-  | 'artist'
-  | 'album'
-  | 'history'
-  | 'studio'
-
-/** Tabs inside the Library destination (Aura 4 §20 navigation model). */
-export type LibraryTab = 'all' | 'favorites' | 'playlists' | 'recent'
+// ── Folder watching (Wave 4) ─────────────────────────────────────────────
+// One change event per watched folder, already debounced in the main
+// process — the renderer responds by re-running the Folder Sync
+// reconciliation for that folder (or all of them, cheap either way).
+export interface FolderWatchChange {
+  folder: string
+  // Main-process epoch ms when the change was first seen (pre-debounce).
+  at: number
+}
 
 export interface RewindMonthData {
+  // Aggregates over the month window (see lib/rewind.ts for the math).
   monthStart: number
   monthEnd: number
   hasData: boolean
@@ -76,20 +66,27 @@ export interface RewindMonthData {
   topArtists: { key: string; name: string; ms: number; plays: number }[]
   topAlbums: { key: string; name: string; artist: string; ms: number; plays: number }[]
   topGenres: { name: string; plays: number }[]
-  hourHistogram: number[]
-  weekdayHistogram: number[]
+  hourHistogram: number[]        // 24 buckets, session-start counts
+  weekdayHistogram: number[]     // 7 buckets, Mon-first, session-start counts
+  // Per-day listening totals, day-of-month → ms (0 when silent).
   dayTotals: number[]
-  longestStreak: number
+  longestStreak: number          // consecutive days with ≥1 scrobble
   mostActiveDay: { day: number; ms: number } | null
+  // Cover art (aura:// or file path) for the #1 song/album/artist's top song,
+  // resolved at query time from the live library when still available.
   topSongCover: string | null
+  // The color the Rewind story is told in — derived from the top song's art
+  // by the caller (useDynamicTheme pipeline), not stored here.
 }
 
+// Aggregated local listening stats for one song — computed on demand from
+// the append-only scrobble store (see getSongStats in lib/scrobbleStore).
 export interface SongListenStats {
-  plays: number
-  completed: number
-  skipped: number
-  totalPlayedMs: number
-  lastPlayedAt: number | null
+  plays: number          // listening sessions (sub-200ms double-clicks excluded)
+  completed: number      // sessions that reached ≥90% of the track
+  skipped: number        // sessions abandoned before the halfway point
+  totalPlayedMs: number  // cumulative audible listen time
+  lastPlayedAt: number | null // ms epoch of the most recent session
 }
 
 // Technical file properties, fetched on demand by the Properties dialog.
@@ -104,7 +101,9 @@ export interface SongFileStats {
 }
 
 // One de-duplicated candidate returned by the keyless "Find Info Online"
-// lookup (Deezer + iTunes + MusicBrainz merged).
+// lookup (Deezer + iTunes + MusicBrainz merged — see net:findMetadata in
+// main.cjs). `sources` holds which of the three found this candidate, e.g.
+// ['deezer','itunes'].
 export interface OnlineMatch {
   title: string | null
   artist: string | null
@@ -125,7 +124,7 @@ export type FindMetadataQuery = {
   duration: number
 }
 
-// One row of the batch existence check behind Library Health.
+// One row of the batch existence check behind Library Health (Phase 1).
 export interface PathCheck {
   path: string
   exists: boolean
@@ -133,25 +132,165 @@ export interface PathCheck {
   mtimeMs: number
 }
 
-// ── Aura 3.0 domain entities (user-owned annotations) ───────────────────────
-// User notes and artwork overrides live in their own SQLite tables now; the
-// shapes below are what the catalog store exposes.
-
-export interface TrackNote {
-  text: string
-  updatedAt: number
+// The failure shape the provider core returns over IPC (Phase 3).
+export interface ProviderErrorLike {
+  kind: string
+  message: string
+  status?: number
 }
 
+export interface ElectronAPI {
+  openFolder:    () => Promise<string | null>
+  openFiles:     () => Promise<string[]>
+  scanFolder:    (path: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>
+  // Batch filesystem existence check for the Library Health feature (Phase 1).
+  // Returns one row per requested path; missing/unreadable paths come back
+  // with exists:false instead of throwing — health checks must not be able
+  // to fail just because one path vanished mid-scan.
+  checkPaths:    (paths: string[]) => Promise<PathCheck[]>
+  // ── Provider Core (Phase 3) ──────────────────────────────────────────────
+  // One channel for every online music provider: the renderer names a
+  // provider id + op (both allowlisted in the main process) and never a URL.
+  // Resolves with the op's raw result, or a ProviderErrorLike object
+  // ({ kind, message }) on failure — normalized by the client layer.
+  providerRequest: (requestId: string, providerId: string, op: string, params: Record<string, unknown>) =>
+    Promise<unknown>
+  providerCancel: (requestId: string) => void
+  // Real connectivity probe (HEAD, 4s cap) — navigator.onLine is only a hint.
+  // Resolves a diagnostic { ok, kind, detail?, latencyMs } (the bare boolean
+  // hid WHY a probe failed — network investigation fix). Legacy mocks that
+  // return a plain boolean are still handled.
+  probeOnline:    () => Promise<boolean | { ok: boolean; kind: string; detail?: string; latencyMs: number }>
+  resolveDroppedPaths: (paths: string[]) => Promise<{
+    files: { path: string; name: string; mtimeMs: number }[]
+    folders: string[]
+  }>
+  // Playlist export (M3U) — shows a native save dialog, returns the chosen
+  // path (or null if cancelled), then writeTextFile actually writes it.
+  savePlaylistFile: (defaultName: string) => Promise<string | null>
+  writeTextFile: (filePath: string, content: string) => Promise<boolean>
+  showItemInFolder: (filePath: string) => void
+  setAsDefaultMusicPlayer?: () => Promise<{ ok: boolean; openedSettings?: boolean; reason?: string }>
+  parseMetadata: (path: string) => Promise<Omit<Song, 'id' | 'path'>>
+  // Technical file properties for the Properties dialog — fetched on demand.
+  getFileStats: (path: string) => Promise<SongFileStats>
+  // Keyless online metadata lookup (Deezer + iTunes + MusicBrainz — no API
+  // key, text queries only). Resolves to { ok:true, candidates } — candidates
+  // sorted best-first — or { ok:false, error } on a total network failure.
+  findMetadata: (query: FindMetadataQuery) => Promise<{ ok: true; candidates: OnlineMatch[] } | { ok: false; error: string }>
+  // Downloads a remote artwork image into Aura's covers cache; returns a
+  // persistent aura:// URL, or null if the download failed.
+  cacheArtwork: (url: string) => Promise<string | null>
+  // Parses many files with limited concurrency in the main process — used instead
+  // of calling parseMetadata in a loop, which is slow due to per-call IPC overhead.
+  // Progress arrives separately via onMetadataProgress since callbacks can't cross
+  // the context bridge — only serializable data can.
+  parseMetadataBatch: (paths: string[]) => Promise<Omit<Song, 'id' | 'path'>[]>
+  onMetadataProgress: (cb: (done: number, total: number) => void) => () => void
+  // Task 3 — fired when Aura is opened via a file association (double-clicking
+  // an audio file in Explorer), whether that's the launch itself or a second
+  // launch attempt routed to the already-running instance.
+  onFileOpened: (cb: (filePath: string) => void) => () => void
+  // Global media keys and Windows taskbar thumbnail controls both arrive here.
+  // v3.2.0 — 'mute' joins the funnel (the mini player's mute button).
+  onMediaCommand: (cb: (command: 'toggle' | 'next' | 'previous' | 'mute') => void) => () => void
+  // v3.2.0 — the mini player's seek/volume requests arrive on their own
+  // narrow channels (values pre-clamped by the main process).
+  onMediaSeek: (cb: (fraction: number) => void) => () => void
+  onMediaVolume: (cb: (volume: number) => void) => () => void
+  syncPlaybackState: (isPlaying: boolean) => void
+  // ── Folder watching (Wave 4) ────────────────────────────────────────────
+  // Replaces the live watcher set with exactly the given folders (recursive).
+  // Returns the count of folders actually watched (0 in a plain browser).
+  watchFolders: (folders: string[]) => Promise<number>
+  // Fires at most once per watched folder per debounce window, no matter how
+  // noisy the filesystem churn was underneath (main process debounces).
+  onWatchChange: (cb: (change: FolderWatchChange) => void) => () => void
+  // Rewind share-card export: shows a native save dialog, then writes the
+  // given base64 data URL (image/png) to disk as binary. Returns the chosen
+  // path or null if the user cancelled.
+  saveImageFile: (defaultName: string, dataUrl: string) => Promise<string | null>
+  // ── Coordinated shutdown (Wave 0 — persistence stability) ─────────────
+  // Main intercepts window close and asks the renderer to flush any
+  // pending IndexedDB state writes FIRST; the renderer resolves once its
+  // flush has landed (or main force-closes after a hard timeout). This is
+  // what makes a change made <800ms before quitting survive the restart.
+  onShutdown: (cb: () => void | Promise<void>) => () => void
+  notifyShutdownComplete: () => void
+  minimize:      () => void
+  maximize:      () => void
+  close:         () => void
+  isMaximized:   () => Promise<boolean>
+  onMaximized:   (cb: (v: boolean) => void) => void
+  // ── Desktop mini player (v2.1.2) ────────────────────────────────────────
+  // The mini player is an independent frameless BrowserWindow. The main
+  // renderer pushes flat state snapshots over pushMiniState; the widget's
+  // transport/window actions arrive via onMediaCommand-style funnels. Both
+  // windows share one preload, so every method here is optional-guarded at
+  // call sites that may run in a plain browser.
+  pushMiniState: (state: {
+    hasSong: boolean
+    title: string
+    artist: string
+    coverArt: string | null
+    isPlaying: boolean
+    progress: number
+    appearance: 'dark' | 'light'
+    /** Aura 3.0 — theme identity + resolved accent vars (artwork-aware). */
+    theme?: string
+    accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
+    /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
+    nextTitle?: string | null
+  }) => void
+  setMiniVisible: (visible: boolean) => void
+  miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') => void
+  // v3.2.0 — widget-side seek + volume asks (main clamps and forwards).
+  miniSeek: (fraction: number) => void
+  setMiniVolume: (volume: number) => void
+  onMiniState: (cb: (state: {
+    hasSong: boolean
+    title: string
+    artist: string
+    coverArt: string | null
+    isPlaying: boolean
+    progress: number
+    appearance: 'dark' | 'light'
+    theme?: string
+    accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
+    nextTitle?: string | null
+  }) => void) => () => void
+  onMiniVisibility: (cb: (visible: boolean) => void) => () => void
+}
+
+declare global {
+  interface Window { electronAPI: ElectronAPI }
+}
+
+// ── Aura 3.0 domain entities (Wave 1/2) ────────────────────────────────────
+// User-owned annotations that live in their OWN persisted stores (never in
+// the main player snapshot — keeps the library payload lean and these
+// concepts independent of library re-imports). None of this is provider
+// metadata; nothing here is ever sent to an external service.
+
+/** A free-form user note attached to one library track (Wave 11 UI). */
+export interface TrackNote {
+  text: string
+  updatedAt: number // epoch ms — drives "edited" hints and search ranking
+}
+
+/** A user-chosen artwork image overriding one track's provider/embedded art. */
 export interface ArtworkOverride {
+  /** aura:// cache URL (via net:cacheArtwork) or a data: URL. */
   url: string
   addedAt: number
 }
 
+/** Local-only preferences captured outside the main player store. */
 export interface UserPrefs {
-  /** Display name for greeting surfaces; '' = not set (never sent anywhere). */
+  /** Display name for greeting surfaces; '' = not set (optional, never sent anywhere). */
   username: string
   /** First-launch setup flow has been completed (or deliberately skipped). */
   onboarded: boolean
-  /** "Set Aura as default player" card dismissed — never nag again. */
+  /** "Set Aura as default player" card dismissed — never nag again (§14). */
   defaultAppPromptDismissed: boolean
 }

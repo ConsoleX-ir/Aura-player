@@ -1,4 +1,4 @@
-import type { Track } from '@/types'
+import type { Song } from '@/types'
 
 // ── Aura library search (Phase 1 — Library 2.0) ─────────────────────────────
 // Pure, React-free query parsing + matching shared by every search surface in
@@ -120,7 +120,7 @@ function includes(haystack: string | null | undefined, needle: string): boolean 
 }
 
 /** Does this one song satisfy every token? (AND semantics) */
-export function matchSong(song: Track, tokens: SearchToken[], noteText?: string): boolean {
+export function matchSong(song: Song, tokens: SearchToken[], noteText?: string): boolean {
   for (const t of tokens) {
     if (t.field === null) {
       // Free text: the broad net — title, artist, album, genre, the user's
@@ -152,7 +152,7 @@ export function matchSong(song: Track, tokens: SearchToken[], noteText?: string)
 }
 
 /** One-shot helper for simple call sites: filter a song list by raw query. */
-export function filterSongs(songs: Track[], rawQuery: string): Track[] {
+export function filterSongs(songs: Song[], rawQuery: string): Song[] {
   const tokens = parseSearchQuery(rawQuery)
   if (tokens.length === 0) return songs
   return songs.filter((s) => matchSong(s, tokens))
@@ -188,7 +188,7 @@ export function fuzzyScore(query: string, text: string): number {
 
 export interface LibrarySearchResult {
   /** Songs matching the query — exact (operator/substring) or fuzzy. */
-  matches: Track[]
+  matches: Song[]
   /**
    * True when exact matching found nothing and these results are fuzzy
    * close-matches. Callers surface a "close matches" hint so the user can
@@ -210,14 +210,14 @@ export interface LibrarySearchResult {
  * latency at any realistic note count (spec §17's no-latency rule).
  */
 export function searchLibrary(
-  songs: Track[],
+  songs: Song[],
   rawQuery: string,
   fuzzyLimit = 40,
   notes?: Record<string, { text: string }>,
 ): LibrarySearchResult {
   const tokens = parseSearchQuery(rawQuery)
   if (tokens.length === 0) return { matches: songs, fuzzy: false }
-  const noteOf = (s: Track): string | undefined => {
+  const noteOf = (s: Song): string | undefined => {
     const n = notes?.[s.id]
     return n ? n.text.toLowerCase() : undefined
   }
@@ -232,7 +232,7 @@ export function searchLibrary(
   }
 
   const q = rawQuery.trim()
-  const scored: { song: Track; score: number }[] = []
+  const scored: { song: Song; score: number }[] = []
   for (const song of songs) {
     const best = Math.max(
       fuzzyScore(q, song.title),

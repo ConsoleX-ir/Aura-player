@@ -505,9 +505,6 @@ body {
   .aurora-rim { display: none; }
 }
 
-/* ── Aura 4 heading rhythm: consistent, calmer vertical beat under page titles */
-[data-theme] h1 { letter-spacing: -0.02em; }
-
 /* ── v3.2.0 Sidebar motion language (CSS half) ──────────────────────────────
    The JS half lives in Sidebar.tsx (CollapseLabel + the collapse-chip
    crossfade). This block owns the state transitions that are pure CSS:

@@ -1,21 +1,20 @@
-import { desktop } from '@/services/desktop'
 import { memo, useState } from 'react'
 import { Play, Heart, MoreHorizontal, ListPlus, ListX, Trash2, FolderOpen, Info, Sparkles, Radio, Mic2, Disc3, ListEnd, ArrowRightToLine } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore } from '@/store/catalogStore'
+import { useArtworkStore } from '@/store/artworkStore'
 import { useUiStore } from '@/store/uiStore'
 import { formatTime, cn } from '@/lib/utils'
 import { startSmartRadio } from '@/lib/smartRadioActions'
-import type { Track } from '@/types'
+import type { Song } from '@/types'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { PlaylistPickerModal } from '@/components/Modals/PlaylistPickerModal'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
 
 interface SongRowProps {
-  song: Track
+  song: Song
   index: number
-  queue: Track[]
+  queue: Song[]
   showAlbumArt?: boolean
   /** When the row is rendered inside a specific playlist's view, this enables
    *  a "Remove from Playlist" action scoped to just that playlist. */
@@ -34,14 +33,14 @@ interface SongRowProps {
 export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt = true, playlistId }: SongRowProps) {
   // Aura 3.0 — artwork override (Wave 11): primitive selector, re-renders
   // only when THIS row's override changes.
-  const coverOverride = useCatalogStore((s) => (s.artworkOverrides[song.id]?.url ?? null))
+  const coverOverride = useArtworkStore((s) => (s.overrides[song.id]?.url ?? null))
   const currentSongId = usePlayerStore((s) => s.currentSong?.id)
   const isPlaying = usePlayerStore((s) => s.isPlaying)
-  const isFav = useCatalogStore((s) => s.favorites.includes(song.id))
+  const isFav = usePlayerStore((s) => s.favorites.includes(song.id))
   const playSong = usePlayerStore((s) => s.playSong)
-  const toggleFavorite = useCatalogStore((s) => s.toggleFavorite)
-  const removeFromPlaylist = useCatalogStore((s) => s.removeFromPlaylist)
-  const removeFromLibrary = useCatalogStore((s) => s.removeFromLibrary)
+  const toggleFavorite = usePlayerStore((s) => s.toggleFavorite)
+  const removeFromPlaylist = usePlayerStore((s) => s.removeFromPlaylist)
+  const removeFromLibrary = usePlayerStore((s) => s.removeFromLibrary)
   const setSelectedArtist = usePlayerStore((s) => s.setSelectedArtist)
   const setSelectedAlbum = usePlayerStore((s) => s.setSelectedAlbum)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
@@ -123,8 +122,8 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
 
       {showAlbumArt && (
         <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden">
-          {(coverOverride ?? song.artworkUrl)
-            ? <img src={(coverOverride ?? song.artworkUrl)!} alt="" className="w-full h-full object-cover" loading="lazy" />
+          {(coverOverride ?? song.coverArt)
+            ? <img src={(coverOverride ?? song.coverArt)!} alt="" className="w-full h-full object-cover" loading="lazy" />
             : <ArtworkPlaceholder seed={song.id} size="sm" />
           }
         </div>
@@ -150,7 +149,7 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
 
       {/* Duration */}
       <span className="text-xs tabular-nums shrink-0 w-9 text-right" style={{ color: 'var(--text-faint)' }}>
-        {formatTime(song.durationSecs)}
+        {formatTime(song.duration)}
       </span>
 
       {/* Actions */}
@@ -269,7 +268,7 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               </DropdownMenu.Item>
 
               <DropdownMenu.Item
-                onClick={() => desktop.system.revealPath(song.path ?? '')}
+                onClick={() => window.electronAPI?.showItemInFolder(song.path)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
               >
                 <FolderOpen size={13} />
@@ -303,7 +302,7 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
         title="Remove from Library"
         description={`"${song.title}" will be removed from your library, playlists, and favorites. The file on your device is not deleted.`}
         confirmLabel="Remove"
-        onConfirm={() => removeFromLibrary([song.id])}
+        onConfirm={() => removeFromLibrary(song.id)}
         onClose={() => setConfirmRemoveLibrary(false)}
       />
 

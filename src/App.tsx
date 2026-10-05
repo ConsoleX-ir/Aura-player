@@ -7,14 +7,13 @@ import { TitleBar } from '@/components/TitleBar'
 import { useDynamicTheme } from '@/hooks/useDynamicTheme'
 import { useAudio } from '@/hooks/useAudio'
 import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore } from '@/store/catalogStore'
 import { useMediaShortcuts } from '@/hooks/useMediaShortcuts'
 import { useFileAssociationLaunch } from '@/hooks/useFileAssociationLaunch'
 import { useSleepTimer } from '@/hooks/useSleepTimer'
 import { useMediaKeys } from '@/hooks/useMediaKeys'
 import { useDragDropImport } from '@/hooks/useDragDropImport'
 import { useStoreHydration } from '@/hooks/useStoreHydration'
-import { desktop } from '@/services/desktop'
+import { flushAllPending } from '@/lib/idbStorage'
 import { Toaster } from '@/components/Toast/Toaster'
 import { HelpModal } from '@/components/Modals/HelpModal'
 import { CommandPalette } from '@/components/CommandPalette'
@@ -42,7 +41,6 @@ const ArtistPage = lazy(() => import('@/pages/ArtistPage').then((m) => ({ defaul
 const AlbumPage = lazy(() => import('@/pages/AlbumPage').then((m) => ({ default: m.AlbumPage })))
 const HistoryPage = lazy(() => import('@/pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
 const AudioStudio = lazy(() => import('@/pages/AudioStudio').then((m) => ({ default: m.AudioStudio })))
-const LocalMusic = lazy(() => import('@/pages/LocalMusic').then((m) => ({ default: m.LocalMusic })))
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)
@@ -65,18 +63,18 @@ export default function App() {
   // does — the first song in the playlist that has embedded artwork — so the
   // ambient glow can take its color from the playlist's own image. Any other
   // view: null, and the theme color is used as before.
-  const playlists = useCatalogStore((s) => s.playlists)
-  const tracks = useCatalogStore((s) => s.tracks)
+  const playlists = usePlayerStore((s) => s.playlists)
   const selectedPlaylistId = usePlayerStore((s) => s.selectedPlaylistId)
+  const library = usePlayerStore((s) => s.library)
   const playlistCover = useMemo(() => {
     if (!isPlaylistView) return null
     const pl = playlists.find((p) => p.id === selectedPlaylistId)
     for (const id of pl?.songIds ?? []) {
-      const song = tracks[id]
-      if (song?.artworkUrl) return song.artworkUrl
+      const song = library.find((s) => s.id === id)
+      if (song?.coverArt) return song.coverArt
     }
     return null
-  }, [isPlaylistView, playlists, tracks, selectedPlaylistId])
+  }, [isPlaylistView, playlists, selectedPlaylistId, library])
 
   // Shift CSS color vars:
   // → Now Playing view, with a song loaded: pull the ambient color from that
@@ -86,7 +84,7 @@ export default function App() {
   //   playlist art. Playlists without any artwork stay on the theme color.
   // → everywhere else: stick to the chosen theme's color (ConsoleX cloud
   //   gray, Forest green, Custom, ...), even while music is playing.
-  const ambientCover = isNowPlaying ? currentSong?.artworkUrl ?? null : playlistCover
+  const ambientCover = isNowPlaying ? currentSong?.coverArt ?? null : playlistCover
   useDynamicTheme(ambientCover, theme, customAccentColor, isNowPlaying || !!playlistCover)
 
   useMediaShortcuts()
@@ -99,7 +97,7 @@ export default function App() {
   useSmartQueueContinuation()
   // Desktop mini player: pushes playback snapshots to the widget window and
   // keeps uiStore.miniPlayer synced with its real visibility. (The widget is
-  // a separate Tauri window — see src-tauri/src/windows/mod.rs — not an in-app UI mode.)
+  // a separate BrowserWindow — see electron/main.cjs — not an in-app UI mode.)
   useMiniPlayerBridge()
   const { isDraggingFiles, dragHandlers } = useDragDropImport()
 
@@ -108,12 +106,18 @@ export default function App() {
   // empty state for a frame on every cold start.
   const hydrated = useStoreHydration()
 
-  // ── File-association readiness ──────────────────────────────────────────
-  // A path Aura was launched with is QUEUED in Rust until the UI can handle
-  // it; signalling ready delivers it (file://opened → useFileAssociationLaunch).
+  // ── Coordinated shutdown (Wave 0) ────────────────────────────────────────
+  // Main holds the window open once and asks us to flush; answer by writing
+  // every pending idbStorage key and acking. The scrobble pipeline writes
+  // immediately (no debounce), so it needs no participation here — and the
+  // engine's beforeunload flush still runs on the real close, as before.
   useEffect(() => {
-    if (!desktop.isDesktop()) return
-    desktop.windows.emitReady().catch(() => {})
+    const api = window.electronAPI
+    if (!api?.onShutdown || !api?.notifyShutdownComplete) return
+    return api.onShutdown(async () => {
+      try { await flushAllPending() } catch { /* fail-soft — timeout path closes anyway */ }
+      api.notifyShutdownComplete()
+    })
   }, [])
 
   useEffect(() => {
@@ -333,17 +337,6 @@ export default function App() {
                 className="h-full overflow-hidden"
               >
                 <SmartPlaylists />
-              </motion.div>
-            ) : activeView === 'localmusic' ? (
-              <motion.div
-                key="localmusic"
-                initial={{ opacity: 0, x: 16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -16 }}
-                transition={{ duration: 0.2 }}
-                className="h-full overflow-y-auto"
-              >
-                <LocalMusic />
               </motion.div>
             ) : (
               <motion.div

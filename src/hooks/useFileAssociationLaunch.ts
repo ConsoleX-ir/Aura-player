@@ -1,38 +1,44 @@
 import { useEffect } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
-import { useCatalogStore, selectLibraryTracks } from '@/store/catalogStore'
-import { desktop } from '@/services/desktop'
-import { importFiles } from '@/services/libraryService'
+import { hashStr } from '@/lib/utils'
+import type { Song } from '@/types'
 
-// File associations (§17): Aura launched (or focused) via double-clicking an
-// associated audio file. If the track is already in the catalog it just
-// plays; otherwise it's imported first (which also lifts any tombstone —
-// a conscious open is a restore), exactly like a normal import, then played.
+// Task 3 — handles Aura being launched (or focused) via double-clicking an
+// associated audio file in Windows Explorer. If the file's already in the
+// library it just plays it; otherwise it's parsed and added first, exactly
+// like a normal individual-file import, then played.
 export function useFileAssociationLaunch() {
+  const playSong = usePlayerStore((s) => s.playSong)
+  const addToLibrary = usePlayerStore((s) => s.addToLibrary)
+
   useEffect(() => {
-    if (!desktop.isDesktop()) return
+    if (!window.electronAPI?.onFileOpened) return
 
-    const off = desktop.events.onFileOpened(async (filePath) => {
+    const unsubscribe = window.electronAPI.onFileOpened(async (filePath) => {
+      const id = hashStr(filePath)
+      const existing = usePlayerStore.getState().library.find((s) => s.id === id)
+
+      if (existing) {
+        playSong(existing, usePlayerStore.getState().library)
+        return
+      }
+
       try {
-        const catalog = useCatalogStore.getState()
-        const existingLocal = Object.values(catalog.tracks).find((t) => t.path === filePath)
-
-        if (existingLocal) {
-          const library = selectLibraryTracks(catalog)
-          usePlayerStore.getState().playSong(existingLocal, library)
-          return
-        }
-
-        await importFiles([filePath])
-        const fresh = useCatalogStore.getState()
-        const imported = Object.values(fresh.tracks).find((t) => t.path === filePath)
-        if (imported) {
-          usePlayerStore.getState().playSong(imported, selectLibraryTracks(fresh))
-        }
+        const [meta] = await window.electronAPI.parseMetadataBatch([filePath])
+        const song: Song = { id, path: filePath, ...meta }
+        // Explicit user action (double-clicked the file in Explorer): lift
+        // any tombstone from a previous removal first (Wave 0), then import.
+        usePlayerStore.getState().restoreImportedPaths([filePath])
+        addToLibrary([song])
+        // addToLibrary updates the store synchronously (Zustand's set() is
+        // not async), so re-reading it here already includes `song` — no
+        // need to append it again.
+        playSong(song, usePlayerStore.getState().library)
       } catch (e) {
         console.error('Failed to open file from association launch:', filePath, e)
       }
     })
-    return () => { off.then((u) => u()).catch(() => {}) }
-  }, [])
+
+    return unsubscribe
+  }, [playSong, addToLibrary])
 }

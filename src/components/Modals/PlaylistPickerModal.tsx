@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ListMusic, Search, X } from 'lucide-react'
-import { useCatalogStore } from '@/store/catalogStore'
+import { usePlayerStore } from '@/store/playerStore'
 import { toast } from '@/store/toastStore'
 
 interface PlaylistPickerModalProps {
   open: boolean
-  /** Track being added — used for the subtitle and the add action. */
+  /** Song being added — used for the subtitle and the add action. */
   songTitle: string
   songId: string
   onClose: () => void
@@ -23,8 +23,8 @@ interface PlaylistPickerModalProps {
 // Keyboard: arrows move the selection, Enter adds the selection, Escape
 // closes — mirroring the command palette's interaction language.
 export function PlaylistPickerModal({ open, songTitle, songId, onClose }: PlaylistPickerModalProps) {
-  const playlists = useCatalogStore((s) => s.playlists)
-  const addToPlaylist = useCatalogStore((s) => s.addToPlaylist)
+  const playlists = usePlayerStore((s) => s.playlists)
+  const addToPlaylist = usePlayerStore((s) => s.addToPlaylist)
 
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)

@@ -1,4 +1,3 @@
-import { desktop } from '@/services/desktop'
 import { useEffect, useState } from 'react'
 import { AudioLines, ArrowRight, UserRound } from 'lucide-react'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
@@ -36,7 +35,7 @@ export function FirstLaunch() {
   if (onboarded || !show) return null
 
   const canSetDefault = typeof window !== 'undefined'
-    && desktop.isDesktop()
+    && !!window.electronAPI?.setAsDefaultMusicPlayer
 
   const finish = (displayName?: string) => {
     completeOnboarding(displayName ?? '')
@@ -104,7 +103,7 @@ export function FirstLaunch() {
         {canSetDefault && (
           <button
             onClick={() => {
-              try { void desktop.system.setDefaultPlayer() } catch { /* OS declined — not fatal */ }
+              try { window.electronAPI?.setAsDefaultMusicPlayer?.() } catch { /* OS declined — not fatal */ }
             }}
             className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition-all mb-5"
             style={{ background: 'var(--glass-1)', border: '1px solid var(--border-default)' }}

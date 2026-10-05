@@ -24,7 +24,7 @@
 // empty result with a note. The engine never fabricates affinity it cannot
 // measure.
 
-import type { Track } from '@/types'
+import type { Song } from '@/types'
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ export const DEFAULT_SMART_CONFIG: SmartConfig = {
 }
 
 export interface SmartPick {
-  song: Track
+  song: Song
   /** Final score (already includes jitter) — higher is better. */
   score: number
   /** Human-readable reasons, most significant first. */
@@ -84,14 +84,14 @@ export interface SmartResult {
 
 export interface SmartContext {
   /** Seed song (e.g. the track "Start Radio" was clicked on). */
-  seed: Track | null
-  library: Track[]
+  seed: Song | null
+  library: Song[]
   favorites: string[]
   listens: Map<string, EngineListen>
   /** Scrobbles from roughly the last 60 days — hour-of-day affinity. */
   recentScrobbles: EngineScrobbleLite[]
   now: number
-  /** Track ids to keep out of the result (already queued, etc.). */
+  /** Song ids to keep out of the result (already queued, etc.). */
   excludeIds?: string[]
   config?: Partial<SmartConfig>
   /** Overrides the default determinism key (seedId|day). Phase 8 smart
@@ -159,7 +159,7 @@ const norm = (s: string | null | undefined): string =>
 // ── Scoring ──────────────────────────────────────────────────────────────────
 
 interface Scored {
-  song: Track
+  song: Song
   score: number
   reasons: string[]
 }
@@ -170,10 +170,10 @@ interface Scored {
  * recent window (may be null when there is no history).
  */
 function scoreCandidate(
-  song: Track,
+  song: Song,
   listen: EngineListen | undefined,
   isFavorite: boolean,
-  seed: Track | null,
+  seed: Song | null,
   hourHist: number[] | null,
   now: number,
   cfg: SmartConfig,
@@ -205,8 +205,8 @@ function scoreCandidate(
         if (d <= 3) score.reasons.push(`Same era (${song.year})`)
       }
     }
-    if (song.durationSecs > 0 && seed.durationSecs > 0) {
-      const d = Math.abs(song.durationSecs - seed.durationSecs) / Math.max(song.durationSecs, seed.durationSecs)
+    if (song.duration > 0 && seed.duration > 0) {
+      const d = Math.abs(song.duration - seed.duration) / Math.max(song.duration, seed.duration)
       if (d <= 0.35) s += W.durationProximity * (1 - d / 0.35)
     }
   }
@@ -290,7 +290,7 @@ function selectDiverse(
   let novelPicked = 0
   const explorationQuota = Math.ceil(cfg.explorationShare * cfg.targetCount)
 
-  const artistKey = (song: Track) => norm(song.artist) || 'unknown'
+  const artistKey = (song: Song) => norm(song.artist) || 'unknown'
 
   // Pass 1 — greedy, cap-aware. The whole pool is scanned (no early break):
   // candidates that hit the cap are deferred, and the novel ones among them
@@ -350,7 +350,7 @@ function selectDiverse(
 // ── Cold-start ordering ──────────────────────────────────────────────────────
 
 function orderColdPicks(
-  pool: Track[],
+  pool: Song[],
   favorites: Set<string>,
   listens: Map<string, EngineListen>,
   cfg: SmartConfig,
@@ -383,7 +383,7 @@ export function buildSmartRadio(ctx: SmartContext): SmartResult {
 
   // Unavailable tracks never enter the pool.
   const excluded = new Set(ctx.excludeIds ?? [])
-  const pool = ctx.library.filter((s) => !excluded.has(s.id) && s.durationSecs >= 0)
+  const pool = ctx.library.filter((s) => !excluded.has(s.id) && s.duration >= 0)
 
   if (pool.length === 0) {
     return { mode: ctx.seed ? 'radio' : 'taste', picks: [], notes: ['Your library is empty — add some music first.'] }

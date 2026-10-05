@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { desktopPrefsStorage } from '@/lib/desktopPrefsStorage'
+import { idbStorage } from '@/lib/idbStorage'
 import { createJSONStorage } from 'zustand/middleware'
 
 // ── Radio favorites (Phase 5) ───────────────────────────────────────────────
@@ -55,7 +55,7 @@ export const useRadioStore = create<RadioState>()(
     }),
     {
       name: 'aura-radio',
-      storage: createJSONStorage(() => desktopPrefsStorage),
+      storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ favorites: s.favorites }),
     },
   ),

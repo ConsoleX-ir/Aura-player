@@ -4,7 +4,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import {
   searchTracks, searchArtists, trending, underground, artistTracks, fresh,
-  trendingPlaylists, searchPlaylists, playlistTracks, toTrack,
+  trendingPlaylists, searchPlaylists, playlistTracks, toSong,
   type OnlineTrack, type AudiusArtist, type AudiusPlaylist,
 } from '@/services/providers/audius'
 import { RadioTab } from '@/components/Explore/RadioTab'
@@ -287,8 +287,8 @@ export function Explore() {
     if (luckyPool.length === 0) return
     const pick = luckyPool[Math.floor(Math.random() * luckyPool.length)]
     const s = usePlayerStore.getState()
-    const song = toTrack(pick)
-    s.playSong(song, luckyPool.map(toTrack))
+    const song = toSong(pick)
+    s.playSong(song, luckyPool.map(toSong))
   }
 
   const setActiveView = usePlayerStore((s) => s.setActiveView)
@@ -329,7 +329,7 @@ export function Explore() {
             <CachedBanner
               note="You're offline — showing this session's cached picks. Reconnect for live charts."
               onLibrary={() => setActiveView('library')}
-              onFavorites={() => { usePlayerStore.getState().setLibraryTab('favorites'); setActiveView('library') }}
+              onFavorites={() => setActiveView('favorites')}
             />
             <DiscoverySections
               trendingState={trendingState} trendingTracks={trendingTracks}
@@ -344,7 +344,7 @@ export function Explore() {
           <OfflineState
             onRecheck={recheck}
             onLibrary={() => setActiveView('library')}
-            onFavorites={() => { usePlayerStore.getState().setLibraryTab('favorites'); setActiveView('library') }}
+            onFavorites={() => setActiveView('favorites')}
           />
         ) : openPlaylist ? (
           <PlaylistSection

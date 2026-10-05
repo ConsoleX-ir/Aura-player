@@ -1,4 +1,3 @@
-import { desktop } from '@/services/desktop'
 import { useEffect, useState } from 'react'
 import { Minus, Square, Copy, X, Keyboard } from 'lucide-react'
 import { useUiStore } from '@/store/uiStore'
@@ -8,12 +7,12 @@ export function TitleBar() {
   const setHelpOpen = useUiStore((s) => s.setHelpOpen)
 
   useEffect(() => {
-    desktop.windows.isMaximized().then(setIsMaximized)
+    window.electronAPI?.isMaximized().then(setIsMaximized)
     // This subscription already existed on the preload/main side but nothing
     // in the renderer ever listened — the maximize button always showed the
     // same icon regardless of actual window state.
     const listener = (v: boolean) => setIsMaximized(v)
-    desktop.events.onMaximized(listener)
+    window.electronAPI?.onMaximized(listener)
   }, [])
 
   return (
@@ -63,7 +62,7 @@ export function TitleBar() {
           <Keyboard size={11} strokeWidth={2.2} />
         </TitleBarButton>
         <TitleBarButton
-          onClick={() => desktop.windows.minimize()}
+          onClick={() => window.electronAPI?.minimize()}
           title="Minimize"
           color="var(--warning)"
           veil="var(--warning-veil)"
@@ -73,7 +72,7 @@ export function TitleBar() {
           <Minus size={10} strokeWidth={2.5} />
         </TitleBarButton>
         <TitleBarButton
-          onClick={() => desktop.windows.maximize()}
+          onClick={() => window.electronAPI?.maximize()}
           title={isMaximized ? 'Restore' : 'Maximize'}
           color="var(--success)"
           veil="var(--success-veil)"
@@ -83,7 +82,7 @@ export function TitleBar() {
           {isMaximized ? <Copy size={8} strokeWidth={2.5} /> : <Square size={8} strokeWidth={2.5} />}
         </TitleBarButton>
         <TitleBarButton
-          onClick={() => desktop.windows.close()}
+          onClick={() => window.electronAPI?.close()}
           title="Close"
           color="var(--danger)"
           veil="var(--danger-veil)"

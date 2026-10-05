@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useCatalogStore } from '@/store/catalogStore'
+import { usePlayerStore } from '@/store/playerStore'
 import { syncAllFolders, type SyncResult, type ImportProgress } from '@/services/libraryService'
-import { desktop } from '@/services/desktop'
 
 // Thin UI wrapper around LibraryService.syncAllFolders — all reconciliation
 // logic lives in src/services/libraryService.ts. This hook only holds view
@@ -13,10 +12,10 @@ export function useLibrarySync() {
 
   // Reactive so the Settings screen updates as folders are added/removed
   // (e.g. a sync that discovers a deleted folder stops tracking it).
-  const folderCount = useCatalogStore((s) => s.musicFolders.length)
+  const folderCount = usePlayerStore((s) => s.importedFolders.length)
 
   const syncAll = async () => {
-    if (!desktop.isDesktop()) return
+    if (!window.electronAPI) return
     setSyncing(true)
     try {
       const result = await syncAllFolders((p) => setProgress(p))

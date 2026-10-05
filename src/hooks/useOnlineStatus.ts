@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { desktop } from '@/services/desktop'
 
 // ── useOnlineStatus (Phase 3) ────────────────────────────────────────────────
 // Honest online awareness for provider-backed surfaces. Three signals, worst
@@ -27,16 +26,20 @@ export function useOnlineStatus(): OnlineStatus {
   const inFlight = useRef<AbortController | null>(null)
 
   const probe = useCallback(() => {
-    if (!desktop.isDesktop()) return
+    const api = typeof window !== 'undefined' ? window.electronAPI : undefined
+    if (!api?.probeOnline) return
+    inFlight.current?.abort()
+    const controller = new AbortController()
+    inFlight.current = controller
     setProbing(true)
-    desktop.providers.probeOnline()
+    api.probeOnline()
       .then((v) => {
-        // A diagnostic object { ok, kind, detail?, latencyMs } — not a bare
-        // boolean, so an "offline" UI state is always explainable.
-        setProbedOnline(!!v?.ok)
+        // probeOnline returns a diagnostic object { ok, kind, detail?, latencyMs }
+        // (network investigation fix); legacy test mocks return a bare boolean.
+        if (!controller.signal.aborted) setProbedOnline(typeof v === 'object' && v !== null ? !!v.ok : !!v)
       })
-      .catch(() => setProbedOnline(false))
-      .finally(() => setProbing(false))
+      .catch(() => { if (!controller.signal.aborted) setProbedOnline(false) })
+      .finally(() => { if (!controller.signal.aborted) setProbing(false) })
   }, [])
 
   useEffect(() => {

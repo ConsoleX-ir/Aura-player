@@ -7,7 +7,7 @@
 // "Beatles" is a music-brain problem, not a string problem — honest grouping
 // beats clever over-matching that merges distinct artists.
 
-import type { Track } from '@/types'
+import type { Song } from '@/types'
 
 export function normName(s: string | null | undefined): string {
   return (s ?? '').trim().toLowerCase()
@@ -45,17 +45,17 @@ export function displayVariant(variants: string[]): string {
   return best
 }
 
-export function songsByArtist(library: Track[], artistDisplay: string): Track[] {
+export function songsByArtist(library: Song[], artistDisplay: string): Song[] {
   const norm = normName(artistDisplay)
   return library.filter((s) => normName(s.artist) === norm)
 }
 
-export function albumKeyOf(song: Track): string {
+export function albumKeyOf(song: Song): string {
   return `${normName(song.artist)}||${normName(song.album)}`
 }
 
-export function albumsOfArtist(songs: Track[]): { key: AlbumKey; songs: Track[] }[] {
-  const groups = new Map<string, Track[]>()
+export function albumsOfArtist(songs: Song[]): { key: AlbumKey; songs: Song[] }[] {
+  const groups = new Map<string, Song[]>()
   for (const s of songs) {
     const k = albumKeyOf(s)
     if (!groups.has(k)) groups.set(k, [])
@@ -75,7 +75,7 @@ export function albumsOfArtist(songs: Track[]): { key: AlbumKey; songs: Track[] 
 }
 
 /** Album order: trackNumber asc (missing sink, title asc), a stable order. */
-export function sortAlbumTracks(songs: Track[]): Track[] {
+export function sortAlbumTracks(songs: Song[]): Song[] {
   return [...songs].sort((a, b) => {
     const ta = a.trackNumber ?? Number.MAX_SAFE_INTEGER
     const tb = b.trackNumber ?? Number.MAX_SAFE_INTEGER
@@ -89,7 +89,7 @@ export function sortAlbumTracks(songs: Track[]): Track[] {
  * Ranked by overlap size then name; returns display names only. Honest: a
  * purely local signal — no pretending to know taste similarity we cannot see.
  */
-export function relatedArtists(library: Track[], artistDisplay: string, limit = 4): string[] {
+export function relatedArtists(library: Song[], artistDisplay: string, limit = 4): string[] {
   const norm = normName(artistDisplay)
   const genresOf = (artist: string): Set<string> => {
     const set = new Set<string>()
@@ -122,6 +122,6 @@ export function relatedArtists(library: Track[], artistDisplay: string, limit = 
     .map(([a]) => displayVariant(display.get(a) ?? [a]))
 }
 
-export function totalRuntimeSec(songs: Track[]): number {
-  return songs.reduce((acc, s) => acc + (s.durationSecs > 0 ? s.durationSecs : 0), 0)
+export function totalRuntimeSec(songs: Song[]): number {
+  return songs.reduce((acc, s) => acc + (s.duration > 0 ? s.duration : 0), 0)
 }
