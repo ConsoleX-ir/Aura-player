@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Aura Player",
+  "outputfilename": "AuraPlayer",
+  "frontend:dir": ".",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev:vite",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "./src/lib",
+  "author": { "name": "ConsoleX", "email": "consolex@users.noreply.github.com" },
+  "info": {
+    "companyName": "ConsoleX",
+    "productName": "Aura Player",
+    "productVersion": "3.2.0",
+    "copyright": "Copyright © ConsoleX",
+    "comments": "Aura Player — com.consolex.aura"
+  }
+}

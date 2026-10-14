@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Song, Playlist, RepeatMode, AppView } from '@/types'
 import { DEFAULT_THEME_ID, type ThemePresetId } from '@/lib/themePresets'
 import { idbStorage } from '@/lib/idbStorage'
+import { normalizeMediaUrl } from '@/lib/mediaUrl'
 import type { SortKey, SortDir } from '@/lib/sort'
 import {
   shuffledAround, nextIndex, prevIndex, removeByIds, moveItem, indexAfterMove, insertAfter, upcomingIds,
@@ -266,6 +267,18 @@ interface PlayerState {
   // seekTo trigger watched by audio engine
   seekRequest: number | null
   clearSeekRequest: () => void
+}
+
+// ── Legacy media URL migration (Electron → Wails) ───────────────────────────
+// Libraries exported by the Electron 3.2.0 build store cover art as
+// `aura://local?path=…` protocol URLs. The Wails build serves the same files
+// same-origin at `/aura/local?path=…`, so every hydrated song's cover is
+// normalized here (idempotent — modern URLs pass through untouched).
+function normalizeLegacyMediaUrl(song: Song): Song {
+  if (song.coverArt && song.coverArt.startsWith('aura://')) {
+    return { ...song, coverArt: normalizeMediaUrl(song.coverArt) }
+  }
+  return song
 }
 
 export const usePlayerStore = create<PlayerState>()(
@@ -839,7 +852,7 @@ export const usePlayerStore = create<PlayerState>()(
           queueIds?: string[]; naturalQueueIds?: string[]
           queueIndex?: number; currentSongId?: string | null
         }
-        const library: Song[] = Array.isArray(p.library) ? p.library : []
+        const library: Song[] = (Array.isArray(p.library) ? p.library : []).map(normalizeLegacyMediaUrl)
         const byId = new Map(library.map((x) => [x.id, x]))
         const resolve = (ids?: string[]): Song[] =>
           Array.isArray(ids) ? ids.map((id) => byId.get(id)).filter((x): x is Song => !!x) : []

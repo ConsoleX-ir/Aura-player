@@ -2,6 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { installDesktopBridge } from '@/platform/install'
+import { DesktopRoot } from '@/platform/DesktopRoot'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
 
@@ -15,8 +17,13 @@ import { useUiStore } from '@/store/uiStore'
 // form and the default; light values already exist in tokens.css.
 document.documentElement.dataset.theme = 'dark'
 
+// Must run before the first render: components read window.electronAPI.
+installDesktopBridge()
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <DesktopRoot>
+      <App />
+    </DesktopRoot>
   </StrictMode>
 )

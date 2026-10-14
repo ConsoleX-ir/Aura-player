@@ -96,7 +96,7 @@ export function MiniApp() {
           boxShadow: '0 12px 40px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.3), inset 0 1px 0 var(--border-emphasis)',
           backdropFilter: 'blur(28px) saturate(1.4)',
           WebkitBackdropFilter: 'blur(28px) saturate(1.4)',
-          WebkitAppRegion: 'drag',
+          WebkitAppRegion: 'drag', '--wails-draggable': 'drag',
         } as React.CSSProperties}
       >
         {/* Artwork-aware accent wash — the glass catches the music's color */}
@@ -116,7 +116,7 @@ export function MiniApp() {
           title={state.isPlaying ? 'Pause' : 'Play'}
           aria-label={state.isPlaying ? 'Pause' : 'Play'}
           className="relative w-[60px] h-[60px] shrink-0 group/mini rounded-[15px] overflow-hidden"
-          style={{ background: 'var(--glass-2)', WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          style={{ background: 'var(--glass-2)', WebkitAppRegion: 'no-drag', '--wails-draggable': 'no-drag' } as React.CSSProperties}
         >
           {state.coverArt ? (
             <img src={state.coverArt} alt="" className="w-full h-full object-cover" draggable={false} />
@@ -163,7 +163,7 @@ export function MiniApp() {
               className="absolute left-0 right-0 -bottom-0.5 text-[9.5px] truncate text-left opacity-0 group-hover/mini:opacity-100 transition-opacity pointer-events-auto cursor-pointer"
               style={{
                 color: 'var(--accent)',
-                WebkitAppRegion: 'no-drag',
+                WebkitAppRegion: 'no-drag', '--wails-draggable': 'no-drag',
                 transitionDuration: 'var(--dur-fast)',
               } as React.CSSProperties}
             >
@@ -178,7 +178,7 @@ export function MiniApp() {
         </div>
 
         {/* Transport + volume — no-drag so clicks work inside the draggable card */}
-        <div className="flex items-center gap-0.5 shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className="flex items-center gap-0.5 shrink-0" style={{ WebkitAppRegion: 'no-drag', '--wails-draggable': 'no-drag' } as React.CSSProperties}>
           <button
             onClick={() => act('previous')}
             title="Previous"
@@ -287,7 +287,7 @@ function MiniSeek({ progress, durationSec, hasSong }: { progress: number; durati
   return (
     <div
       className="flex items-center gap-1.5 mt-1"
-      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      style={{ WebkitAppRegion: 'no-drag', '--wails-draggable': 'no-drag' } as React.CSSProperties}
       data-mini-seek
     >
       <span className="text-[9px] tabular-nums w-7 text-right shrink-0" style={{ color: 'var(--text-tertiary)' }}>

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { ArtworkOverride } from '../types'
 import { idbStorage } from '../lib/idbStorage.ts'
+import { normalizeMediaUrl } from '../lib/mediaUrl.ts'
 
 // ── Custom Artwork domain store (Aura 3.0 Wave 1/2) ─────────────────────────
 // Per-track artwork OVERRIDES chosen by the user (Wave 11 UI: track
@@ -40,6 +41,17 @@ export const useArtworkStore = create<ArtworkState>()(
       name: 'aura-artwork',
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ overrides: s.overrides }),
+      // Legacy media URL migration (Electron → Wails): overrides may hold
+      // `aura://local?path=…` URLs from the 3.2.0 build; normalize on
+      // hydration (idempotent — modern URLs pass through).
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as { overrides?: Record<string, { url: string; addedAt: number }> }
+        const overrides: typeof current.overrides = {}
+        for (const [id, o] of Object.entries(p.overrides ?? {})) {
+          overrides[id] = o.url.startsWith('aura://') ? { ...o, url: normalizeMediaUrl(o.url) } : o
+        }
+        return { ...current, ...p, overrides }
+      },
     },
   ),
 )
