@@ -35,6 +35,7 @@
 // stats can never break playback.
 
 import { usePlayerStore } from '@/store/playerStore'
+import { localMediaUrl } from '@/lib/mediaUrl'
 import { safeAppendScrobble } from '@/lib/scrobbleStore'
 import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
@@ -407,8 +408,7 @@ export function initPlayback() {
       audio.crossOrigin = (state.currentSong.source === 'online' && state.currentSong.streamCors === false)
         ? null
         : 'anonymous'
-      const params = new URLSearchParams({ path: state.currentSong.path })
-      audio.src = isElectron && !isRemote ? `aura://local?${params.toString()}` : state.currentSong.path
+      audio.src = isElectron && !isRemote ? localMediaUrl(state.currentSong.path) : state.currentSong.path
       audio.load()
       audio.currentTime = 0
 

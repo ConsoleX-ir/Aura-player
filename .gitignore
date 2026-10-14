@@ -1,7 +1,11 @@
-node_modules/
-dist/
-dist-electron/
-.env
-*.local
 *.exe
+*.local
+*.tsbuildinfo
+.env
 Install/
+build/bin
+dist-electron/
+dist/
+go.sandbox.sum
+node_modules/
+scripts/

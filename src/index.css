@@ -169,12 +169,29 @@ html, body, #root {
   overflow: hidden;
 }
 
+/* ── Wails (WebView2) drag-and-drop ────────────────────────────────────────
+   Wails' runtime only reports a dropped file to Go when the element under
+   the cursor carries `--wails-drop-target: drop` (the Electron build ignores
+   the property entirely). Marking #root makes the whole app shell the drop
+   surface; while a drag is over the window the runtime adds the
+   `wails-drop-target-active` class, which we style as a subtle hint (the
+   big "Drop to import" overlay still comes from the app's own dragenter
+   handlers, which keep working because the runtime's listeners coexist). */
+#root {
+  --wails-drop-target: drop;
+}
+#root.wails-drop-target-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -10px;
+}
+
 body {
   font-family: var(--font-body);
   background: var(--surface-base);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
   /* Theme cross-fade: when Wave 5 flips data-theme, every token-driven
      surface/text/border fades instead of snapping. Cheap (color-only). */
   transition: background var(--dur-ambient) var(--ease-smooth);
@@ -325,8 +342,8 @@ body {
 }
 
 /* ── Electron drag ───────────────────────────────────────────────────────── */
-.titlebar-drag    { -webkit-app-region: drag; }
-.titlebar-no-drag { -webkit-app-region: no-drag; }
+.titlebar-drag    { -webkit-app-region: drag; --wails-draggable: drag; }
+.titlebar-no-drag { -webkit-app-region: no-drag; --wails-draggable: no-drag; }
 
 /* ── Playing bars — lightweight CSS animation, no JS/framer-motion cost ─── */
 @keyframes playing-bar {
@@ -598,3 +615,9 @@ body {
     transform: none;
   }
 }
+
+/* ── Desktop mini mode (Wails single-window) ───────────────────────────────
+   The window is transparent; the widget paints its own rounded card. */
+html[data-aura-mode='mini'],
+html[data-aura-mode='mini'] body,
+html[data-aura-mode='mini'] #root { background: transparent !important; }

@@ -206,6 +206,13 @@ export interface ElectronAPI {
   // Fires at most once per watched folder per debounce window, no matter how
   // noisy the filesystem churn was underneath (main process debounces).
   onWatchChange: (cb: (change: FolderWatchChange) => void) => () => void
+  // ── OS drag-and-drop (Wails build) ───────────────────────────────────────
+  // Electron exposed absolute paths on the dropped File objects (a
+  // non-standard extension). WebView2 cannot do that, so the Wails build
+  // delivers the dropped AUDIO paths through this channel instead (Wails
+  // OnFileDrop → Go audio filter → event). Optional: only the Wails bridge
+  // provides it; the Electron build keeps using File.path.
+  onDragDropped?: (cb: (paths: string[]) => void) => () => void
   // Rewind share-card export: shows a native save dialog, then writes the
   // given base64 data URL (image/png) to disk as binary. Returns the chosen
   // path or null if the user cancelled.

@@ -9,7 +9,10 @@
          creatornode.*, …) and Radio Browser station favicons/streams live on the
          stations' own domains — so img-src / media-src allow https:/http: as
          schemes instead of an untenable host whitelist. Script execution stays
-         locked to 'self'; images and media are passive content (no script exec). -->
+         locked to 'self'; images and media are passive content (no script exec).
+         Local files are served same-origin at /aura/local (the Wails build's
+         replacement for the Electron-only aura: protocol, which was dropped
+         from this policy when the migration completed). -->
     <meta
   http-equiv="Content-Security-Policy"
   content="
@@ -17,8 +20,8 @@
     script-src 'self';
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com data:;
-    img-src 'self' data: blob: aura: https: http:;
-    media-src 'self' aura: blob: https: http:;
+    img-src 'self' data: blob: https: http:;
+    media-src 'self' blob: https: http:;
     connect-src 'self' http://localhost:5173 ws://localhost:5173 https://lrclib.net;
   "
 />
