@@ -1,12 +1,12 @@
 # 🎵 Aura Player
 
-> A modern, elegant, and lightweight desktop music player built with React, TypeScript, Vite — and, since the 3.2.0 Wails migration, a native Go host (Wails v2 + WebView2) instead of Electron.
+> A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
 ![Version](https://img.shields.io/badge/version-v3.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
-![React](https://img.shields.io/badge/React%2019-61DAFB?logo=react)
-![Wails](https://img.shields.io/badge/Wails%20v2-DF2E4D?logo=go)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![Electron](https://img.shields.io/badge/Electron-Latest-47848F?logo=electron)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)
 
 ---
@@ -22,13 +22,6 @@ v3 is the liquid-glass generation. A wide glass play bar breathes with the real 
 ---
 
 ## 🚀 Features
-
-> Everything below is the 3.2.0 feature set. The Electron → Wails migration
-> (see `docs/MIGRATION_REPORT.md` and `docs/FEATURE_PARITY.md`) preserves it
-> with two documented deltas: the mini player is now a mode of the single
-> window (Wails v2 is single-window), and the Windows SMTC media flyout is
-> unavailable in WebView2 (global media keys and taskbar thumbnail controls
-> are reimplemented natively in Go).
 
 ### 🎵 Music Library
 
@@ -208,7 +201,7 @@ Every keyboard action gives visible confirmation — a small toast rises above t
 
 # 🛠 Tech Stack
 
-- **Wails v2** (Go 1.25 host + WebView2) — the desktop shell since the 3.2.0 migration
+- Electron
 - React
 - TypeScript
 - Vite
@@ -216,11 +209,6 @@ Every keyboard action gives visible confirmation — a small toast rises above t
 - Zustand
 - Framer Motion
 - Lucide Icons
-- Go backend: tag/duration parsing (`dhowden/tag` + pure-Go container parsers), hardened provider networking, fsnotify folder watching, Win32 media keys & taskbar integration
-
-The Electron toolchain (`electron/`, `electron-builder` config in `package.json`) is kept for
-reference during the transition and is no longer required to build the app — see
-`docs/MIGRATION_REPORT.md` §5 for the planned cleanup.
 
 ---
 
@@ -244,19 +232,7 @@ Install dependencies
 npm install
 ```
 
-Install the Wails CLI (once)
-
-```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
-```
-
 Start development
-
-```bash
-wails dev
-```
-
-Or the renderer-only mode (Vite in a plain browser — no native features, handy for UI work):
 
 ```bash
 npm run dev
@@ -266,37 +242,25 @@ npm run dev
 
 # 🔨 Build
 
-Create a production build of the **Windows exe + NSIS installer** (the installer
-registers the 8 audio file associations via the bundled NSIS template;
-requires `makensis` on PATH):
+Create a production build
 
 ```bash
-./scripts/build-windows.sh --nsis
-# or directly:
-wails build -platform windows/amd64 -nsis -webview2 download
+npm run build
 ```
 
-The Windows target is CGO-free, so Linux/macOS machines can cross-compile the
-exe directly (drop `--nsis` for just `AuraPlayer.exe`):
+Package as a Windows installer (also registers file associations)
 
 ```bash
-wails build -platform windows/amd64 -s
+npm run build:electron
 ```
 
-Full verification (what CI runs):
+Package for Linux — builds an **AppImage** and a **.deb** (targets defined in `package.json`)
 
 ```bash
-npm ci && npx tsc -b && npx vite build
-bash scripts/a3_run_units.sh      # 20 unit suites (incl. Wails bridge + migration)
-go test ./...                     # Go services (11 packages)
-go run ./scripts/liveprobe        # live online-provider verification
+npm run build:linux
 ```
 
-The Wails build ships the Go host + WebView2 loader (~13.6 MB exe); the NSIS
-installer comes out **around 7.5 MB** — versus Electron's ~80 MB — because the
-browser engine comes with Windows. The legacy Electron packaging commands
-(`npm run build:electron` / `build:linux`) still work from `package.json` and
-are retained during the transition.
+The packages are optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and every non-English Electron locale is stripped from the package (about 46 MB lighter unpacked) while keeping full functionality. The Windows installer comes out **around 80 MB**; the Linux AppImage and .deb land **around 90 MB** each.
 
 ---
 
@@ -369,39 +333,18 @@ src/
  ├── hooks/        # useAudio, useLibraryImport, useLyrics, useMediaKeys, useFolderWatcher, useStoreHydration, ...
  ├── pages/        # Library, Explore, Playlist, NowPlaying, Settings, PropertiesPage, RewindPage,
  │                 #   HistoryPage, SmartPlaylists, ArtistPage, AlbumPage
- ├── platform/     # desktopBridge — window.electronAPI implemented over Wails bindings; install, events bus,
- │                 #   DesktopRoot (mini-player mode of the single window)
- ├── mini/         # MiniApp — the desktop widget renderer
- ├── services/     # providers/ (Audius + Radio Browser + find-info bindings, cache), libraryService
  ├── store/        # Zustand stores — playerStore (playback/library/queue), toastStore, uiStore, radioStore
  │                 #   + domain stores: notesStore, artworkStore, userPrefsStore (separately persisted)
- ├── styles/       # tokens.css (design tokens) + themes.css (theme identities)
+ ├── styles/       # tokens.css (design tokens) + themes.css (8 theme identities)
  ├── types/        # Shared TS types, incl. the ElectronAPI contract
  └── lib/          # Pure modules — playbackController (audio engine + FX chain), queueEngine, sort, eq,
                    #   audioFx, radioMusic, search, smartEngine, smartQueue, rewind, scrobbleStore, ...
-                   #   + wailsjs/ (generated Wails bindings)
 
-internal/          # Go services bound to the webview (docs/ARCHITECTURE.md)
- ├── library/      # folder scanning, drop resolution, health checks
- ├── metadata/     # pure-Go tags/duration/cover cache (replaces music-metadata)
- ├── netcore/      # hardened networking: timeouts, retries, typed errors, cancellation
- ├── providers/    # Audius + Radio Browser + find-info (allowlisted ops)
- ├── watcher/      # recursive folder watching, per-folder debounce
- ├── dialogs/      # native dialogs + guarded file writes
- ├── window/       # mini-player state machine + Win32 geometry
- ├── fileopen/     # file-association launches + single-instance handover
- ├── lifecycle/    # coordinated shutdown flush handshake
- ├── shell/        # reveal-in-folder, default-player handoff
- ├── media/        # /aura/local asset handler (Range-capable)
- ├── mediakeys/    # global media keys (RegisterHotKey)
- ├── taskbar/      # taskbar thumbnail buttons (ITaskbarList3)
- ├── syswin/       # renderer→OS playback state (thumbbar glyph)
- └── audiofmt/     # audio extension allow-list + MIME map
-
-electron/          # 3.2.0 Electron host — retained for reference during the transition
- ├── main.cjs      # (the Wails build does not use it)
- ├── findinfo.cjs
- └── preload.cjs
+electron/
+ ├── main.cjs      # Main process — window, IPC handlers, fs watchers, file associations,
+ │                 #   default-player OS handoff, coordinated shutdown
+ ├── findinfo.cjs  # Keyless metadata lookup (Deezer / iTunes / MusicBrainz), scored + merged
+ └── preload.cjs   # contextBridge — the only surface the renderer can reach into Node with
 ```
 
 ---

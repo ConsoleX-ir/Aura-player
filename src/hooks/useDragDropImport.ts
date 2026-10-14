@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useRef, useState, type DragEvent } from 'react'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 
 // Drag-and-drop import for the whole app window. Handles the classic
@@ -36,25 +36,12 @@ export function useDragDropImport() {
     // Electron extends the standard File object with a real filesystem
     // .path — that's what lets a browser-standard drop event reach all the
     // way into main-process file scanning/parsing, the same as if the user
-    // had picked these paths from a dialog. WebView2 (the Wails build) has
-    // no such extension: there, absolute paths arrive through the parallel
-    // onDragDropped channel below and the DOM drop event only resets the
-    // visual state.
+    // had picked these paths from a dialog.
     const paths = Array.from(e.dataTransfer.files)
       .map((f) => (f as File & { path?: string }).path)
       .filter((p): p is string => !!p)
 
     if (paths.length > 0) importDroppedPaths(paths)
-  }, [importDroppedPaths])
-
-  // Wails path: OnFileDrop → Go audio filter → 'drag:dropped'. Registered
-  // once; the handler is a stable store action so no re-subscription churn.
-  useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.onDragDropped) return
-    return api.onDragDropped((dropped) => {
-      importDroppedPaths(dropped)
-    })
   }, [importDroppedPaths])
 
   return {
