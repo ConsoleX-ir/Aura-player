@@ -11,8 +11,10 @@ export function TitleBar() {
     // This subscription already existed on the preload/main side but nothing
     // in the renderer ever listened — the maximize button always showed the
     // same icon regardless of actual window state.
+    // v3.2.1: unsubscribe on unmount (the bridge now returns a cleanup, so
+    // StrictMode remounts no longer stack duplicate listeners).
     const listener = (v: boolean) => setIsMaximized(v)
-    window.electronAPI?.onMaximized(listener)
+    return window.electronAPI?.onMaximized(listener)
   }, [])
 
   return (

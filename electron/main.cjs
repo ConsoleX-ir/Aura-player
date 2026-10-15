@@ -200,6 +200,21 @@ function saveMiniBounds(bounds) {
   } catch { /* best effort */ }
 }
 
+// v3.2.1: persisting bounds is best-effort, but 'moved' fires on every drag
+// step (dozens of times per reposition) and each save did a synchronous
+// mkdir + write on the MAIN thread — visible hitches while dragging the
+// widget on slow disks. The in-memory position is still updated instantly
+// (miniLastBounds, used by miniTargetBounds); only the disk write is
+// debounced, flushing 500ms after the user stops moving the widget.
+let miniBoundsSaveTimer = null
+function scheduleMiniBoundsSave(bounds) {
+  if (miniBoundsSaveTimer !== null) clearTimeout(miniBoundsSaveTimer)
+  miniBoundsSaveTimer = setTimeout(() => {
+    miniBoundsSaveTimer = null
+    saveMiniBounds(bounds)
+  }, 500)
+}
+
 /** Is (x, y) plausibly visible on one of the connected displays? */
 function isPointOnAnyDisplay(x, y) {
   const { screen } = require('electron')
@@ -257,12 +272,12 @@ function createMiniWindow() {
     miniWindow.loadFile(path.join(__dirname, '../dist/mini.html'))
   }
   // Remember where the user dragged it — within this session AND across
-  // restarts (Phase 13).
+  // restarts (Phase 13). Disk write debounced (see scheduleMiniBoundsSave).
   miniWindow.on('moved', () => {
     if (!miniWindow || miniWindow.isDestroyed()) return
     const [x, y] = miniWindow.getPosition()
     miniLastBounds = { x, y }
-    saveMiniBounds(miniLastBounds)
+    scheduleMiniBoundsSave(miniLastBounds)
   })
   return miniWindow
 }
@@ -411,7 +426,9 @@ app.whenReady().then(() => {
   fs.mkdirSync(coversDir, { recursive: true })
 
   // Stream local audio files via fs — net.fetch(file://) is unreliable on Windows
-  protocol.handle('aura', (request) => {
+  // v3.2.1: callback is async now (the handler awaits one fs.promises.stat
+  // per request instead of blocking the main thread with the sync pair).
+  protocol.handle('aura', async (request) => {
     try {
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -428,15 +445,29 @@ app.whenReady().then(() => {
       const filePath = searchParams.get('path')
       if (!filePath) return new Response('Missing path', { status: 400, headers: corsHeaders })
 
-      // Verify the file exists
-      if (!fs.existsSync(filePath)) {
+      // v3.2.1: one async stat replaces v3.2.0's synchronous exists/stat
+      // pair. Every seek/buffer request from the media element lands here —
+      // the sync pair blocked the MAIN process twice per request (visible on
+      // network shares / slow disks when a scan or large read was also in
+      // flight). Same outcomes: ENOENT etc. → 404, any other failure → 500.
+      let stat
+      try {
+        stat = await fs.promises.stat(filePath)
+      } catch (e) {
+        if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR' || e.code === 'EACCES' || e.code === 'EBUSY')) {
+          console.error('File not found:', filePath)
+          return new Response('File not found: ' + filePath, { status: 404, headers: corsHeaders })
+        }
+        console.error('Protocol handler error:', e)
+        return new Response('Internal error: ' + e.message, { status: 500 })
+      }
+      if (!stat.isFile()) {
         console.error('File not found:', filePath)
         return new Response('File not found: ' + filePath, { status: 404, headers: corsHeaders })
       }
 
       const ext  = path.extname(filePath).toLowerCase()
       const mime = MIME[ext] || 'audio/mpeg'
-      const stat = fs.statSync(filePath)
       const size = stat.size
 
       // Handle Range requests — essential for audio seeking
@@ -535,8 +566,26 @@ app.on('will-quit', () => { globalShortcut.unregisterAll() })
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
 
+// v3.2.1: every handler that touches mainWindow now goes through guards —
+// a window that is mid-teardown (or already destroyed) used to make these
+// IPC calls throw, which for dialog:* handlers surfaced in the renderer as
+// an unhandled rejection instead of a silent no-op.
+function liveMainWindow() {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+}
+
+// dialog.show*Dialog overloads accept an owner window OR just options —
+// passing null explicitly throws, so destroyed-window calls degrade to the
+// owner-less overload (dialog still appears; nothing crashes).
+function openDialogSafe(win, options) {
+  return win ? dialog.showOpenDialog(win, options) : dialog.showOpenDialog(options)
+}
+function saveDialogSafe(win, options) {
+  return win ? dialog.showSaveDialog(win, options) : dialog.showSaveDialog(options)
+}
+
 ipcMain.handle('dialog:openFolder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const result = await openDialogSafe(liveMainWindow(), {
     properties: ['openDirectory'],
     title: 'Select Music Folder',
   })
@@ -546,7 +595,7 @@ ipcMain.handle('dialog:openFolder', async () => {
 // Lets the user pick one or more individual audio files directly, instead of
 // having to import a whole containing folder.
 ipcMain.handle('dialog:openFiles', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const result = await openDialogSafe(liveMainWindow(), {
     properties: ['openFile', 'multiSelections'],
     title: 'Select Songs',
     filters: [
@@ -561,7 +610,7 @@ ipcMain.handle('dialog:openFiles', async () => {
 // nothing to generate here beyond the dialog + write; the actual M3U text
 // is built in the renderer (useLibraryImport's sibling, useLibraryExport).
 ipcMain.handle('dialog:savePlaylistFile', async (_e, defaultName) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await saveDialogSafe(liveMainWindow(), {
     title: 'Export Playlist',
     defaultPath: defaultName,
     filters: [{ name: 'M3U Playlist', extensions: ['m3u'] }],
@@ -584,7 +633,7 @@ ipcMain.handle('fs:writeTextFile', async (_e, filePath, content) => {
 // in / binary out keeps the context bridge happy — only serializable data
 // crosses it.
 ipcMain.handle('dialog:saveImageFile', async (_e, defaultName, dataUrl) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await saveDialogSafe(liveMainWindow(), {
     title: 'Save Image',
     defaultPath: defaultName,
     filters: [{ name: 'PNG Image', extensions: ['png'] }],
@@ -727,7 +776,11 @@ ipcMain.handle('fs:resolveDroppedPaths', async (_e, droppedPaths) => {
 
     if (stat.isDirectory()) {
       folders.push(p)
-      files.push(...scanFolderForAudio(p))
+      // v3.2.1 fix: scanFolderForAudio is async — v3.2.0 pushed the raw
+      // Promise here (spread of a non-iterable), which threw a TypeError
+      // and rejected the whole IPC call, so dragging a FOLDER onto the
+      // window failed every time (dropping loose files was unaffected).
+      files.push(...(await scanFolderForAudio(p)))
     } else if (stat.isFile() && AUDIO_EXTS.includes(path.extname(p).toLowerCase())) {
       files.push({ path: p, name: path.basename(p), mtimeMs: stat.mtimeMs })
     }
@@ -749,9 +802,14 @@ async function parseOneFile(filePath) {
       // Same source file always hashes to the same cache filename, so a
       // re-parse (e.g. Folder Sync re-checking an unchanged file) skips the
       // write entirely instead of needlessly re-writing identical bytes.
-      if (!fs.existsSync(cachedPath)) {
-        try { fs.writeFileSync(cachedPath, Buffer.from(cover.data)) }
-        catch (e) { console.error('Failed to cache cover art:', cachedPath, e.message) }
+      // v3.2.1: one async 'wx'-flag write replaces v3.2.0's existsSync +
+      // writeFileSync pair. 'wx' fails harmlessly when the cache file
+      // already exists, so the skip-if-cached semantics are identical, but
+      // nothing blocks the MAIN process per parsed file (this runs under
+      // METADATA_CONCURRENCY workers during large imports).
+      try { await fs.promises.writeFile(cachedPath, Buffer.from(cover.data), { flag: 'wx' }) }
+      catch (e) {
+        if (e?.code !== 'EEXIST') console.error('Failed to cache cover art:', cachedPath, e.message)
       }
       // Served through the same aura:// protocol handler that already
       // streams audio — a plain file path/query param it already understands,
@@ -1002,10 +1060,10 @@ ipcMain.handle('fs:checkPaths', async (_e, paths) => {
   return out
 })
 
-ipcMain.on('window:minimize', () => mainWindow.minimize())
-ipcMain.on('window:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize())
-ipcMain.on('window:close',    () => mainWindow.close())
-ipcMain.handle('window:isMaximized', () => mainWindow.isMaximized())
+ipcMain.on('window:minimize', () => { liveMainWindow()?.minimize() })
+ipcMain.on('window:maximize', () => { const w = liveMainWindow(); if (w) w.isMaximized() ? w.unmaximize() : w.maximize() })
+ipcMain.on('window:close',    () => { liveMainWindow()?.close() })
+ipcMain.handle('window:isMaximized', () => liveMainWindow()?.isMaximized() ?? false)
 
 // ── Desktop mini player IPC (v2.1.2) ────────────────────────────────────────
 

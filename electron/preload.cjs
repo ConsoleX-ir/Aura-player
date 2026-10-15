@@ -56,7 +56,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize:      ()       => ipcRenderer.send('window:maximize'),
   close:         ()       => ipcRenderer.send('window:close'),
   isMaximized:   ()       => ipcRenderer.invoke('window:isMaximized'),
-  onMaximized:   (cb)     => ipcRenderer.on('window:maximized', (_e, v) => cb(v)),
+  // v3.2.1: returns an unsubscribe like every other on* bridge method —
+  // v3.2.0 returned nothing, so any component that subscribed could never
+  // clean up (each remount leaked one listener on 'window:maximized').
+  onMaximized:   (cb) => {
+    const listener = (_e, v) => cb(v)
+    ipcRenderer.on('window:maximized', listener)
+    return () => ipcRenderer.removeListener('window:maximized', listener)
+  },
   // Global media keys (hardware Play/Pause/Next/Previous) and Windows
   // taskbar thumbnail controls both funnel through this one channel.
   onMediaCommand: (cb) => {

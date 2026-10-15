@@ -273,9 +273,25 @@ export const usePlayerStore = create<PlayerState>()(
     (set, get) => ({
       library: [],
       setLibrary: (songs) => set({ library: songs }),
-      addToLibrary: (songs) => set((s) => ({
-        library: [...s.library, ...songs.filter((n) => !s.library.find((e) => e.id === n.id))]
-      })),
+      // v3.2.1: duplicate check uses a Set instead of a per-candidate
+      // Array.find — importing N songs into an M-song library was O(N×M)
+      // on the main thread (a 2,000-file re-import into a 5,000-song
+      // library did ~10M comparisons inside one set() call). Dedupe is now
+      // idempotent: existing library ids win, and duplicates WITHIN the
+      // batch collapse to their first occurrence (song ids are library-wide
+      // primary keys everywhere else — removeFromLibrary, favorites, health
+      // scans — so a duplicate id in state was never a valid outcome).
+      addToLibrary: (songs) => set((s) => {
+        if (songs.length === 0) return s
+        const seen = new Set(s.library.map((e) => e.id))
+        const fresh: typeof songs = []
+        for (const n of songs) {
+          if (seen.has(n.id)) continue
+          seen.add(n.id)
+          fresh.push(n)
+        }
+        return fresh.length ? { library: [...s.library, ...fresh] } : s
+      }),
       // Removes a song from the app's index only — the file on disk is never touched.
       // Also cleans it out of every playlist, favorites, and the live queue so nothing
       // is left pointing at a song that no longer exists in the library.

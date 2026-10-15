@@ -1,7 +1,4 @@
 node_modules/
 dist/
 dist-electron/
-.env
-*.local
-*.exe
-Install/
+*.tsbuildinfo

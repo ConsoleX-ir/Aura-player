@@ -221,7 +221,7 @@ export interface ElectronAPI {
   maximize:      () => void
   close:         () => void
   isMaximized:   () => Promise<boolean>
-  onMaximized:   (cb: (v: boolean) => void) => void
+  onMaximized:   (cb: (v: boolean) => void) => () => void
   // ── Desktop mini player (v2.1.2) ────────────────────────────────────────
   // The mini player is an independent frameless BrowserWindow. The main
   // renderer pushes flat state snapshots over pushMiniState; the widget's
