@@ -3,9 +3,13 @@ import { AudioWaveform } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { EQ_PRESETS, EQ_BAND_LABELS, EQ_MIN_DB, EQ_MAX_DB, isFlat } from '@/lib/eq'
 import { UserPresetChip, SavePresetControl } from './UserPresetChip'
+import { EqResponseCurve } from './EqResponseCurve'
 
-// ── Audio Studio → Equalizer (v3.2.0) ───────────────────────────────────────
+// ── Audio Studio → Equalizer (4.0.0) ────────────────────────────────────────
 // The Wave 3 card, upgraded for its new home as a Studio section:
+//   • a REAL transfer-response curve above the bands — the chain's actual
+//     magnitude response (live getFrequencyResponse of the 12 filters in the
+//     path + preamp), with the live spectrum as a soft ghost under it
 //   • an honest ENABLE gate — disabled flattens the bands while the user's
 //     curve stays intact in the store (the engine glides, nothing rebuilds)
 //   • the built-in curves (now incl. Pop and Acoustic)
@@ -107,6 +111,12 @@ export function EqualizerCard({ bypassed }: { bypassed: boolean }) {
           disabled={inert}
           onSave={(name) => saveEqPreset(name)}
         />
+      </div>
+
+      {/* The REAL transfer response of the live chain — plus the spectrum
+          it is acting on. Drawn from the engine's own filter nodes. */}
+      <div className="mb-3">
+        <EqResponseCurve inert={inert} />
       </div>
 
       {/* Bands */}

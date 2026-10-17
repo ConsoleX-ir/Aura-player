@@ -256,3 +256,30 @@
   --glass-background:     var(--surface-chrome);
   --glass-border:         var(--border-strong);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   STUDIO VISUALIZATION TOKENS (v4.0.0) — the Audio Studio's instruments
+   read these names instead of hard-coded colors, so every theme identity
+   (and the light foundation) re-skins the meters, the EQ response curve
+   and the spectrum without any per-component branching. Everything here
+   derives from the semantic layer above — accents stay theme accents,
+   meters stay traffic-light semantics — in BOTH appearances.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  /* EQ transfer curve — the theme accent IS the chain's voice */
+  --viz-curve:        var(--accent);
+  --viz-curve-fill:   color-mix(in srgb, var(--accent) 16%, transparent);
+  /* Live spectrum ghost under the curve */
+  --viz-ghost:        color-mix(in srgb, var(--accent) 26%, transparent);
+  /* Spectrum bars */
+  --viz-spectrum:      color-mix(in srgb, var(--accent) 52%, transparent);
+  --viz-spectrum-peak: var(--accent-strong);
+  /* Grids & axis text (instrument paper, not chrome) */
+  --viz-grid:         var(--border-subtle);
+  --viz-grid-strong:  var(--border-default);
+  --viz-text:         var(--text-tertiary);
+  /* Meter traffic lights (semantic, not decorative) */
+  --viz-meter:        var(--success);
+  --viz-meter-hot:    var(--warning);
+  --viz-meter-clip:   var(--danger);
+}

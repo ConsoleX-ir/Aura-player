@@ -255,6 +255,36 @@ body {
   display: none;
 }
 
+/* ── Theme Engine decorative layer (v3.3) ───────────────────────────────────
+   ONE static div inside .dynamic-bg (App.tsx); the per-theme RECIPES live in
+   styles/themes.css keyed by [data-aura-theme]. Contract:
+   • paints between the accent orbs and all content (z-index -1, tree order);
+   • pointer-events: none — decor can never intercept interaction;
+   • theme switches replay the one-shot deco-in fade (opacity only), which
+     cross-fades the layer while .theme-anim glides the tokens;
+   • no element exists in the mini player (compact widget — no decor), and a
+     missing recipe simply renders nothing: decorative failure can never
+     break layout or readability. */
+.theme-deco {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+/* The decorative layer is deliberately ANIMATION-FREE — including during the
+   .theme-anim cross-fade window. Two measured reasons (llvmpipe / software
+   rendering, Electron 42):
+   • A boot-time full-viewport opacity animation wedged the renderer outright
+     (continuous re-composite during first paint collides with the SharedImage
+     pipeline — see docs/THEME_ENGINE_IMPLEMENTATION.md §7).
+   • A fade scoped to the switch window gets CANCELED mid-flight when the
+     window closes (850ms < nothing-fade budget), and that cancel+full-repaint
+     also wedged software-rendered sessions.
+   So the layer is static, full stop: the token cross-fade (.theme-anim) still
+   animates every surface/color on a switch, and the low-alpha decor swap
+   beneath it reads as part of that fade. Steady state: one composited layer,
+   zero animation, zero continuous cost. */
+
 /* ── Glass utilities ─────────────────────────────────────────────────────── */
 .glass {
   background: var(--glass-1);

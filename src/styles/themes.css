@@ -1,28 +1,34 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   AURA THEME SYSTEM 3.0 — the theme registry (Wave 4)
+   AURA THEME ENGINE — identity layer (v3.3)
    ═══════════════════════════════════════════════════════════════════════════
-   A THEME is a color IDENTITY, orthogonal to the appearance (dark/light):
-   `data-aura-theme` selects the identity, `data-theme` stays the appearance
-   switch. Each identity remaps:
+   One CSS identity block per theme in the typed registry (src/theme/registry.ts).
+   Registry ↔ CSS completeness is enforced by scripts/a33_theme_engine.test.ts,
+   which parses this file and fails if a registry theme has no block here.
 
-     • the PRIMITIVE ink scale (§tokens.css) toward its own hue family —
-       the whole semantic layer (surfaces, borders, chrome) inherits for
-       free, which is exactly the three-layer architecture doing its job;
-     • the idle cloud/ambient family (the glow color before any artwork);
-     • a curated SECONDARY accent (--accent-2) for 3.0 surfaces
-       (Playbar glass, Explore hero, selected states).
+   A theme block remaps, in one attribute write:
+     • the PRIMITIVE ink scale (§tokens.css) toward its own hue family — the
+       whole semantic surface/border/chrome ladder inherits for free;
+     • the ambient cloud family (idle glow before artwork takes over);
+     • a theme-owned SECONDARY accent (--accent-2);
+     • chrome + shadow + border TEMPERATURE (tinted, not neutral gray);
+     • the decorative background recipe for .theme-deco (index.css owns the
+       element's base styles, stillness and fade-in contract).
 
    The PRIMARY accent is NOT defined here — it keeps flowing through the
-   dynamic pipeline (useDynamicTheme → --color-dynamic-*) so custom accent
-   colors, Now Playing artwork-ambient and playlist covers keep working
-   unchanged (spec §6: Now Playing stays artwork-driven).
+   dynamic pipeline (useDynamicTheme → --color-dynamic-*) sourced from the
+   registry, so custom accent colors, Now Playing artwork-ambient and playlist
+   covers keep working unchanged.
 
-   Light mode: the light foundation in tokens.css re-maps inks to paper.
-   Themes only tint the paper (--surface-base) — the veil-based accent
-   system survives light mode untouched, by design.
+   Brightness: each theme's block is designed for its fixed appearance —
+   aurora/abyss/nebula build on the dark foundation, ember/vector on the light
+   foundation (the engine derives data-theme from the registry; there is no
+   separate per-theme light-paper pairing anymore).
 
-   Everything here is static CSS — switching themes costs one attribute
-   write; transitions ride the existing .theme-anim cross-fade.
+   Everything here is static CSS — switching themes costs one attribute write;
+   transitions ride the existing .theme-anim cross-fade plus the .theme-deco
+   one-shot fade-in. Zero animation at steady state. No blur filters in any
+   decorative layer (pre-softened gradients) — Performance Mode needs no
+   special-casing and the decor costs one composited layer.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Secondary-accent semantic tokens (defaults = derived from dynamic) ── */
@@ -32,203 +38,570 @@
   --accent-2-border: color-mix(in srgb, var(--color-dynamic-2) 40%, transparent);
 }
 
-/* ═══ CONSOLEX — the house identity (default; equals the token base) ════ */
-[data-aura-theme='default'] {
-  --aura-ink-900: #0A0A0F;
-  --aura-ink-800: #101017;
-  --aura-ink-700: #16161E;
-  --aura-ink-600: #1D1D27;
-  --aura-cloud-500: #B0B8C8;
-  --accent-2:        #D7DEEB;
-  --accent-2-veil:   rgba(215, 222, 235, 0.12);
-  --accent-2-border: rgba(215, 222, 235, 0.38);
-}
-
-/* ═══ OCEAN DEEP — deep blue ════════════════════════════════════════════ */
-[data-aura-theme='ocean'] {
-  --aura-ink-900: #060A13;
-  --aura-ink-800: #0A111E;
-  --aura-ink-700: #0E1728;
-  --aura-ink-600: #131F35;
-  --aura-cloud-500: #8FB3D9;
-  --cloud:       #8FB3D9;
-  --cloud-soft:  rgba(143, 179, 217, 0.15);
-  --cloud-glow:  rgba(143, 179, 217, 0.08);
-  --accent-2:        #7FB8E8;
-  --accent-2-veil:   rgba(127, 184, 232, 0.12);
-  --accent-2-border: rgba(127, 184, 232, 0.38);
-}
-
-/* ═══ AMETHYST — violet ═════════════════════════════════════════════════ */
-[data-aura-theme='amethyst'] {
-  --aura-ink-900: #0B0913;
-  --aura-ink-800: #100D1B;
-  --aura-ink-700: #151228;
-  --aura-ink-600: #1B1834;
-  --aura-cloud-500: #B5A8D9;
-  --cloud:       #B5A8D9;
-  --cloud-soft:  rgba(181, 168, 217, 0.15);
-  --cloud-glow:  rgba(181, 168, 217, 0.08);
-  --accent-2:        #C4B0F0;
-  --accent-2-veil:   rgba(196, 176, 240, 0.12);
-  --accent-2-border: rgba(196, 176, 240, 0.38);
-}
-
-/* ═══ CYAN FROST ════════════════════════════════════════════════════════ */
-[data-aura-theme='cyan'] {
-  --aura-ink-900: #061113;
-  --aura-ink-800: #0A1A1E;
-  --aura-ink-700: #0E2328;
-  --aura-ink-600: #132E35;
-  --aura-cloud-500: #8FCED9;
-  --cloud:       #8FCED9;
-  --cloud-soft:  rgba(143, 206, 217, 0.15);
-  --cloud-glow:  rgba(143, 206, 217, 0.08);
-  --accent-2:        #86E3EE;
-  --accent-2-veil:   rgba(134, 227, 238, 0.12);
-  --accent-2-border: rgba(134, 227, 238, 0.38);
-}
-
-/* ═══ EMERALD ═══════════════════════════════════════════════════════════ */
-[data-aura-theme='forest'] {
-  --aura-ink-900: #070F0A;
-  --aura-ink-800: #0B1710;
-  --aura-ink-700: #0F2016;
-  --aura-ink-600: #142A1D;
-  --aura-cloud-500: #9BCBB0;
-  --cloud:       #9BCBB0;
-  --cloud-soft:  rgba(155, 203, 176, 0.15);
-  --cloud-glow:  rgba(155, 203, 176, 0.08);
-  --accent-2:        #86D0A8;
-  --accent-2-veil:   rgba(134, 208, 168, 0.12);
-  --accent-2-border: rgba(134, 208, 168, 0.38);
-}
-
-/* ═══ CRIMSON ═══════════════════════════════════════════════════════════ */
-[data-aura-theme='crimson'] {
-  --aura-ink-900: #110A0C;
-  --aura-ink-800: #190F12;
-  --aura-ink-700: #211418;
-  --aura-ink-600: #2B1A1F;
-  --aura-cloud-500: #D9A0A8;
-  --cloud:       #D9A0A8;
-  --cloud-soft:  rgba(217, 160, 168, 0.15);
-  --cloud-glow:  rgba(217, 160, 168, 0.08);
-  --accent-2:        #F0A3AA;
-  --accent-2-veil:   rgba(240, 163, 170, 0.12);
-  --accent-2-border: rgba(240, 163, 170, 0.38);
-}
-
-/* ═══ AMBER — warm sunset ═══════════════════════════════════════════════ */
-[data-aura-theme='sunset'] {
-  --aura-ink-900: #100C07;
-  --aura-ink-800: #181209;
-  --aura-ink-700: #20180D;
-  --aura-ink-600: #2A2012;
-  --aura-cloud-500: #D9C29A;
-  --cloud:       #D9C29A;
-  --cloud-soft:  rgba(217, 194, 154, 0.15);
-  --cloud-glow:  rgba(217, 194, 154, 0.08);
-  --accent-2:        #F2BE8A;
-  --accent-2-veil:   rgba(242, 190, 138, 0.12);
-  --accent-2-border: rgba(242, 190, 138, 0.38);
-}
-
-/* ═══ MONO — pure grayscale, zero chroma ════════════════════════════════ */
-[data-aura-theme='mono'] {
-  --aura-ink-900: #08080A;
-  --aura-ink-800: #0E0E10;
-  --aura-ink-700: #141416;
-  --aura-ink-600: #1B1B1E;
-  --aura-cloud-500: #C8C8CC;
-  --cloud:       #C8C8CC;
-  --cloud-soft:  rgba(200, 200, 204, 0.15);
-  --cloud-glow:  rgba(200, 200, 204, 0.08);
-  --accent-2:        #FAFAFA;
-  --accent-2-veil:   rgba(250, 250, 250, 0.10);
-  --accent-2-border: rgba(250, 250, 250, 0.36);
-}
-
-/* ═════════════════════════════════════════════════════════════════════
-   V3.2.0 SPECIAL IDENTITIES — four additive first-class themes. Each one
-   remaps the same primitive ink scale + ambient cloud + secondary accent
-   trio as the eight above, so the ENTIRE semantic layer (surfaces,
-   borders, chrome, glass, status veils) resolves automatically — no
-   component branches anywhere (spec §4: centralized tokens, not per-
-   component theme switches). Persisted ids are new strings; existing
-   selections and the 'custom' accent path are untouched.
-   ═════════════════════════════════════════════════════════════════════ */
-
-/* ═══ ORCHID — plum-magenta bloom ═══════════════════════════════════ */
-[data-aura-theme='orchid'] {
-  --aura-ink-900: #120A11;
-  --aura-ink-800: #1A0F18;
-  --aura-ink-700: #22141F;
-  --aura-ink-600: #2C1A29;
-  --aura-cloud-500: #D9A6CE;
-  --cloud:       #D9A6CE;
-  --cloud-soft:  rgba(217, 166, 206, 0.15);
-  --cloud-glow:  rgba(217, 166, 206, 0.08);
-  --accent-2:        #EFA8DF;
-  --accent-2-veil:   rgba(239, 168, 223, 0.12);
-  --accent-2-border: rgba(239, 168, 223, 0.38);
-}
-
-/* ═══ INDIGO — deep blue-violet night ═════════════════════════════ */
-[data-aura-theme='indigo'] {
-  --aura-ink-900: #080A16;
-  --aura-ink-800: #0C0F20;
-  --aura-ink-700: #10142B;
-  --aura-ink-600: #151A38;
-  --aura-cloud-500: #A3AED9;
-  --cloud:       #A3AED9;
-  --cloud-soft:  rgba(163, 174, 217, 0.15);
-  --cloud-glow:  rgba(163, 174, 217, 0.08);
-  --accent-2:        #8F9FEF;
-  --accent-2-veil:   rgba(143, 159, 239, 0.12);
-  --accent-2-border: rgba(143, 159, 239, 0.38);
-}
-
-/* ═══ CHAMPAGNE — warm aged gold ═══════════════════════════════════ */
-[data-aura-theme='champagne'] {
-  --aura-ink-900: #110E08;
-  --aura-ink-800: #191409;
-  --aura-ink-700: #1F1910;
-  --aura-ink-600: #2A2116;
-  --aura-cloud-500: #D9CCA0;
-  --cloud:       #D9CCA0;
-  --cloud-soft:  rgba(217, 204, 160, 0.15);
-  --cloud-glow:  rgba(217, 204, 160, 0.08);
-  --accent-2:        #EFDFA8;
-  --accent-2-veil:   rgba(239, 223, 168, 0.12);
-  --accent-2-border: rgba(239, 223, 168, 0.38);
-}
-
-/* ═══ AURORA — boreal teal-green ═══════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   AURORA — northern lights, atmospheric depth (dark · default)
+   Deep boreal teal-green ink; green→turquoise accents; violet reserved for
+   the decorative ribbons so the UI itself never reads as generic neon.
+   ═══════════════════════════════════════════════════════════════════════ */
 [data-aura-theme='aurora'] {
-  --aura-ink-900: #060F0C;
-  --aura-ink-800: #0A1613;
-  --aura-ink-700: #0C1D19;
-  --aura-ink-600: #11251F;
+  --aura-ink-900: #071310;
+  --aura-ink-800: #0B1B18;
+  --aura-ink-700: #0F2320;
+  --aura-ink-600: #152D29;
   --aura-cloud-500: #9AD9C8;
   --cloud:       #9AD9C8;
   --cloud-soft:  rgba(154, 217, 200, 0.15);
   --cloud-glow:  rgba(154, 217, 200, 0.08);
-  --accent-2:        #7FE0C8;
-  --accent-2-veil:   rgba(127, 224, 200, 0.12);
-  --accent-2-border: rgba(127, 224, 200, 0.38);
+  --accent-2:        #67DCD0;
+  --accent-2-veil:   rgba(103, 220, 208, 0.12);
+  --accent-2-border: rgba(103, 220, 208, 0.38);
+  /* Mint-tinted chrome — floating chrome picks up the boreal cast */
+  --surface-chrome:  rgba(7, 18, 16, 0.93);
+  --color-chrome-solid: #091715;
+  /* Cool mint border temperature */
+  --border-subtle:   rgba(214, 248, 240, 0.06);
+  --border-default:  rgba(214, 248, 240, 0.09);
+  --border-strong:   rgba(214, 248, 240, 0.13);
+  --border-emphasis: rgba(214, 248, 240, 0.17);
+  /* Pine-shadow ladder */
+  --shadow-1: 0 1px 2px rgba(1, 9, 7, 0.45);
+  --shadow-2: 0 8px 24px rgba(1, 9, 7, 0.55);
+  --shadow-3: 0 24px 64px rgba(1, 9, 7, 0.60);
+  --shadow-overlay: 0 16px 44px rgba(1, 9, 7, 0.60);
 }
 
-/* ═══ LIGHT PAPERS — per-identity paper tint over the light foundation ══ */
-[data-aura-theme='ocean'][data-theme='light']     { --surface-base: #EFF3F8; --color-chrome-solid: #f6f9fc; }
-[data-aura-theme='amethyst'][data-theme='light']  { --surface-base: #F4F2F8; --color-chrome-solid: #faf9fc; }
-[data-aura-theme='cyan'][data-theme='light']      { --surface-base: #EEF5F7; --color-chrome-solid: #f5fafb; }
-[data-aura-theme='forest'][data-theme='light']    { --surface-base: #F0F5F1; --color-chrome-solid: #f6faf7; }
-[data-aura-theme='crimson'][data-theme='light']   { --surface-base: #F8F2F3; --color-chrome-solid: #fbf7f8; }
-[data-aura-theme='sunset'][data-theme='light']    { --surface-base: #F8F4EE; --color-chrome-solid: #fcf9f5; }
-[data-aura-theme='mono'][data-theme='light']      { --surface-base: #F6F6F7; --color-chrome-solid: #fafafa; }
-/* v3.2.0 identities carry their own light papers too */
-[data-aura-theme='orchid'][data-theme='light']    { --surface-base: #F8F1F6; --color-chrome-solid: #fbf7fa; }
-[data-aura-theme='indigo'][data-theme='light']    { --surface-base: #F0F1F8; --color-chrome-solid: #f7f8fc; }
-[data-aura-theme='champagne'][data-theme='light'] { --surface-base: #F9F5EC; --color-chrome-solid: #fcf9f3; }
-[data-aura-theme='aurora'][data-theme='light']    { --surface-base: #EEF6F2; --color-chrome-solid: #f6fbf9; }
+/* ═══════════════════════════════════════════════════════════════════════
+   EMBER — warm editorial paper, firelight (LIGHT · refined composition)
+   The identity reads as a printed journal by firelight: deep parchment
+   (not cream-white) under near-white cards, copper light falling from
+   the top-right, a burgundy floor and a dark hearth ledge anchoring the
+   base of the window; fine paper grain ties it together. Serif display
+   headings complete the print-editorial voice. Ink ladder verified
+   against WCAG AA by scripts/a32_contrast_check.mjs.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='ember'] {
+  /* Parchment — warm and grounded, so near-white cards visibly LIFT */
+  --surface-base:    #F6EEDF;
+  --surface-raised:  #FEFBF4;
+  --surface-card:    #FFFDF8;
+  --surface-inset:   rgba(51, 32, 15, 0.05);
+  --surface-hover:   rgba(51, 32, 15, 0.075);
+  --surface-active:  rgba(51, 32, 15, 0.105);
+  --surface-selected: rgba(51, 32, 15, 0.15);
+  --surface-chrome:  rgba(255, 253, 248, 0.92);
+  --surface-solid:   rgba(255, 253, 248, 0.98);
+  --color-chrome-solid: #fffdf8;
+
+  --glass-1: rgba(51, 32, 15, 0.055);
+  --glass-2: rgba(51, 32, 15, 0.085);
+  --glass-3: rgba(51, 32, 15, 0.125);
+
+  /* Warm ink ladder (see contrast script: secondary/tertiary ≥ 4.5:1) */
+  --text-primary:   rgba(51, 32, 15, 0.92);
+  --text-secondary: rgba(51, 32, 15, 0.68);
+  --text-tertiary:  rgba(51, 32, 15, 0.64);
+  --text-faint:     rgba(51, 32, 15, 0.50);
+
+  /* Warm hairlines — the emphasis step leans copper for definition */
+  --border-subtle:   rgba(82, 48, 20, 0.09);
+  --border-default:  rgba(82, 48, 20, 0.14);
+  --border-strong:   rgba(82, 48, 20, 0.19);
+  --border-emphasis: rgba(82, 48, 20, 0.27);
+
+  /* Deeper firelight shadows — panels sit IN the light, not on it */
+  --shadow-1: 0 1px 2px rgba(62, 34, 14, 0.11);
+  --shadow-2: 0 8px 24px rgba(62, 34, 14, 0.13);
+  --shadow-3: 0 24px 64px rgba(62, 34, 14, 0.15);
+  --shadow-overlay: 0 16px 44px rgba(62, 34, 14, 0.17);
+
+  /* Amber-mist ambient */
+  --aura-cloud-500: #C79E76;
+  --cloud:       #C79E76;
+  --cloud-soft:  rgba(199, 158, 118, 0.18);
+  --cloud-glow:  rgba(199, 158, 118, 0.10);
+
+  --accent-2:        #9C4A52;
+  --accent-2-veil:   rgba(156, 74, 82, 0.12);
+  --accent-2-border: rgba(156, 74, 82, 0.40);
+
+  /* Editorial voice: serif display over the sans body */
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ABYSS — ocean depths (dark · deepest)
+   Abyssal navy ink; teal primary, turquoise highlights; light falls from
+   above (SVG shafts) and the floor drops away (depth gradient).
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='abyss'] {
+  --aura-ink-900: #050912;
+  --aura-ink-800: #081020;
+  --aura-ink-700: #0C1830;
+  --aura-ink-600: #112140;
+  --aura-cloud-500: #7FB6D9;
+  --cloud:       #7FB6D9;
+  --cloud-soft:  rgba(127, 182, 217, 0.15);
+  --cloud-glow:  rgba(127, 182, 217, 0.08);
+  --accent-2:        #63D8E8;
+  --accent-2-veil:   rgba(99, 216, 232, 0.12);
+  --accent-2-border: rgba(99, 216, 232, 0.38);
+  /* Deep-water chrome */
+  --surface-chrome:  rgba(6, 12, 24, 0.93);
+  --color-chrome-solid: #071120;
+  /* Ice-blue border temperature */
+  --border-subtle:   rgba(200, 230, 255, 0.06);
+  --border-default:  rgba(200, 230, 255, 0.08);
+  --border-strong:   rgba(200, 230, 255, 0.12);
+  --border-emphasis: rgba(200, 230, 255, 0.16);
+  /* Trench shadows */
+  --shadow-1: 0 1px 2px rgba(0, 2, 6, 0.50);
+  --shadow-2: 0 8px 24px rgba(0, 2, 6, 0.60);
+  --shadow-3: 0 24px 64px rgba(0, 2, 6, 0.65);
+  --shadow-overlay: 0 16px 44px rgba(0, 2, 6, 0.65);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VECTOR — technical precision (LIGHT)
+   Silver-white paper with graphite ink; one restrained cobalt accent;
+   tighter radii + wider caps tracking + crisper hairlines = engineered feel.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='vector'] {
+  /* Silver paper — cooler and flatter than Ember's cream */
+  --surface-base:    #EFF1F4;
+  --surface-raised:  #F8F9FB;
+  --surface-card:    #FBFCFD;
+  --surface-inset:   rgba(20, 23, 29, 0.045);
+  --surface-hover:   rgba(20, 23, 29, 0.065);
+  --surface-active:  rgba(20, 23, 29, 0.095);
+  --surface-selected: rgba(20, 23, 29, 0.14);
+  --surface-chrome:  rgba(248, 249, 251, 0.94);
+  --surface-solid:   rgba(248, 249, 251, 0.98);
+  --color-chrome-solid: #f8f9fb;
+
+  --glass-1: rgba(20, 23, 29, 0.05);
+  --glass-2: rgba(20, 23, 29, 0.08);
+  --glass-3: rgba(20, 23, 29, 0.12);
+
+  /* Graphite ink ladder (contrast-verified, same targets as Ember) */
+  --text-primary:   rgba(20, 23, 29, 0.92);
+  --text-secondary: rgba(20, 23, 29, 0.68);
+  --text-tertiary:  rgba(20, 23, 29, 0.62);
+  --text-faint:     rgba(20, 23, 29, 0.48);
+
+  /* Crisp engineering hairlines — one step heavier than the foundation */
+  --border-subtle:   rgba(20, 23, 29, 0.09);
+  --border-default:  rgba(20, 23, 29, 0.14);
+  --border-strong:   rgba(20, 23, 29, 0.19);
+  --border-emphasis: rgba(20, 23, 29, 0.25);
+
+  /* Tight, cool shadows — machined, not soft */
+  --shadow-1: 0 1px 2px rgba(15, 18, 24, 0.10);
+  --shadow-2: 0 6px 20px rgba(15, 18, 24, 0.10);
+  --shadow-3: 0 20px 56px rgba(15, 18, 24, 0.12);
+  --shadow-overlay: 0 14px 40px rgba(15, 18, 24, 0.14);
+
+  /* Silver-mist ambient */
+  --aura-cloud-500: #9AA6B5;
+  --cloud:       #9AA6B5;
+  --cloud-soft:  rgba(154, 166, 181, 0.16);
+  --cloud-glow:  rgba(154, 166, 181, 0.10);
+
+  --accent-2:        #4E5A6B;
+  --accent-2-veil:   rgba(78, 90, 107, 0.12);
+  --accent-2-border: rgba(78, 90, 107, 0.40);
+
+  /* Precision geometry: tighter corners, wider technical caps */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --tracking-caps: 0.22em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NEBULA — cosmic clouds (dark)
+   Violet-black space ink; violet-magenta primary with a coral companion
+   (the warm counterpoint that keeps it clearly distinct from Aurora);
+   gold appears only in the decorative washes.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='nebula'] {
+  --aura-ink-900: #0C0A15;
+  --aura-ink-800: #110D1D;
+  --aura-ink-700: #171227;
+  --aura-ink-600: #1E1836;
+  --aura-cloud-500: #C0A8D9;
+  --cloud:       #C0A8D9;
+  --cloud-soft:  rgba(192, 168, 217, 0.15);
+  --cloud-glow:  rgba(192, 168, 217, 0.08);
+  --accent-2:        #EF8E70;
+  --accent-2-veil:   rgba(239, 142, 112, 0.12);
+  --accent-2-border: rgba(239, 142, 112, 0.38);
+  /* Space-dust chrome */
+  --surface-chrome:  rgba(13, 10, 22, 0.93);
+  --color-chrome-solid: #100D1B;
+  /* Lavender border temperature */
+  --border-subtle:   rgba(226, 214, 255, 0.06);
+  --border-default:  rgba(226, 214, 255, 0.08);
+  --border-strong:   rgba(226, 214, 255, 0.12);
+  --border-emphasis: rgba(226, 214, 255, 0.16);
+  /* Void shadows */
+  --shadow-1: 0 1px 2px rgba(3, 2, 8, 0.50);
+  --shadow-2: 0 8px 24px rgba(3, 2, 8, 0.60);
+  --shadow-3: 0 24px 64px rgba(3, 2, 8, 0.65);
+  --shadow-overlay: 0 16px 44px rgba(3, 2, 8, 0.65);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VERDANT — deep forest (dark · expansion wave)
+   Dense green-canopy ink, clearly its own family: true emerald/moss green
+   (NOT Aurora's teal) with a restrained warm-gold companion that reads as
+   light breaking through leaves. Gold appears only as accent-2 + decor.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='verdant'] {
+  --aura-ink-900: #071409;
+  --aura-ink-800: #0B1D10;
+  --aura-ink-700: #102717;
+  --aura-ink-600: #173622;
+  --aura-cloud-500: #9CC5A5;
+  --cloud:       #9CC5A5;
+  --cloud-soft:  rgba(156, 197, 165, 0.15);
+  --cloud-glow:  rgba(156, 197, 165, 0.08);
+  --accent-2:        #C9A45C;
+  --accent-2-veil:   rgba(201, 164, 92, 0.12);
+  --accent-2-border: rgba(201, 164, 92, 0.38);
+  /* Canopy-shade chrome */
+  --surface-chrome:  rgba(8, 20, 11, 0.93);
+  --color-chrome-solid: #0A170D;
+  /* Sage border temperature */
+  --border-subtle:   rgba(214, 240, 220, 0.06);
+  --border-default:  rgba(214, 240, 220, 0.09);
+  --border-strong:   rgba(214, 240, 220, 0.13);
+  --border-emphasis: rgba(214, 240, 220, 0.17);
+  /* Loam shadows */
+  --shadow-1: 0 1px 2px rgba(1, 7, 3, 0.45);
+  --shadow-2: 0 8px 24px rgba(1, 7, 3, 0.55);
+  --shadow-3: 0 24px 64px rgba(1, 7, 3, 0.60);
+  --shadow-overlay: 0 16px 44px rgba(1, 7, 3, 0.60);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OBSIDIAN — dark glass stone (dark · expansion wave)
+   Near-neutral charcoal with the faintest cool cast; silver/chrome accents
+   carry the "polished stone" identity. Distinct from Vector: Obsidian is
+   about MATERIAL depth (facets, sheen, black glass) where Vector is about
+   drawn structure (grid, hairlines) on light paper.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='obsidian'] {
+  --aura-ink-900: #090A0C;
+  --aura-ink-800: #0E1013;
+  --aura-ink-700: #13161A;
+  --aura-ink-600: #1A1E24;
+  --aura-cloud-500: #AEB6C2;
+  --cloud:       #AEB6C2;
+  --cloud-soft:  rgba(174, 182, 194, 0.15);
+  --cloud-glow:  rgba(174, 182, 194, 0.08);
+  --accent-2:        #98A2B3;
+  --accent-2-veil:   rgba(152, 162, 179, 0.12);
+  --accent-2-border: rgba(152, 162, 179, 0.40);
+  /* Basalt chrome */
+  --surface-chrome:  rgba(10, 11, 13, 0.93);
+  --color-chrome-solid: #0D0F12;
+  /* Silver border temperature */
+  --border-subtle:   rgba(216, 222, 232, 0.07);
+  --border-default:  rgba(216, 222, 232, 0.10);
+  --border-strong:   rgba(216, 222, 232, 0.14);
+  --border-emphasis: rgba(216, 222, 232, 0.19);
+  /* Void shadows — black glass has no hue */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.60);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.65);
+  --shadow-overlay: 0 16px 44px rgba(0, 0, 0, 0.65);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SOLSTICE — golden hour (LIGHT · expansion wave)
+   Luminous golden paper — brighter and sunnier than Ember's parchment and
+   WITHOUT its print-grain material voice. Amber primary, coral companion;
+   the ink ladder is warm amber-brown. Sunset light, not firelight.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='solstice'] {
+  /* Sunlit paper — golden cast, clearly not Ember's cream */
+  --surface-base:    #FAF1DC;
+  --surface-raised:  #FFF9EA;
+  --surface-card:    #FFFCF2;
+  --surface-inset:   rgba(96, 64, 16, 0.05);
+  --surface-hover:   rgba(96, 64, 16, 0.07);
+  --surface-active:  rgba(96, 64, 16, 0.10);
+  --surface-selected: rgba(96, 64, 16, 0.14);
+  --surface-chrome:  rgba(255, 249, 234, 0.93);
+  --surface-solid:   rgba(255, 249, 234, 0.98);
+  --color-chrome-solid: #fff9ea;
+
+  --glass-1: rgba(96, 64, 16, 0.05);
+  --glass-2: rgba(96, 64, 16, 0.08);
+  --glass-3: rgba(96, 64, 16, 0.12);
+
+  /* Amber ink ladder (contrast-verified — page is the binding background) */
+  --text-primary:   rgba(88, 58, 12, 0.92);
+  --text-secondary: rgba(88, 58, 12, 0.78);
+  --text-tertiary:  rgba(88, 58, 12, 0.77);
+  --text-faint:     rgba(88, 58, 12, 0.62);
+
+  /* Warm hairlines */
+  --border-subtle:   rgba(96, 64, 16, 0.10);
+  --border-default:  rgba(96, 64, 16, 0.15);
+  --border-strong:   rgba(96, 64, 16, 0.20);
+  --border-emphasis: rgba(96, 64, 16, 0.27);
+
+  /* Late-afternoon shadows */
+  --shadow-1: 0 1px 2px rgba(112, 72, 20, 0.10);
+  --shadow-2: 0 8px 24px rgba(112, 72, 20, 0.12);
+  --shadow-3: 0 24px 64px rgba(112, 72, 20, 0.14);
+  --shadow-overlay: 0 16px 44px rgba(112, 72, 20, 0.16);
+
+  /* Golden ambient */
+  --aura-cloud-500: #F2CD88;
+  --cloud:       #F2CD88;
+  --cloud-soft:  rgba(242, 205, 136, 0.20);
+  --cloud-glow:  rgba(242, 205, 136, 0.10);
+
+  --accent-2:        #D96349;
+  --accent-2-veil:   rgba(217, 99, 73, 0.12);
+  --accent-2-border: rgba(217, 99, 73, 0.40);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CRYO — glacier light (LIGHT · expansion wave)
+   Genuinely BRIGHT cold paper — ice white with a cyan cast, deep glacial
+   blue for contrast. NOT a blue dark theme: readable light surfaces are
+   the identity; the crystal decor stays static and quiet.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='cryo'] {
+  /* Ice paper — cool, airy, near-white cards */
+  --surface-base:    #ECF3F8;
+  --surface-raised:  #F7FBFD;
+  --surface-card:    #FBFDFF;
+  --surface-inset:   rgba(24, 52, 74, 0.05);
+  --surface-hover:   rgba(24, 52, 74, 0.07);
+  --surface-active:  rgba(24, 52, 74, 0.10);
+  --surface-selected: rgba(24, 52, 74, 0.14);
+  --surface-chrome:  rgba(247, 251, 253, 0.94);
+  --surface-solid:   rgba(247, 251, 253, 0.98);
+  --color-chrome-solid: #f7fbfd;
+
+  --glass-1: rgba(24, 52, 74, 0.05);
+  --glass-2: rgba(24, 52, 74, 0.08);
+  --glass-3: rgba(24, 52, 74, 0.12);
+
+  /* Glacial slate ink ladder (contrast-verified — page is binding) */
+  --text-primary:   rgba(22, 44, 64, 0.92);
+  --text-secondary: rgba(22, 44, 64, 0.70);
+  --text-tertiary:  rgba(22, 44, 64, 0.69);
+  --text-faint:     rgba(22, 44, 64, 0.56);
+
+  /* Cool hairlines */
+  --border-subtle:   rgba(24, 52, 74, 0.09);
+  --border-default:  rgba(24, 52, 74, 0.14);
+  --border-strong:   rgba(24, 52, 74, 0.19);
+  --border-emphasis: rgba(24, 52, 74, 0.26);
+
+  /* Frost shadows */
+  --shadow-1: 0 1px 2px rgba(30, 58, 84, 0.10);
+  --shadow-2: 0 8px 24px rgba(30, 58, 84, 0.12);
+  --shadow-3: 0 24px 64px rgba(30, 58, 84, 0.14);
+  --shadow-overlay: 0 16px 44px rgba(30, 58, 84, 0.16);
+
+  /* Ice-mist ambient */
+  --aura-cloud-500: #B5D9EA;
+  --cloud:       #B5D9EA;
+  --cloud-soft:  rgba(181, 217, 234, 0.18);
+  --cloud-glow:  rgba(181, 217, 234, 0.10);
+
+  --accent-2:        #2C5E96;
+  --accent-2-veil:   rgba(44, 94, 150, 0.12);
+  --accent-2-border: rgba(44, 94, 150, 0.40);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAKURA — blossom season (LIGHT · expansion wave)
+   Paper white under plum-charcoal ink with blossom-pink accents; strong
+   text contrast keeps it refined rather than sweet. Serif display shares
+   Ember's editorial stack but the palette and decor are its own.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-aura-theme='sakura'] {
+  /* Petal paper — warm rose-tinted white, never all-pink */
+  --surface-base:    #F9F2F1;
+  --surface-raised:  #FDF9F8;
+  --surface-card:    #FFFCFB;
+  --surface-inset:   rgba(74, 46, 52, 0.05);
+  --surface-hover:   rgba(74, 46, 52, 0.07);
+  --surface-active:  rgba(74, 46, 52, 0.10);
+  --surface-selected: rgba(74, 46, 52, 0.14);
+  --surface-chrome:  rgba(253, 249, 248, 0.93);
+  --surface-solid:   rgba(253, 249, 248, 0.98);
+  --color-chrome-solid: #fdf9f8;
+
+  --glass-1: rgba(74, 46, 52, 0.05);
+  --glass-2: rgba(74, 46, 52, 0.08);
+  --glass-3: rgba(74, 46, 52, 0.12);
+
+  /* Plum-charcoal ink ladder (strong contrast = the refinement;
+     contrast-verified — page is the binding background) */
+  --text-primary:   rgba(62, 42, 48, 0.92);
+  --text-secondary: rgba(62, 42, 48, 0.72);
+  --text-tertiary:  rgba(62, 42, 48, 0.71);
+  --text-faint:     rgba(62, 42, 48, 0.57);
+
+  /* Rosewood hairlines */
+  --border-subtle:   rgba(74, 46, 52, 0.09);
+  --border-default:  rgba(74, 46, 52, 0.14);
+  --border-strong:   rgba(74, 46, 52, 0.19);
+  --border-emphasis: rgba(74, 46, 52, 0.26);
+
+  /* Soft warm shadows */
+  --shadow-1: 0 1px 2px rgba(88, 52, 62, 0.10);
+  --shadow-2: 0 8px 24px rgba(88, 52, 62, 0.12);
+  --shadow-3: 0 24px 64px rgba(88, 52, 62, 0.14);
+  --shadow-overlay: 0 16px 44px rgba(88, 52, 62, 0.16);
+
+  /* Blush ambient */
+  --aura-cloud-500: #EFC6D2;
+  --cloud:       #EFC6D2;
+  --cloud-soft:  rgba(239, 198, 210, 0.20);
+  --cloud-glow:  rgba(239, 198, 210, 0.10);
+
+  --accent-2:        #8E4A5F;
+  --accent-2-veil:   rgba(142, 74, 95, 0.12);
+  --accent-2-border: rgba(142, 74, 95, 0.40);
+
+  /* Refined literary voice: serif display over the sans body */
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DECORATIVE LAYER — per-theme recipes for .theme-deco (see index.css for
+   the element contract: absolute inset-0, z-index -1, pointer-events none).
+   All recipes are STATIC and blur-free: layered gradients + tiny inline SVG
+   data-URIs (< 2 KB each, zero network requests, work in dev/package/mini).
+   They paint ABOVE the accent orbs (tree order after ::before/::after at the
+   same negative z-index) and BELOW all content. Any failure of an SVG layer
+   degrades to the gradient layers underneath — never to a broken layout.
+   The one-shot deco-in fade (index.css) cross-fades the layer on switches.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* AURORA — flowing ribbons: three soft radial fields + a 3-stroke SVG ribbon
+   sweeping the top edge. Violet only appears here (not in UI accents). */
+[data-aura-theme='aurora'] .theme-deco {
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(53, 208, 165, 0.13), transparent 62%),
+    radial-gradient(90% 42% at 84% -6%, rgba(139, 127, 208, 0.11), transparent 65%),
+    radial-gradient(70% 38% at 10% 2%, rgba(103, 220, 208, 0.09), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='420' viewBox='0 0 1200 420' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1200' y2='120' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2335D0A5' stop-opacity='0'/%3E%3Cstop offset='0.35' stop-color='%2335D0A5' stop-opacity='0.5'/%3E%3Cstop offset='0.6' stop-color='%2367DCD0' stop-opacity='0.4'/%3E%3Cstop offset='0.85' stop-color='%238B7FD0' stop-opacity='0.25'/%3E%3Cstop offset='1' stop-color='%238B7FD0' stop-opacity='0'/%3E%3C/linearGradient%3E%3ClinearGradient id='b' x1='0' y1='0' x2='1200' y2='200' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%2367DCD0' stop-opacity='0'/%3E%3Cstop offset='0.5' stop-color='%2367DCD0' stop-opacity='0.35'/%3E%3Cstop offset='1' stop-color='%2335D0A5' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M-40 150 C 220 40, 480 220, 740 130 S 1180 60, 1260 140' stroke='url(%23a)' stroke-width='52' stroke-linecap='round'/%3E%3Cpath d='M-40 240 C 260 140, 520 300, 820 200 S 1160 150, 1260 210' stroke='url(%23b)' stroke-width='30' stroke-linecap='round'/%3E%3Cpath d='M-40 90 C 240 20, 500 150, 780 80 S 1150 20, 1260 90' stroke='url(%23b)' stroke-width='14' stroke-linecap='round' opacity='0.7'/%3E%3C/svg%3E") top center / 100% 46% no-repeat;
+}
+
+/* EMBER — refined firelight composition: fine paper grain (SVG feTurbulence,
+   warm-brown alpha ≈ 4%) over copper light from the top-right, a burgundy
+   floor wash, a dark hearth ledge anchoring the very bottom, and the
+   signature static heat-ripple arcs radiating from the light source. */
+[data-aura-theme='ember'] .theme-deco {
+  background:
+    radial-gradient(60% 45% at 88% -8%, rgba(196, 112, 59, 0.11), transparent 62%),
+    radial-gradient(52% 40% at -6% 104%, rgba(156, 74, 82, 0.08), transparent 60%),
+    linear-gradient(180deg, transparent 94%, rgba(58, 32, 14, 0.07) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='420' viewBox='0 0 1200 420' fill='none'%3E%3Cg stroke='%23C4703B' fill='none'%3E%3Cpath d='M1215 -40 A 560 560 0 0 1 760 402' stroke-width='1.6' opacity='0.10'/%3E%3Cpath d='M1215 10 A 480 480 0 0 1 836 400' stroke-width='1.4' opacity='0.085'/%3E%3Cpath d='M1215 60 A 400 400 0 0 1 912 396' stroke-width='1.2' opacity='0.07'/%3E%3Cpath d='M1215 110 A 320 320 0 0 1 988 390' stroke-width='1' opacity='0.055'/%3E%3C/g%3E%3C/svg%3E") right top / 100% 60% no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.24 0 0 0 0 0.15 0 0 0 0 0.07 0 0 0 0.14 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E") repeat;
+}
+
+/* ABYSS — underwater light: three faint surface shafts (SVG) falling from the
+   top, a cool surface-light gradient, and a trench-depth floor gradient. */
+[data-aura-theme='abyss'] .theme-deco {
+  background:
+    linear-gradient(180deg, rgba(127, 182, 217, 0.06), transparent 30%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='500' viewBox='0 0 1200 500' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='s' x1='0' y1='0' x2='0' y2='500' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%23BFEAF2' stop-opacity='0.5'/%3E%3Cstop offset='0.7' stop-color='%23BFEAF2' stop-opacity='0.08'/%3E%3Cstop offset='1' stop-color='%23BFEAF2' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='url(%23s)'%3E%3Cpath d='M140 0 L260 0 L520 500 L330 500 Z' opacity='0.15'/%3E%3Cpath d='M420 0 L500 0 L860 500 L720 500 Z' opacity='0.1'/%3E%3Cpath d='M760 0 L830 0 L1140 500 L1020 500 Z' opacity='0.07'/%3E%3C/g%3E%3C/svg%3E") top center / 100% 52% no-repeat,
+    radial-gradient(85% 60% at 50% 118%, rgba(2, 4, 10, 0.55), transparent 62%);
+}
+
+/* VECTOR — blueprint: fine 28px grid + 112px major grid (CSS repeating
+   gradients, ~3.5% alpha), a cobalt horizon wash, all fading out toward the
+   bottom via mask so text-heavy lists sit on clean paper. */
+[data-aura-theme='vector'] .theme-deco {
+  background:
+    repeating-linear-gradient(0deg, rgba(20, 23, 29, 0.032) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(20, 23, 29, 0.032) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg, rgba(20, 23, 29, 0.05) 0 1px, transparent 1px 112px),
+    repeating-linear-gradient(90deg, rgba(20, 23, 29, 0.05) 0 1px, transparent 1px 112px),
+    radial-gradient(110% 55% at 50% -18%, rgba(43, 91, 215, 0.06), transparent 55%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 42%, transparent 88%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 42%, transparent 88%);
+}
+
+/* NEBULA — cosmic clouds: violet/coral/gold washes anchored off the corners
+   + a sparse static star field (10 stars + 2 glints per 260px tile). */
+[data-aura-theme='nebula'] .theme-deco {
+  background:
+    radial-gradient(90% 58% at 80% -10%, rgba(168, 102, 220, 0.13), transparent 60%),
+    radial-gradient(64% 46% at 6% 4%, rgba(239, 142, 112, 0.06), transparent 55%),
+    radial-gradient(85% 52% at 50% 116%, rgba(228, 185, 91, 0.05), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cg fill='%23E9DDFF'%3E%3Ccircle cx='23' cy='41' r='1.1' opacity='0.5'/%3E%3Ccircle cx='87' cy='17' r='0.8' opacity='0.35'/%3E%3Ccircle cx='151' cy='67' r='1.3' opacity='0.55'/%3E%3Ccircle cx='219' cy='29' r='0.7' opacity='0.3'/%3E%3Ccircle cx='57' cy='113' r='0.9' opacity='0.4'/%3E%3Ccircle cx='189' cy='131' r='1' opacity='0.45'/%3E%3Ccircle cx='119' cy='171' r='0.7' opacity='0.3'/%3E%3Ccircle cx='239' cy='199' r='1.2' opacity='0.5'/%3E%3Ccircle cx='31' cy='221' r='0.8' opacity='0.35'/%3E%3Ccircle cx='163' cy='243' r='0.9' opacity='0.4'/%3E%3C/g%3E%3Cg stroke='%23E9DDFF' stroke-width='1' opacity='0.3'%3E%3Cpath d='M151 61 v12 M145 67 h12'/%3E%3Cpath d='M239 193 v12 M233 199 h12'/%3E%3C/g%3E%3C/svg%3E") repeat;
+}
+
+/* VERDANT — forest canopy: a soft canopy-light field from the top-left, one
+   warm-gold shaft (the light through leaves), a mossy floor wash, and a
+   static SVG branch with leaf silhouettes along the top edge. */
+[data-aura-theme='verdant'] .theme-deco {
+  background:
+    radial-gradient(115% 52% at 14% -10%, rgba(63, 190, 126, 0.11), transparent 60%),
+    radial-gradient(42% 34% at 74% -6%, rgba(201, 164, 92, 0.08), transparent 62%),
+    radial-gradient(85% 48% at 50% 118%, rgba(2, 10, 4, 0.50), transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='420' viewBox='0 0 1200 420' fill='none'%3E%3Cg stroke='%239CC5A5' stroke-width='3' opacity='0.16'%3E%3Cpath d='M-30 70 C 190 96, 360 44, 560 92 S 900 130, 1230 66'/%3E%3C/g%3E%3Cg fill='%239CC5A5' opacity='0.13'%3E%3Cpath d='M150 84 q 14 -26 44 -28 q -8 24 -44 28 Z'/%3E%3Cpath d='M310 66 q -6 -28 -34 -38 q 2 26 34 38 Z'/%3E%3Cpath d='M470 78 q 16 -24 46 -22 q -10 22 -46 22 Z'/%3E%3Cpath d='M650 96 q -4 -28 -30 -40 q 0 26 30 40 Z'/%3E%3Cpath d='M830 108 q 16 -22 46 -18 q -12 20 -46 18 Z'/%3E%3Cpath d='M1000 96 q -2 -26 -26 -38 q -2 24 26 38 Z'/%3E%3C/g%3E%3Cg fill='%23C9A45C' opacity='0.10'%3E%3Cpath d='M240 78 q 12 -20 36 -20 q -8 18 -36 20 Z'/%3E%3Cpath d='M740 104 q -2 -24 -24 -34 q 0 22 24 34 Z'/%3E%3C/g%3E%3C/svg%3E") top center / 100% 46% no-repeat;
+}
+
+/* OBSIDIAN — dark glass: a cold metallic sheen sweeping diagonally across the
+   top, large static facet planes (SVG polygons at 2–4% white) that catch the
+   "light", one facet edge highlight, and a void floor. Mask-faded toward the
+   bottom so list content sits on clean stone. */
+[data-aura-theme='obsidian'] .theme-deco {
+  background:
+    linear-gradient(115deg, rgba(214, 222, 232, 0.07), transparent 42%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='460' viewBox='0 0 1200 460' fill='none'%3E%3Cg fill='%23D8DEE8'%3E%3Cpath d='M0 0 L340 0 L150 210 Z' opacity='0.028'/%3E%3Cpath d='M340 0 L640 0 L150 210 Z' opacity='0.018'/%3E%3Cpath d='M640 0 L1010 0 L620 260 Z' opacity='0.032'/%3E%3Cpath d='M1010 0 L1200 0 L1200 240 L620 260 Z' opacity='0.02'/%3E%3Cpath d='M0 0 L150 210 L0 320 Z' opacity='0.022'/%3E%3C/g%3E%3Cpath d='M150 210 L620 260' stroke='%23D8DEE8' stroke-opacity='0.07' stroke-width='1.4'/%3E%3Cpath d='M620 260 L1010 0' stroke='%23D8DEE8' stroke-opacity='0.05' stroke-width='1.2'/%3E%3C/svg%3E") top center / 100% 58% no-repeat,
+    radial-gradient(85% 55% at 50% 120%, rgba(0, 0, 0, 0.55), transparent 62%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 48%, transparent 92%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 48%, transparent 92%);
+}
+
+/* SOLSTICE — golden hour: a high sun disc, a warm atmospheric wash falling
+   from above, and a coral horizon band low in the frame. Pure CSS — the
+   horizon is a gradient band, the sun a radial glow; nothing animates. */
+[data-aura-theme='solstice'] .theme-deco {
+  background:
+    radial-gradient(30% 30% at 50% 20%, rgba(242, 205, 136, 0.16), transparent 72%),
+    radial-gradient(120% 52% at 50% -12%, rgba(217, 142, 43, 0.10), transparent 60%),
+    linear-gradient(180deg, transparent 60%, rgba(217, 99, 73, 0.06) 76%, transparent 94%),
+    radial-gradient(70% 34% at 50% 104%, rgba(217, 142, 43, 0.05), transparent 65%);
+}
+
+/* CRYO — glacier light: a cold frozen sheen sweeping from the top-left, a
+   deep glacial floor wash, and a static SVG crystal cluster (two hexagonal
+   columns with facet spokes) anchored in the top-right. Mask-faded toward
+   the bottom so lists stay clean. */
+[data-aura-theme='cryo'] .theme-deco {
+  background:
+    linear-gradient(135deg, rgba(181, 217, 234, 0.14), transparent 46%),
+    radial-gradient(80% 50% at 50% 118%, rgba(44, 94, 150, 0.06), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='460' viewBox='0 0 1200 460' fill='none'%3E%3Cg stroke='%235FA8CC' fill='none'%3E%3Cpath d='M950 40 L1010 74 L1010 150 L950 184 L890 150 L890 74 Z' stroke-width='2' opacity='0.14'/%3E%3Cpath d='M950 40 L950 184 M890 74 L1010 150 M1010 74 L890 150' stroke-width='1.2' opacity='0.10'/%3E%3Cpath d='M1060 96 L1104 121 L1104 172 L1060 197 L1016 172 L1016 121 Z' stroke-width='1.6' opacity='0.11'/%3E%3Cpath d='M1060 96 L1060 197 M1016 121 L1104 172' stroke-width='1' opacity='0.08'/%3E%3Cpath d='M880 196 L912 214 L912 252 L880 270 L848 252 L848 214 Z' stroke-width='1.4' opacity='0.09'/%3E%3C/g%3E%3C/svg%3E") top right / 62% 52% no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 46%, transparent 90%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 46%, transparent 90%);
+}
+
+/* SAKURA — blossom season: soft blush washes from two corners and a sparse
+   static SVG of blossom sprays and drifting petals (outline flowers + small
+   rotated petal ellipses) in the upper half. Mask-faded toward the bottom so
+   content areas stay clean paper. */
+[data-aura-theme='sakura'] .theme-deco {
+  background:
+    radial-gradient(60% 44% at 88% -6%, rgba(217, 122, 150, 0.09), transparent 62%),
+    radial-gradient(54% 40% at -4% 8%, rgba(239, 198, 210, 0.11), transparent 58%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='460' viewBox='0 0 1200 460' fill='none'%3E%3Cg stroke='%23D97A96' fill='none' stroke-width='1.8'%3E%3Cg transform='translate(170 120)'%3E%3Cellipse rx='15' ry='26' cy='-28'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(72)'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(144)'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(216)'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(288)'/%3E%3Ccircle r='4'/%3E%3C/g%3E%3Cg transform='translate(1010 190) scale(0.7)' opacity='0.8'%3E%3Cellipse rx='15' ry='26' cy='-28'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(72)'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(144)'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(216)'/%3E%3Cellipse rx='15' ry='26' cy='-28' transform='rotate(288)'/%3E%3Ccircle r='4'/%3E%3C/g%3E%3C/g%3E%3Cg fill='%23D97A96' opacity='0.12'%3E%3Cellipse cx='420' cy='90' rx='9' ry='15' transform='rotate(38 420 90)'/%3E%3Cellipse cx='620' cy='180' rx='8' ry='13' transform='rotate(-24 620 180)'/%3E%3Cellipse cx='790' cy='70' rx='7' ry='12' transform='rotate(60 790 70)'/%3E%3Cellipse cx='300' cy='230' rx='7' ry='12' transform='rotate(-52 300 230)'/%3E%3Cellipse cx='900' cy='300' rx='8' ry='13' transform='rotate(18 900 300)'/%3E%3Cellipse cx='130' cy='330' rx='7' ry='12' transform='rotate(44 130 330)'/%3E%3C/g%3E%3C/svg%3E") top center / 100% 56% no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 44%, transparent 88%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 44%, transparent 88%);
+}

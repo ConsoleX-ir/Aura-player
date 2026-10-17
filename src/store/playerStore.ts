@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Song, Playlist, RepeatMode, AppView } from '@/types'
-import { DEFAULT_THEME_ID, type ThemePresetId } from '@/lib/themePresets'
+import { DEFAULT_THEME_ID, resolveThemeId, themeAppearance } from '@/theme/registry'
+import type { ThemeId } from '@/theme/types'
 import { idbStorage } from '@/lib/idbStorage'
 import type { SortKey, SortDir } from '@/lib/sort'
 import {
@@ -148,6 +149,16 @@ interface PlayerState {
   setAmbientEffects: (v: boolean) => void
   setAppearance: (v: 'dark' | 'light') => void
 
+  // ── Mini Player visual mode (Liquid Glass) ─────────────────────────────
+  // Drives the desktop widget's INDEPENDENT visual system: true = the fixed
+  // neutral Liquid Glass surface, false = the clean matte fallback. This is a
+  // visual mode ONLY — it never touches playback, the queue, or the widget's
+  // visibility. Persisted; default ON (the widget is designed glass-first).
+  // The flag rides the mini:state snapshot to the widget window, so this
+  // store stays the single source of truth for both surfaces.
+  miniLiquidGlass: boolean
+  setMiniLiquidGlass: (v: boolean) => void
+
   // ── Folder watching (Wave 4) ──────────────────────────────────────────
   // When on, every imported folder is watched via Electron's fs.watch and
   // the library auto-reconciles through Folder Sync. Persisted; defaults
@@ -156,12 +167,13 @@ interface PlayerState {
   watchFolders: boolean
   setWatchFolders: (v: boolean) => void
 
-  // 'default' = ConsoleX (the original cloud-gray look), 'forest' = same
-  // dark base with a green ambient color, 'custom' = user-picked accent color.
-  // Any built-in preset id from THEME_PRESETS (lib/themePresets.ts), or
-  // 'custom' for a user-picked accent color.
-  theme: ThemePresetId | 'custom'
-  setTheme: (t: ThemePresetId | 'custom') => void
+  // Theme Engine (v3.3): a ThemeId from the typed registry — one of the five
+  // named themes (aurora/ember/abyss/vector/nebula) or 'custom' for the
+  // user-picked accent over the neutral base. Legacy ids from Theme System
+  // 3.0 resolve through resolveThemeId() on EVERY path (setter + rehydrate),
+  // so old persisted values migrate instead of breaking.
+  theme: ThemeId
+  setTheme: (t: ThemeId | string) => void
   customAccentColor: string
   setCustomAccentColor: (c: string) => void
 
@@ -637,11 +649,22 @@ export const usePlayerStore = create<PlayerState>()(
       setAmbientEffects: (v) => set({ ambientEffects: v }),
       setAppearance: (v) => set({ appearance: v }),
 
+      miniLiquidGlass: true,
+      setMiniLiquidGlass: (v) => set({ miniLiquidGlass: v === true }),
+
       watchFolders: true,
       setWatchFolders: (v) => set({ watchFolders: v }),
 
       theme: DEFAULT_THEME_ID,
-      setTheme: (t) => set({ theme: t }),
+      // Validation lives HERE (not at call sites): any stale/foreign id —
+      // including the Theme System 3.0 preset ids — resolves to a safe ThemeId
+      // and the appearance follows the theme's designed brightness. 'custom'
+      // keeps the user's current appearance (pre-migration custom+light users
+      // keep their look; see registry.ts CUSTOM_THEME).
+      setTheme: (t) => set((s) => {
+        const id = resolveThemeId(t, s.appearance)
+        return { theme: id, appearance: id === 'custom' ? s.appearance : themeAppearance(id) }
+      }),
       customAccentColor: '#B0B8C8',
       setCustomAccentColor: (c) => set({ customAccentColor: c }),
 
@@ -761,7 +784,12 @@ export const usePlayerStore = create<PlayerState>()(
         sleepTimerEndsAt: minutes ? Date.now() + minutes * 60_000 : null
       }),
 
-      activeView: 'library',
+      // Core Experience redesign: Home (the Orb landing page) is the startup
+      // destination. activeView remains session-only (not persisted) — every
+      // launch begins at Home after store hydration, and no persisted view
+      // can fight that. The default view value only ever matters before the
+      // user navigates in a session.
+      activeView: 'home',
       // previousView tracking: skip no-op sets so repeated clicks on the same
       // nav target never poison the Back history.
       previousView: null,
@@ -836,6 +864,8 @@ export const usePlayerStore = create<PlayerState>()(
         smartQueue: s.smartQueue,
         // Phase 14 — ambient visuals opt-out survives restarts.
         ambientEffects: s.ambientEffects,
+        // Liquid Glass mini player visual mode survives restarts.
+        miniLiquidGlass: s.miniLiquidGlass,
         // Phase 11 — Queue 2.0: the queue persists as ID REFERENCES (not Song
         // objects) and is rebuilt against the library at hydrate time by the
         // custom merge below — deleted/moved files drop out honestly, and a
@@ -863,8 +893,20 @@ export const usePlayerStore = create<PlayerState>()(
         const naturalQueue = resolve(p.naturalQueueIds)
         const currentSong = (p.currentSongId ? byId.get(p.currentSongId) : undefined) ?? null
         const base = { ...current, ...p } as PlayerState
+        // ── Theme Engine migration (v3.3) ────────────────────────────────
+        // The persisted theme is normalized on EVERY rehydrate: legacy
+        // Theme System 3.0 ids map to their closest new identity (resolved
+        // against the persisted appearance so light-mode users stay light),
+        // unknown/corrupt ids fall back to the default, and the stored
+        // appearance re-syncs to the theme's designed brightness ('custom'
+        // keeps the persisted appearance). Nothing user-visible is discarded.
+        const migratedTheme = resolveThemeId(p.theme, p.appearance)
         return {
           ...base,
+          theme: migratedTheme,
+          appearance: migratedTheme === 'custom'
+            ? (p.appearance === 'light' ? 'light' : 'dark')
+            : themeAppearance(migratedTheme),
           // Aura 3.0 — persisted FX fields are sanitized against corrupted
           // or foreign snapshots before they can reach the engine.
           audioFx: sanitizeFx((p as { audioFx?: unknown }).audioFx),

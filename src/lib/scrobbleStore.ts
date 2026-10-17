@@ -153,6 +153,38 @@ export async function getScrobblesInRange(startMs: number, endMs: number): Promi
 }
 
 /**
+ * The N most recent scrobbles, newest first — the read-only feed behind the
+ * Home page's "Continue Listening" section. A bounded reverse walk over the
+ * existing byStartedAt index (no full-store scan, no cache, no new store):
+ * history stays the append-only source of truth, this just reads its tail.
+ * Fails soft to an empty array — Home is a welcome surface, never an error.
+ */
+export async function getRecentScrobbles(limit: number): Promise<Scrobble[]> {
+  if (limit <= 0) return []
+  try {
+    const db = await openDb()
+    return await new Promise<Scrobble[]>((resolve, reject) => {
+      const tx = db.transaction(SCROBBLES, 'readonly')
+      const index = tx.objectStore(SCROBBLES).index('byStartedAt')
+      const out: Scrobble[] = []
+      const req = index.openCursor(null, 'prev') // newest first
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (!cursor || out.length >= limit) {
+          resolve(out)
+          return
+        }
+        out.push(cursor.value as Scrobble)
+        cursor.continue()
+      }
+      req.onerror = () => reject(req.error)
+    })
+  } catch {
+    return []
+  }
+}
+
+/**
  * Current schema version, written once on first open so future migrations
  * can detect what a user's history was recorded with.
  */

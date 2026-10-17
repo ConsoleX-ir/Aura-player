@@ -8,7 +8,7 @@ import {
 import { useUiStore } from '@/store/uiStore'
 import { startSmartRadio } from '@/lib/smartRadioActions'
 import { usePlayerStore } from '@/store/playerStore'
-import { setAppearanceAnimated } from '@/lib/appearance'
+import { setThemeAnimated, setAppearanceAnimated, oppositeThemeCandidate, oppositeThemeLabel } from '@/lib/appearance'
 import { fuzzyScore, searchLibrary } from '@/lib/search'
 import { cn } from '@/lib/utils'
 
@@ -128,7 +128,9 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
     const ui = useUiStore.getState()
 
     const nav: Command[] = [
+      { id: 'nav.home', group: 'Navigate', label: 'Go to Home', icon: Music2, run: () => s.setActiveView('home') },
       { id: 'nav.library', group: 'Navigate', label: 'Go to Library', icon: Music2, run: () => s.setActiveView('library') },
+      { id: 'nav.local', group: 'Navigate', label: 'Go to Local Music', hint: 'files on this device', icon: Music2, run: () => s.setActiveView('local') },
       { id: 'nav.favorites', group: 'Navigate', label: 'Go to Favorites', icon: Heart, run: () => s.setActiveView('favorites') },
       { id: 'nav.nowplaying', group: 'Navigate', label: 'Go to Now Playing', icon: Disc3, run: () => { if (s.currentSong) s.setActiveView('nowplaying') } },
       { id: 'nav.rewind', group: 'Navigate', label: 'Open Aura Rewind', hint: 'listening story', icon: History, run: () => s.setActiveView('rewind') },
@@ -169,7 +171,16 @@ function PalettePanel({ onClose }: { onClose: () => void }) {
     const toggles: Command[] = [
       { id: 'tg.mini', group: 'System', label: ui.miniPlayer ? 'Leave mini-player' : 'Switch to mini-player', hint: 'P', icon: PictureInPicture2, run: () => ui.setMiniPlayer(!ui.miniPlayer) },
       { id: 'tg.perf', group: 'System', label: s.performanceMode ? 'Performance Mode — turn off' : 'Performance Mode — turn on', icon: Gauge, run: () => usePlayerStore.getState().setPerformanceMode(!s.performanceMode) },
-      { id: 'tg.theme', group: 'System', label: s.appearance === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', icon: SunMoon, keywords: 'theme light dark appearance', run: () => setAppearanceAnimated(s.appearance === 'dark' ? 'light' : 'dark') },
+      // Theme Engine v3.3 — named themes carry their own brightness, so the
+      // old dark↔light flip becomes a jump to the last-used theme of the
+      // OTHER brightness (session memory in lib/appearance.ts). A Custom
+      // selection has no designed brightness, so it still flips the raw
+      // appearance over the neutral base, exactly like before.
+      { id: 'tg.theme', group: 'System', label: s.theme === 'custom' ? (s.appearance === 'dark' ? 'Switch to light paper' : 'Switch to dark base') : `Theme — switch to ${oppositeThemeLabel(s.appearance)}`, icon: SunMoon, keywords: 'theme light dark appearance',
+        run: () => {
+          if (s.theme === 'custom') setAppearanceAnimated(s.appearance === 'dark' ? 'light' : 'dark')
+          else setThemeAnimated(oppositeThemeCandidate(s.appearance))
+        } },
     ]
 
     return [...nav, ...playback, ...panels, ...toggles]

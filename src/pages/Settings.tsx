@@ -1,32 +1,15 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Palette, TreePine, Waves, Sunset, Gem, Flame, Globe, Mic2, User, Disc3, AudioLines, Timer, Snowflake, Contrast, Flower2, MoonStar, Crown, Rainbow } from 'lucide-react'
+import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, Check, Globe, Mic2, User, Disc3, AudioLines, Timer } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
-import { setAppearanceAnimated, setThemeAnimated } from '@/lib/appearance'
+import { setThemeAnimated } from '@/lib/appearance'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { LibraryHealthCard } from '@/components/Settings/LibraryHealthCard'
 import { formatRuntime } from '@/lib/utils'
 import { useLibrarySync } from '@/hooks/useLibrarySync'
-import { THEME_PRESETS } from '@/lib/themePresets'
-
-// UI-only concern, kept out of the shared themePresets.ts registry so that
-// file (also used by useDynamicTheme.ts, which has no business importing an
-// icon library) stays free of any UI dependency.
-const THEME_ICONS: Record<string, typeof Palette> = {
-  default:  Palette,
-  forest:   TreePine,
-  ocean:    Waves,
-  sunset:   Sunset,
-  amethyst: Gem,
-  crimson:  Flame,
-  cyan:     Snowflake,
-  mono:     Contrast,
-  // v3.2.0 Special identities
-  orchid:    Flower2,
-  indigo:    MoonStar,
-  champagne: Crown,
-  aurora:    Rainbow,
-}
+import { THEME_LIST } from '@/theme/registry'
+import type { ThemeId } from '@/theme/types'
+import { ThemeIcon } from '@/theme/icons'
 
 export function Settings() {
   // Narrow selectors — Settings has nothing to do with playback progress,
@@ -40,7 +23,8 @@ export function Settings() {
   const setSmartQueue = usePlayerStore((s) => s.setSmartQueue)
   const ambientEffects = usePlayerStore((s) => s.ambientEffects)
   const setAmbientEffects = usePlayerStore((s) => s.setAmbientEffects)
-  const appearance = usePlayerStore((s) => s.appearance)
+  const miniLiquidGlass = usePlayerStore((s) => s.miniLiquidGlass)
+  const setMiniLiquidGlass = usePlayerStore((s) => s.setMiniLiquidGlass)
   const watchFolders = usePlayerStore((s) => s.watchFolders)
   const setWatchFolders = usePlayerStore((s) => s.setWatchFolders)
   const importedFolderCount = usePlayerStore((s) => s.importedFolders.length)
@@ -112,30 +96,30 @@ export function Settings() {
           </SettingRow>
         </Section>
 
-        {/* ── Appearance ────────────────────────────────────────────────── */}
+        {/* ── Appearance (Theme Engine v3.3) ─────────────────────────────
+            The named themes ARE the product's selection model now: each one
+            is a complete, designed identity with its own brightness, so the
+            old Dark/Light toggle is retired (the store migrates the old
+            preference — light users land on Ember/Vector). Custom keeps the
+            user-picked accent path and its stored color. */}
         <Section title="Appearance">
           <SettingRow
             label="Theme"
-            description="Pick a built-in palette, or go Custom for any accent color you like."
+            description="Ten complete identities — each with its own surfaces, depth and brightness. Custom keeps your own accent color."
           >
-            <div className="flex items-center gap-2 flex-wrap justify-end max-w-[360px]">
-              {THEME_PRESETS.map((p) => (
+            <div className="flex items-center gap-2 flex-wrap justify-end max-w-[400px]" data-theme-picker>
+              {THEME_LIST.map((p) => (
                 <ThemeButton
                   key={p.id}
-                  color={p.color}
+                  color={p.accent.primary}
+                  swatch={p.swatch}
                   label={p.label}
-                  icon={THEME_ICONS[p.id] ?? Palette}
+                  title={p.description}
+                  themeId={p.id}
                   active={theme === p.id}
                   onClick={() => setThemeAnimated(p.id)}
                 />
               ))}
-              <ThemeButton
-                color={customAccentColor}
-                label="Custom"
-                icon={SlidersHorizontal}
-                active={theme === 'custom'}
-                onClick={() => setThemeAnimated('custom')}
-              />
               {theme === 'custom' && (
                 <input
                   type="color"
@@ -146,35 +130,6 @@ export function Settings() {
                   style={{ border: '1px solid var(--border-default)' }}
                 />
               )}
-            </div>
-          </SettingRow>
-
-          <SettingRow
-            label="Light mode"
-            description="Switch between Aura's true dark form and the light paper look. Colors glide — nothing snaps."
-          >
-            <div
-              className="flex items-center rounded-xl p-0.5"
-              style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}
-              role="group"
-              aria-label="Theme appearance"
-              data-appearance-toggle
-            >
-              {(['dark', 'light'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setAppearanceAnimated(mode)}
-                  className="px-3.5 py-1.5 text-xs font-medium rounded-lg capitalize transition-all"
-                  style={{
-                    transitionDuration: 'var(--dur-fast)',
-                    background: appearance === mode ? 'var(--accent-dim)' : 'transparent',
-                    color: appearance === mode ? 'var(--accent)' : 'var(--text-tertiary)',
-                    border: appearance === mode ? '1px solid var(--accent-border)' : '1px solid transparent',
-                  }}
-                >
-                  {mode}
-                </button>
-              ))}
             </div>
           </SettingRow>
 
@@ -190,6 +145,17 @@ export function Settings() {
             description="The artwork-tinted background glow and the Aura Pulse ring. Turn off for a completely still interface — your theme and accent stay exactly as chosen."
           >
             <Toggle checked={ambientEffects} onChange={setAmbientEffects} ariaLabel="Toggle Ambient Visuals" />
+          </SettingRow>
+
+          {/* Liquid Glass mini player (v3.3.1) — the desktop widget's own
+              visual mode. VISUAL ONLY: toggling never touches playback, the
+              queue, or widget visibility, and neither mode derives from the
+              active theme (the widget has its own fixed neutral design). */}
+          <SettingRow
+            label="Liquid Glass Mini Player"
+            description="The desktop widget's own frosted-glass look with artwork-tinted depth — independent of your theme. Off = a clean matte panel. Visual mode only; playback is never affected."
+          >
+            <Toggle checked={miniLiquidGlass} onChange={setMiniLiquidGlass} ariaLabel="Toggle Liquid Glass Mini Player" />
           </SettingRow>
         </Section>
 
@@ -411,20 +377,33 @@ function KeylessBadge({ icon }: { icon: React.ReactNode }) {
   )
 }
 
-function ThemeButton({ color, label, icon: Icon, active, onClick }: {
-  color: string; label: string; icon: typeof Palette; active: boolean; onClick: () => void
+function ThemeButton({ color, swatch, label, title, themeId, active, onClick }: {
+  color: string; swatch: string; label: string; title: string
+  themeId: ThemeId; active: boolean; onClick: () => void
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-150 hover:scale-[1.03] active:scale-95"
+      title={title}
+      aria-pressed={active}
+      className="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 hover:scale-[1.03] active:scale-95"
       style={
         active
           ? { background: `${color}22`, borderColor: `${color}66`, color: 'var(--text-primary)' }
           : { background: 'var(--glass-1)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }
       }
     >
-      <Icon size={13} style={{ color: active ? color : undefined }} />
+      {/* Identity tile — the theme's own swatch gradient with its bespoke
+          emblem (src/theme/icons.tsx). The tile carries the color identity,
+          the emblem the shape identity, so the set reads as designed at the
+          28 px tile size; the check glyph (not color) marks selection. */}
+      <span
+        aria-hidden
+        className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center"
+        style={{ background: swatch, border: '1px solid var(--border-strong)' }}
+      >
+        <ThemeIcon id={themeId} size={13} style={{ color: 'rgba(255,255,255,0.92)', filter: 'drop-shadow(0 0.5px 1px rgba(0,0,0,0.35))' }} />
+      </span>
       {label}
       {active && (
         <Check size={11} strokeWidth={3} style={{ color }} className="ml-0.5" />

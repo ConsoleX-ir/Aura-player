@@ -38,7 +38,9 @@ export interface Playlist {
 export type RepeatMode = 'none' | 'one' | 'all'
 // 'rewind' = Aura Rewind (Wave 4) — the monthly listening-story destination.
 // 'studio' = Audio Studio (v3.2.0) — the dedicated audio workspace destination.
-export type AppView = 'library' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind' | 'explore' | 'smart' | 'artist' | 'album' | 'history' | 'studio'
+// 'home' = the Aura Orb landing page (Core Experience redesign) — startup view.
+// 'local' = Local Music — device files, distinct from Library's whole-collection view.
+export type AppView = 'home' | 'library' | 'local' | 'playlist' | 'favorites' | 'nowplaying' | 'settings' | 'properties' | 'rewind' | 'explore' | 'smart' | 'artist' | 'album' | 'history' | 'studio'
 
 // ── Folder watching (Wave 4) ─────────────────────────────────────────────
 // One change event per watched folder, already debounced in the main

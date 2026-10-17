@@ -86,6 +86,11 @@ export function useMiniPlayerBridge() {
         muted: s.muted,
         appearance: s.appearance,
         theme: s.theme,
+        // Liquid Glass visual mode + Performance Mode ride every snapshot so
+        // the widget can never disagree with the Settings the user just
+        // flipped (the playerStore subscription below makes it instant).
+        liquidGlass: s.miniLiquidGlass,
+        perf: s.performanceMode,
         accent: {
           d1: v('--color-dynamic-1'),
           d2: v('--color-dynamic-2'),
@@ -116,12 +121,17 @@ export function useMiniPlayerBridge() {
     // too — the periodic push below then keeps it rolling).
     pushIfChanged()
     const offUi = useUiStore.subscribe(pushIfChanged)
+    // v3.3.1 — playerStore subscription: Settings flips (Liquid Glass mode,
+    // Performance Mode) apply the moment they happen, not on the next
+    // heartbeat tick. The dedupe above keeps an unchanged snapshot free.
+    const offPlayer = usePlayerStore.subscribe(pushIfChanged)
 
     const interval = setInterval(pushIfChanged, 250)
 
     return () => {
       offVisibility()
       offUi()
+      offPlayer()
       clearInterval(interval)
     }
   }, [])

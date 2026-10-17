@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { THEME_PRESETS, DEFAULT_THEME_ID } from '@/lib/themePresets'
+import { THEMES, CUSTOM_THEME, DEFAULT_THEME_ID, resolveThemeId } from '@/theme/registry'
+import type { ThemeId } from '@/theme/types'
 
 function toHex(r: number, g: number, b: number) {
   return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
@@ -45,9 +46,13 @@ export function onAccentInk(color: string): string {
   return L > 0.30 ? '#101017' : '#FFFFFF'
 }
 
-// Every built-in preset's idle color, keyed by id — kept as a lookup rather
-// than duplicating THEME_PRESETS' array-find logic on every effect run.
-const PRESET_COLORS_BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p.color]))
+// Every theme's accent hex, keyed by id — kept as a lookup rather than
+// re-resolving the registry object on every effect run. 'custom' maps to the
+// classic neutral accent; the live user-picked color overrides it below.
+const ACCENT_BY_ID = new Map<string, string>([
+  ...Object.values(THEMES).map((t) => [t.id, t.accent.primary] as [string, string]),
+  ['custom', CUSTOM_THEME.accent.primary],
+])
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '')
@@ -117,7 +122,7 @@ function getDominantColor(src: string): Promise<[number, number, number]> {
 
 export function useDynamicTheme(
   coverArt: string | null,
-  theme: string,
+  theme: ThemeId | string,
   customAccentColor: string,
   // True only on the Now Playing view — everywhere else the app sticks to
   // the chosen theme's color, even while a song is playing. On Now Playing,
@@ -126,12 +131,13 @@ export function useDynamicTheme(
   useAlbumArtColor: boolean = false,
 ) {
   useEffect(() => {
-    // Custom uses the user's own picked color; every built-in preset (Forest,
-    // Ocean, Sunset, ...) is just a curated hex from the shared registry.
+    // Custom uses the user's own picked color; every named theme (Aurora,
+    // Abyss, Nebula, ...) supplies a curated hex from the typed registry.
     // Both go through the exact same colorToVars() formula below.
-    const themeHex = theme === 'custom'
+    const resolvedId = resolveThemeId(theme)
+    const themeHex = resolvedId === 'custom'
       ? customAccentColor
-      : (PRESET_COLORS_BY_ID.get(theme) ?? PRESET_COLORS_BY_ID.get(DEFAULT_THEME_ID)!)
+      : (ACCENT_BY_ID.get(resolvedId) ?? ACCENT_BY_ID.get(DEFAULT_THEME_ID)!)
 
     if (!useAlbumArtColor || !coverArt) {
       // Everywhere except Now Playing (or Now Playing with no song loaded):
@@ -162,9 +168,11 @@ export function useDynamicTheme(
       })
       .catch(() => {
         // Album art failed to load/decode — fall back to the theme's color
-        const v = colorToVars(themeHex)
+        // (re-resolved through the same custom/registry split as above).
+        const fallbackHex = resolvedId === 'custom' ? customAccentColor : themeHex
+        const v = colorToVars(fallbackHex)
         applyVars(v.d1, v.d2, v.d3, v.glow)
-        document.documentElement.style.setProperty('--text-on-accent', onAccentInk(themeHex))
+        document.documentElement.style.setProperty('--text-on-accent', onAccentInk(fallbackHex))
       })
   }, [coverArt, theme, customAccentColor, useAlbumArtColor])
 }
