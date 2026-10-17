@@ -2,7 +2,7 @@ import { useEffect, useMemo, lazy, Suspense } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { Sidebar } from '@/components/Sidebar/Sidebar'
 import { PlayerBar } from '@/components/Player/PlayerBar'
-import { Library } from '@/pages/Library'
+import { Home } from '@/pages/Home'
 import { TitleBar } from '@/components/TitleBar'
 import { useDynamicTheme } from '@/hooks/useDynamicTheme'
 import { useAudio } from '@/hooks/useAudio'
@@ -22,14 +22,19 @@ import { useFolderWatcher } from '@/hooks/useFolderWatcher'
 import { useSmartQueueContinuation } from '@/hooks/useSmartQueue'
 import { useUiStore } from '@/store/uiStore'
 import { FirstLaunch } from '@/components/FirstLaunch'
+import { applyThemeToDocument } from '@/theme/engine'
+import { resolveThemeId, themeAppearance } from '@/theme/registry'
+import { noteThemeAppearance } from '@/lib/appearance'
 import { UploadCloud, Loader2 } from 'lucide-react'
 
-// Library is what's shown on launch almost every time, so it stays a normal
-// eager import. The other three pages — and everything they pull in (Radix
-// dropdown menus, the color picker, etc.) — are only ever needed once the
-// user actually navigates there, so splitting them into separate chunks
-// means the startup bundle has meaningfully less JS to parse and execute
-// before the app can render anything at all.
+// Home is the startup destination (Core Experience redesign), so — exactly
+// like Library before it — it stays a normal eager import: the landing page
+// must paint without waiting on a chunk. Everything else, including Library
+// now that it's a navigation destination rather than the launch default, is
+// split into its own chunk so the startup bundle stays lean (the Orb itself
+// is dependency-free Canvas 2D — no heavy render library rides along).
+const Library = lazy(() => import('@/pages/Library').then((m) => ({ default: m.Library })))
+const LocalMusic = lazy(() => import('@/pages/LocalMusic').then((m) => ({ default: m.LocalMusic })))
 const PlaylistPage = lazy(() => import('@/pages/Playlist').then((m) => ({ default: m.PlaylistPage })))
 const NowPlaying = lazy(() => import('@/pages/NowPlaying').then((m) => ({ default: m.NowPlaying })))
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })))
@@ -58,6 +63,7 @@ export default function App() {
   const isPropertiesView = activeView === 'properties'
   const isRewindView = activeView === 'rewind'
   const isExploreView = activeView === 'explore'
+  const isLocalView = activeView === 'local'
 
   // Playlist view: derive the playlist's cover the same way the playlist hero
   // does — the first song in the playlist that has embedded artwork — so the
@@ -132,25 +138,19 @@ export default function App() {
     document.documentElement.setAttribute('data-ambient', ambientEffects ? 'on' : 'off')
   }, [ambientEffects])
 
-  // ── Appearance (v2.0.0) ─────────────────────────────────────────────────
-  // data-theme drives the whole token layer, so switching is one attribute.
-  // The visual cross-fade: .theme-anim is applied for the transition window
-  // (see setAppearance below / index.css) so colors glide instead of snap.
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', appearance)
-  }, [appearance])
-
-  // ── Theme System 3.0 (Wave 4) ───────────────────────────────────────────
-  // data-aura-theme selects the color IDENTITY (ink tints, ambient cloud,
-  // secondary accent — see styles/themes.css); data-theme above stays the
-  // dark/light appearance. Orthogonal on purpose. A Custom accent color has
-  // no identity block — the attribute is removed so the token defaults
-  // (and the custom color's derived companions) take over.
-  useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'custom') root.removeAttribute('data-aura-theme')
-    else root.setAttribute('data-aura-theme', theme)
-  }, [theme])
+    // Theme Engine (v3.3): ONE effect applies the full theme — data-aura-theme
+    // (identity block) AND data-theme (the theme's designed brightness, no
+    // longer an independent axis; 'custom' preserves the store's appearance).
+    // The store has already validated/migrated the id; this is the DOM mirror
+    // of that state. Cost: two attribute writes; the visual cross-fade rides
+    // the .theme-anim window (the decor layer is static by design).
+    applyThemeToDocument(theme, document, { customAppearance: appearance })
+    // Session memory for the command palette's brightness jump: remember the
+    // last NAMED theme seen per appearance (custom is not a named identity).
+    const resolved = resolveThemeId(theme)
+    if (resolved !== 'custom') noteThemeAppearance(resolved, themeAppearance(resolved))
+  }, [theme, appearance])
 
   if (!hydrated) return <BootScreen />
 
@@ -190,6 +190,11 @@ export default function App() {
 
       <TitleBar />
 
+      {/* Theme Engine decorative layer — one static, pointer-transparent div;
+          its per-theme recipe lives in styles/themes.css. Paints between the
+          accent orbs and all content, never intercepts input. */}
+      <div aria-hidden className="theme-deco" />
+
       <div
         className="flex flex-1 overflow-hidden"
         // In Now Playing the immersive artwork backdrop must flow BEHIND the
@@ -227,6 +232,28 @@ export default function App() {
                 className="h-full overflow-hidden"
               >
                 <NowPlaying />
+              </motion.div>
+            ) : isLocalView ? (
+              <motion.div
+                key="local"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.22 }}
+                className="h-full overflow-hidden"
+              >
+                <LocalMusic />
+              </motion.div>
+            ) : activeView === 'home' ? (
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                className="h-full overflow-hidden"
+              >
+                <Home />
               </motion.div>
             ) : activeView === 'playlist' ? (
               <motion.div

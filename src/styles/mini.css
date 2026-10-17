@@ -1,0 +1,448 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURA MINI PLAYER — Liquid Glass visual system (v3.3.1)
+   ═══════════════════════════════════════════════════════════════════════════
+   Deliberately INDEPENDENT of the Theme Engine. Nothing in this file reads a
+   surface / border / accent semantic token from themes.css or tokens.css, so
+   the widget renders identically under all ten themes (aurora … sakura). The
+   only artwork and state inputs are the pushed snapshot: cover image, title,
+   artist, progress and play state.
+
+   Two visual modes, one layout (Settings → "Liquid Glass Mini Player"):
+     .mini-card--glass  — layered translucent surface + controlled backdrop
+                          blur + specular hairlines (the designed default)
+     .mini-card--matte  — the same layout on a clean near-opaque neutral panel,
+                          zero blur (the fallback; also the forced shape under
+                          Performance Mode, which strips backdrop-filter)
+
+   Performance contract (mirrors the main window's rules):
+     • No animations at steady state — only ≤250ms background/opacity/shadow
+       transitions on user-visible state changes, disabled under
+       prefers-reduced-motion.
+     • One static blurred layer (the artwork ambient glow) behind the glass —
+       rasterized once per track change, display:none under Performance Mode.
+     • Backdrop-filter is stripped under Performance Mode onto a fixed solid
+       surface — never a theme-provided solid color, so independence holds.
+
+   This file is imported ONLY by src/mini/main.tsx — it can never affect the
+   main window.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Fixed neutral palette — the widget's own design system (theme-independent). */
+:root {
+  --mg-ink:        rgba(255, 255, 255, 0.95);  /* primary text            */
+  --mg-ink-2:      rgba(255, 255, 255, 0.64);  /* secondary text          */
+  --mg-ink-3:      rgba(255, 255, 255, 0.48);  /* tertiary/muted          */
+  --mg-icon:       rgba(255, 255, 255, 0.75);  /* resting icon            */
+  --mg-icon-hover: rgba(255, 255, 255, 0.98);
+  --mg-line:       rgba(255, 255, 255, 0.14);  /* hairline dividers       */
+  --mg-track:      rgba(255, 255, 255, 0.18);  /* progress/volume track   */
+  --mg-fill:       rgba(255, 255, 255, 0.92);  /* progress/volume fill    */
+  --mg-press-ink:  #16181D;                    /* ink on the white play key */
+  --mg-focus:      rgba(255, 255, 255, 0.78);  /* focus-visible ring      */
+  --mg-radius: 20px;
+}
+
+/* ── Root: transparent page, the card paints its own silhouette ────────────
+   The 8px inset hosts the painted drop shadow (the window itself is
+   frameless + transparent + hasShadow:false, so there is no native frame to
+   fight and no double shadow). html/body background stays transparent. */
+.mini-root {
+  position: fixed;
+  inset: 8px;
+}
+
+/* ── Artwork ambient glow (glass mode only) ────────────────────────────────
+   The ACTUAL cover art, blown out and blurred, sits behind the translucent
+   card. The backdrop-filter frosts it into genuine depth that follows the
+   music — an artwork input, not a theme input, so independence holds. */
+.mini-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--mg-radius);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 0.25s ease;
+}
+/* Neutral depth floor: present even with no artwork so glass still reads. */
+.mini-glow::before {
+  content: '';
+  position: absolute;
+  inset: -18%;
+  background:
+    radial-gradient(58% 90% at 14% 0%, rgba(255, 255, 255, 0.13), transparent 62%),
+    radial-gradient(70% 110% at 88% 110%, rgba(96, 108, 130, 0.20), transparent 68%),
+    linear-gradient(165deg, rgba(64, 70, 84, 0.30), rgba(30, 33, 40, 0.42));
+}
+.mini-glow img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(46px) saturate(1.35);
+  transform: scale(1.5);
+}
+
+/* ── The card ───────────────────────────────────────────────────────────────
+   Shared geometry + interaction; mode classes supply the surface. */
+.mini-card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--mg-radius);
+  color: var(--mg-ink);
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+  /* Electron draggable region — the whole glass surface drags the window;
+     every interactive descendant opts out with no-drag (see .mini-art,
+     .mini-btn, .mini-seek, .mini-volume, .mini-window). */
+  cursor: default;
+  user-select: none;
+}
+
+/* Decorative layers common to both modes: pseudo-elements keep the markup
+   clean and can never intercept pointer events (pointer-events: none). */
+.mini-card::before,
+.mini-card::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Glass mode ──────────────────────────────────────────────────────────── */
+.mini-card--glass {
+  background:
+    /* top sheen — the light catch */
+    linear-gradient(168deg, rgba(255, 255, 255, 0.115), rgba(255, 255, 255, 0.02) 42%, rgba(255, 255, 255, 0.055)) padding-box,
+    /* bottom refraction darkening — grounded, not floating */
+    linear-gradient(0deg, rgba(8, 10, 14, 0.16), rgba(8, 10, 14, 0.16)) padding-box,
+    /* the neutral glass body */
+    rgba(21, 23, 29, 0.62) padding-box,
+    /* refractive hairline edge — light enters top-left, exits bottom-right */
+    linear-gradient(160deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0.17)) border-box;
+  border: 1px solid transparent; /* the gradient above IS the edge — no visible rectangular frame */
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.38),
+    0 2px 9px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.20);
+  -webkit-backdrop-filter: blur(26px) saturate(1.45);
+  backdrop-filter: blur(26px) saturate(1.45);
+}
+/* Readability scrim behind the info column (glass only): guarantees the text
+   zone even over near-white artwork; fades out to the right so the glass
+   stays honestly translucent where there is no text. */
+.mini-card--glass::before {
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 56%;
+  background: linear-gradient(90deg, rgba(8, 10, 14, 0.28), transparent 86%);
+  border-radius: var(--mg-radius);
+}
+/* One static diagonal light streak — refraction, not decoration. No motion. */
+.mini-card--glass::after {
+  top: -42%;
+  left: -4%;
+  width: 44%;
+  height: 184%;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.05) 44%, rgba(255, 255, 255, 0.10) 50%, transparent 64%);
+  transform: rotate(14deg);
+}
+
+/* ── Matte mode (toggle off / Performance Mode shape) ─────────────────────── */
+.mini-card--matte {
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 40%) padding-box,
+    linear-gradient(180deg, #24262E, #1B1D24) padding-box,
+    linear-gradient(160deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.11)) border-box;
+  border: 1px solid transparent;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.34),
+    0 2px 8px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Mode plumbing: matte hides the glow; the root carries the mode class. */
+.mini-root--matte .mini-glow { opacity: 0; }
+.mini-root--glass .mini-card--glass { /* mode pairing is explicit for probes */ }
+
+/* ── Performance Mode (app-wide setting, honored by the widget) ─────────────
+   Fixed neutral fallback — deliberately NOT the active theme solid-surface
+   token, which would recolor the widget and break independence. */
+:root[data-performance='on'] .mini-glow { display: none; }
+:root[data-performance='on'] .mini-card--glass {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 40%) padding-box,
+    linear-gradient(180deg, #262932, #1D2027) padding-box,
+    linear-gradient(160deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)) border-box;
+}
+
+/* ── Artwork + progress ring + hover play ────────────────────────────────── */
+.mini-art {
+  position: relative;
+  z-index: 1;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+.mini-art:hover { border-color: rgba(255, 255, 255, 0.26); }
+.mini-art:active { transform: scale(0.97); }
+.mini-art:focus-visible { outline: 2px solid var(--mg-focus); outline-offset: 2px; }
+.mini-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mini-art-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #2B2E37, #1D2028);
+}
+.mini-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.mini-art-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 16, 0.45);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.mini-art:hover .mini-art-overlay,
+.mini-art:focus-visible .mini-art-overlay { opacity: 1; }
+
+/* ── Info column ─────────────────────────────────────────────────────────── */
+.mini-info {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0; /* truncation works only inside a bounded flex child */
+}
+.mini-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  line-height: 1.25;
+  color: var(--mg-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-artist {
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 1px;
+  color: var(--mg-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.15s ease;
+}
+/* Next-up hover affordance (existing feature, fixed neutral ink). While
+   hovered it takes over the ARTIST slot — a dedicated position, so it can
+   never collide with the seek row or the times. */
+.mini-next {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 16px;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: left;
+  color: var(--mg-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.mini-card:hover .mini-next { opacity: 1; }
+/* Artist yields its slot only when a next-up preview actually exists. */
+.mini-card:hover:has(.mini-next) .mini-artist { opacity: 0; }
+.mini-card:hover .mini-next:hover { color: var(--mg-icon-hover); }
+
+/* ── Seek row ────────────────────────────────────────────────────────────── */
+.mini-seek {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.mini-time {
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mg-ink-3);
+  flex-shrink: 0;
+}
+.mini-time--elapsed { width: 26px; text-align: right; }
+.mini-time--total   { width: 30px; }
+.mini-seekbar {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.mini-seekbar:focus-visible { outline: 2px solid var(--mg-focus); outline-offset: 3px; border-radius: 6px; }
+.mini-seek-track {
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--mg-track);
+  overflow: hidden;
+}
+.mini-seek-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  border-radius: 999px;
+  background: var(--mg-fill);
+  pointer-events: none;
+}
+.mini-seek-knob {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.12s ease;
+  pointer-events: none;
+}
+.mini-seekbar:hover .mini-seek-knob,
+.mini-seekbar:focus-visible .mini-seek-knob { transform: translate(-50%, -50%) scale(1); }
+
+/* ── Transport + window buttons ──────────────────────────────────────────── */
+.mini-controls {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.mini-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--mg-icon);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease, transform 0.12s ease;
+}
+.mini-btn:hover { color: var(--mg-icon-hover); background: rgba(255, 255, 255, 0.10); }
+.mini-btn:active { transform: scale(0.94); }
+.mini-btn:focus-visible { outline: 2px solid var(--mg-focus); outline-offset: 2px; }
+/* Disabled (nothing queued): honest dimming — state is not color-only,
+   the icons also stop responding to hover/press. */
+.mini-btn:disabled,
+.mini-btn[aria-disabled='true'] {
+  color: var(--mg-ink-3);
+  cursor: default;
+  background: transparent;
+  transform: none;
+}
+.mini-div {
+  width: 1px;
+  height: 20px;
+  background: var(--mg-line);
+  margin: 0 5px;
+  flex-shrink: 0;
+}
+/* The primary key: a white glass disc — the single strong accent. */
+.mini-play {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--mg-press-ink);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.mini-play:hover { background: #FFFFFF; }
+.mini-play:active { transform: scale(0.95); }
+.mini-play:focus-visible { outline: 2px solid var(--mg-focus); outline-offset: 2px; }
+.mini-play:disabled { cursor: default; background: rgba(255, 255, 255, 0.35); color: rgba(22, 24, 29, 0.55); box-shadow: none; }
+
+/* ── Volume (existing feature, fixed neutral ink) ────────────────────────── */
+.mini-volume {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.mini-volume input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 3px;
+  border-radius: 999px;
+  cursor: pointer;
+  outline-offset: 3px;
+}
+/* Neutral thumb — the UA default is blue, which would break the fixed
+   neutral identity (and inherit nothing from the accent on purpose). */
+.mini-volume input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.mini-volume input[type='range']:focus-visible { outline: 2px solid var(--mg-focus); }
+
+/* ── Reduced motion: kill every transition the widget declares ───────────── */
+@media (prefers-reduced-motion: reduce) {
+  .mini-card, .mini-glow, .mini-art, .mini-art-overlay, .mini-next,
+  .mini-seek-knob, .mini-btn, .mini-play, .mini-volume input[type='range'] {
+    transition: none !important;
+  }
+}

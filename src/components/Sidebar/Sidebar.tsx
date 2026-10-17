@@ -1,5 +1,9 @@
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2, ChevronRight, Settings as SettingsIcon, History, Clock, Globe, Sparkles, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from 'lucide-react'
+import {
+  House, Music2, Heart, ListMusic, Plus, FolderOpen, FileAudio, Loader2,
+  Settings as SettingsIcon, History, Clock, Globe, Sparkles, PanelLeftClose,
+  PanelLeftOpen, SlidersHorizontal, HardDrive, ChevronRight,
+} from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
@@ -8,30 +12,53 @@ import { useState } from 'react'
 import { PlaylistModal } from '../Modals/PlaylistModal'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
 import { EmptyState } from '@/components/States/EmptyState'
+import type { AppView } from '@/types'
 
-// ── Sidebar 3.2 (Aura 3.2.0 — collapse polish + motion language) ────────────
-// v3.0 gave the sidebar a REAL collapse; 3.2 makes it feel designed:
-//   • The collapse control is a proper 26px chip (hover veil, press scale,
-//     animated icon crossfade) instead of a floating 13px glyph.
-//   • Destination rows (Explore/Smart/History/Rewind) now share the SAME
-//     travelling gel pill as Library/Favorites — one selection language,
-//     with the indicator physically animating between items.
-//   • Labels fade/slide out on collapse and back in on expand (Animate-
-//     Presence, opacity/transform only) so the width change, icon recenter
-//     and label fade read as ONE coordinated movement instead of a snap.
-//   • Icon colors transition via CSS (see [data-liquid-tabs] svg rule in
-//     index.css); hover/focus feedback rides the existing utilities.
-//   • All of it honors prefers-reduced-motion (per-animation here + the
-//     global <MotionConfig reducedMotion="user"> in App) and Performance
-//     Mode inherits the same stillness through liquid.ts's guards.
-// Selection consistency fix (spec §10) preserved: one indicator, no stacks.
+// ── Sidebar 4.0 (Core Experience redesign) ──────────────────────────────────
+// A re-designed information architecture for BOTH states — not a shrink-to-fit
+// of the old list.
+//
+//   Expanded — a grouped hierarchy that mirrors how the app is actually used:
+//     DISCOVER           Home · Explore
+//     YOUR MUSIC         Library · Local Music · Favorites · Playlists (+)
+//     LISTENING & TOOLS  History · Audio Studio · Smart Playlists · Rewind
+//     Application        Settings (pinned bottom, past the now-playing chip)
+//   Selection keeps the app's signature travelling gel pill (LiquidTabs) —
+//   one per group, so the pill physically travels between siblings and tucks
+//   away when the active view belongs to another group.
+//
+//   Collapsed — a deliberate 56px icon rail with its own composition: brand
+//   mark, the import action, the same groups as compact icon stacks separated
+//   by hairlines, a Playlists DROPDOWN (so playlist management survives
+//   without text), the now-playing artwork chip, and Settings at the base.
+//   Every icon carries a tooltip; the gel pill still marks the active view.
+//
+//   Everything else is preserved from 3.2: persisted collapse state, reduced-
+//   motion-aware CollapseLabel choreography, the import progress sliver,
+//   PlaylistModal, and the Performance-Mode stillness guarantees.
+
+type View = AppView
+
+// ── Group definitions (expanded labels + collapsed tooltips in one place) ──
+const DISCOVER = [
+  { id: 'home' as const, label: 'Home', title: 'Your landing space — the Aura Orb', icon: House },
+  { id: 'explore' as const, label: 'Explore', title: 'Stream free music from Audius', icon: Globe },
+]
+const YOUR_MUSIC = [
+  { id: 'library' as const, label: 'Library', title: 'Your whole collection', icon: Music2 },
+  { id: 'local' as const, label: 'Local Music', title: 'Files stored on this device', icon: HardDrive },
+  { id: 'favorites' as const, label: 'Favorites', title: 'The songs you loved', icon: Heart },
+]
+const TOOLS = [
+  { id: 'history' as const, label: 'Listening History', title: 'Every session recorded on this device', icon: Clock },
+  { id: 'studio' as const, label: 'Audio Studio', title: 'The live audio workspace — EQ, effects, master stages', icon: SlidersHorizontal },
+  { id: 'smart' as const, label: 'Smart Playlists', title: 'Engine-built lists from your listening history — made on-device', icon: Sparkles },
+  { id: 'rewind' as const, label: 'Aura Rewind', title: 'Your month, told by your own listening', icon: History },
+]
 
 export function Sidebar() {
   // Narrow selectors — Sidebar is mounted almost the entire time the app is
-  // open, so the previous full `usePlayerStore()` subscribe meant it
-  // re-rendered on every store mutation, including the progress tick that
-  // fires ~4-10 times a second during playback, despite never displaying
-  // progress at all.
+  // open, so it must never re-render on the ~4-10Hz playback progress tick.
   const playlists = usePlayerStore((s) => s.playlists)
   const activeView = usePlayerStore((s) => s.activeView)
   const setActiveView = usePlayerStore((s) => s.setActiveView)
@@ -44,32 +71,21 @@ export function Sidebar() {
   const reduceMotion = useReducedMotion()
   const { importFolder, importFiles, importing, progress } = useLibraryImport()
 
-  const nav = [
-    { id: 'library'   as const, label: 'Library',   icon: Music2, count: libraryCount },
-    { id: 'favorites' as const, label: 'Favorites',  icon: Heart,  count: favoritesCount },
-  ]
-
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
 
-  // Destination rows — one consistent visual language (icon + label; selected
-  // = gel pill + accent icon). Rendered through LiquidTabs so the selection
-  // indicator TRAVELS between items (v3.2.0 motion spec §2.2); a value
-  // outside this group (e.g. playlist/settings) tucks the pill away.
-  const destinations = [
-    { id: 'studio' as const, label: 'Audio Studio', title: 'The live audio workspace — EQ, effects, master stages', icon: SlidersHorizontal },
-    { id: 'explore' as const, label: 'Explore', title: 'Stream free music from Audius', icon: Globe },
-    { id: 'smart' as const, label: 'Smart Playlists', title: 'Engine-built lists from your listening history — made on-device', icon: Sparkles },
-    { id: 'history' as const, label: 'Listening History', title: 'Every session recorded on this device', icon: Clock },
-    { id: 'rewind' as const, label: 'Aura Rewind', title: 'Your month, told by your own listening', icon: History },
-  ]
-  const destinationView = destinations.some((d) => d.id === activeView) ? (activeView as 'studio' | 'explore' | 'smart' | 'history' | 'rewind') : ('' as 'studio')
+  const yourMusicItems = YOUR_MUSIC.map((item) => ({
+    ...item,
+    count: item.id === 'library' ? libraryCount : item.id === 'favorites' ? favoritesCount : undefined,
+  }))
+
+  const groupValue = (ids: readonly string[]): string =>
+    ids.includes(activeView) ? activeView : ''
 
   return (
-    /* ── Floating navigation card (v2.1.0, collapsible since 3.0) ────────
+    /* ── Floating navigation card (v2.1.0 identity, collapsible since 3.0) ──
        The sidebar is a deliberate floating card: inset from the window on
-       three sides, rounded, shadowed, glassed — so the ambient background
-       flows AROUND it. Collapsed, it becomes a slim icon rail (56px card).
-       The width animates; everything inside re-flows with it. */
+       three sides, rounded, shadowed, glassed — the ambient background flows
+       AROUND it. Collapsed, it becomes a slim icon rail (56px). */
     <motion.aside
       initial={false}
       animate={{ width: collapsed ? 56 : 'calc(var(--spacing-sidebar) - 10px)' }}
@@ -85,17 +101,49 @@ export function Sidebar() {
         boxShadow: 'var(--shadow-3), inset 0 1px 0 var(--border-emphasis)',
       }}
     >
-      {/* Collapse toggle — v3.2.0: a designed 26px chip in a fixed-height
-          header row (right-aligned expanded, centered in the rail), with a
-          crossfading icon so the control itself participates in the motion
-          instead of snapping between two glyphs. */}
-      <div className={collapsed ? 'flex justify-center pt-2 px-2' : 'flex justify-end pt-2 px-2.5'}>
+      {/* ── Header — brand identity + collapse control ────────────────────
+          The brand mark doubles as a Home button (a rail needs a face, and
+          the landing page is one click away from it in either state). */}
+      <div className={collapsed
+        ? 'flex flex-col items-center gap-1.5 pt-3 px-2'
+        : 'flex items-center justify-between pl-4 pr-2.5 pt-3 pb-1'}>
+        <button
+          onClick={() => setActiveView('home')}
+          className="flex items-center gap-2.5 rounded-xl outline-none"
+          aria-label="Aura — go to Home"
+          title={collapsed ? 'Aura — go to Home' : undefined}
+        >
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background: 'var(--accent-dim)',
+              border: '1px solid var(--accent-border)',
+              boxShadow: '0 0 16px var(--accent-whisper)',
+            }}
+          >
+            <div className="flex items-end gap-[2px] h-3.5">
+              {[2, 3, 4, 3, 2].map((h, i) => (
+                <div key={i} className="w-[2px] rounded-full" style={{ height: h * 3.5, background: 'var(--accent)', opacity: 0.9 }} />
+              ))}
+            </div>
+          </div>
+          {!collapsed && (
+            <CollapseLabel reduceMotion={!!reduceMotion}>
+              <span
+                className="text-[12px] font-semibold uppercase whitespace-nowrap"
+                style={{ color: 'var(--text-primary)', letterSpacing: '0.22em' }}
+              >
+                Aura
+              </span>
+            </CollapseLabel>
+          )}
+        </button>
         <button
           onClick={toggleCollapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-expanded={!collapsed}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="w-[26px] h-[26px] rounded-lg icon-hover flex items-center justify-center"
+          className="w-[26px] h-[26px] rounded-lg icon-hover flex items-center justify-center shrink-0"
           style={{ color: 'var(--text-faint)' }}
         >
           <AnimatePresence initial={false} mode="wait">
@@ -114,7 +162,7 @@ export function Sidebar() {
       </div>
 
       {/* Import — the sidebar's single primary action, wearing the accent. */}
-      <div className={collapsed ? 'px-2 pb-2' : 'px-3.5 pb-2'}>
+      <div className={collapsed ? 'px-2 pt-2.5 pb-1' : 'px-3.5 pt-2 pb-2'}>
         {importing ? (
           <div
             className={collapsed
@@ -183,111 +231,185 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Nav — the gel pill travels between the two rows (v2.16.1 liquid
-          system). Icons-only when collapsed; the pill re-parks via the
-          ResizeObserver. The old leading accent bar is GONE (one indicator,
-          not three). */}
-      <nav className={collapsed ? 'px-1.5 space-y-0.5' : 'px-2.5 space-y-0.5'}>
+      {/* ── Scrollable middle — groups + playlists ─────────────────────────
+          Bounded by flex-1 min-h-0 so short windows scroll the middle while
+          the brand, import, now-playing chip and Settings stay anchored. */}
+      <div className={collapsed ? 'flex-1 min-h-0 overflow-y-auto px-1.5 pt-2 pb-2 space-y-1.5' : 'flex-1 min-h-0 overflow-y-auto px-2.5 pt-2 pb-2'}>
+
+        {/* DISCOVER */}
+        {!collapsed && <SectionLabel>Discover</SectionLabel>}
         <LiquidTabs<string>
           variant="row"
           hideLabels={collapsed}
-          items={nav.map(({ id, label, icon: Icon, count }) => ({
-            id,
-            label,
+          items={DISCOVER.map(({ id, label, title, icon: Icon }) => ({
+            id, label,
+            title: collapsed ? label : title,
             icon: <Icon size={15} style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
-            trailing: !collapsed && count > 0 ? (
+          }))}
+          value={groupValue(DISCOVER.map((d) => d.id))}
+          onChange={(id) => setActiveView(id as View)}
+          ariaLabel="Discover navigation"
+        />
+
+        <RailDivider collapsed={collapsed} />
+
+        {/* YOUR MUSIC */}
+        {!collapsed && <SectionLabel>Your Music</SectionLabel>}
+        <LiquidTabs<string>
+          variant="row"
+          hideLabels={collapsed}
+          items={yourMusicItems.map(({ id, label, title, icon: Icon, count }) => ({
+            id, label,
+            title: collapsed ? label : title,
+            icon: <Icon size={15} style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
+            trailing: !collapsed && count !== undefined && count > 0 ? (
               <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{count}</span>
             ) : undefined,
           }))}
-          value={activeView}
-          onChange={(id) => { if (id === 'library' || id === 'favorites') setActiveView(id) }}
-          ariaLabel="Library navigation"
+          value={groupValue(YOUR_MUSIC.map((d) => d.id))}
+          onChange={(id) => setActiveView(id as View)}
+          ariaLabel="Your music navigation"
         />
-      </nav>
 
-      {/* Playlists — fold away entirely in the rail (a text list has no
-          icons-only form); the + action stays reachable. */}
-      {!collapsed && (
-        <div className="flex-1 overflow-y-auto px-2.5 py-3 mt-3 min-h-0">
-          <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-[10px] font-semibold uppercase" style={{ color: 'var(--text-faint)', letterSpacing: 'var(--tracking-caps)' }}>
-              Playlists
-            </span>
-            <button onClick={() => setShowPlaylistModal(true)} aria-label="New playlist"
-              className="w-5 h-5 rounded flex items-center justify-center transition-all"
-              style={{ color: 'var(--text-faint)', transitionDuration: 'var(--dur-fast)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }}
-            >
-              <Plus size={12} />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {playlists.length === 0 && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <EmptyState
-                  compact
-                  icon={<ListMusic size={18} />}
-                  title="No playlists yet"
-                  hint="Hit + to group your music"
-                />
-              </motion.div>
-            )}
-            {playlists.map((pl) => {
-              const active = activeView === 'playlist' && selectedPlaylistId === pl.id
-              return (
-                <motion.button key={pl.id}
-                  initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
-                  onClick={() => { setActiveView('playlist'); setSelectedPlaylistId(pl.id) }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all"
-                  style={{
-                    transitionDuration: 'var(--dur-fast)',
-                    color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                    background: active ? 'var(--glass-2)' : 'transparent',
-                  }}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--glass-1)' }}
-                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
+        {/* Playlists — expanded: a real list with its own + action.
+            Collapsed: a dropdown keeps playlist management reachable from
+            the rail (a text list has no icons-only form by itself). */}
+        {collapsed ? (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                className="w-full flex items-center justify-center py-2 rounded-lg transition-all"
+                style={{
+                  color: activeView === 'playlist' ? 'var(--accent)' : 'var(--text-faint)',
+                  background: activeView === 'playlist' ? 'var(--glass-2)' : 'transparent',
+                  transitionDuration: 'var(--dur-fast)',
+                }}
+                title="Playlists"
+                aria-label={`Playlists — ${playlists.length} available`}
+              >
+                <ListMusic size={15} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="z-[200] min-w-52 p-1 rounded-xl text-sm max-h-72 overflow-y-auto"
+                style={{
+                  zIndex: 'var(--z-dropdown)',
+                  background: 'var(--surface-chrome)',
+                  border: '1px solid var(--border-strong)',
+                  backdropFilter: 'blur(var(--blur-glass))',
+                  boxShadow: 'var(--shadow-overlay)',
+                }}
+                sideOffset={6} align="start">
+                <DropdownMenu.Item
+                  onClick={() => setShowPlaylistModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
                 >
-                  <ListMusic size={13} style={active ? { color: 'var(--accent)' } : undefined} />
-                  <span className="flex-1 text-left truncate">{pl.name}</span>
-                  <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{pl.songIds.length}</span>
-                  <ChevronRight size={11} style={{ opacity: 0.3 }} />
-                </motion.button>
-              )
-            })}
-          </AnimatePresence>
-        </div>
-      )}
+                  <Plus size={13} />
+                  New Playlist…
+                </DropdownMenu.Item>
+                {playlists.length > 0 && (
+                  <DropdownMenu.Separator className="my-1" style={{ height: 1, background: 'var(--border-default)' }} />
+                )}
+                {playlists.map((pl) => (
+                  <DropdownMenu.Item
+                    key={pl.id}
+                    onClick={() => { setActiveView('playlist'); setSelectedPlaylistId(pl.id) }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
+                    style={activeView === 'playlist' && selectedPlaylistId === pl.id ? { color: 'var(--accent)' } : undefined}
+                  >
+                    <ListMusic size={12} style={{ opacity: 0.7 }} />
+                    <span className="flex-1 truncate">{pl.name}</span>
+                    <span className="text-xs tabular-nums" style={{ color: 'var(--text-faint)' }}>{pl.songIds.length}</span>
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        ) : (
+          <div className="pl-1 pr-0.5 mt-1.5">
+            <div className="flex items-center justify-between pl-2.5 pr-1.5 mb-0.5">
+              <span
+                className="text-[10px] font-medium uppercase"
+                style={{ color: 'var(--text-faint)', letterSpacing: 'var(--tracking-caps)' }}
+              >
+                Playlists
+              </span>
+              <button
+                onClick={() => setShowPlaylistModal(true)}
+                aria-label="New playlist"
+                title="New playlist"
+                className="w-5 h-5 rounded flex items-center justify-center transition-all"
+                style={{ color: 'var(--text-faint)', transitionDuration: 'var(--dur-fast)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--glass-1)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <Plus size={12} />
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {playlists.length === 0 && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <EmptyState
+                    compact
+                    icon={<ListMusic size={18} />}
+                    title="No playlists yet"
+                    hint="Hit + to group your music"
+                  />
+                </motion.div>
+              )}
+              {playlists.map((pl) => {
+                const active = activeView === 'playlist' && selectedPlaylistId === pl.id
+                return (
+                  <motion.button key={pl.id}
+                    initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
+                    onClick={() => { setActiveView('playlist'); setSelectedPlaylistId(pl.id) }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-[13px] transition-all"
+                    style={{
+                      transitionDuration: 'var(--dur-fast)',
+                      color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                      background: active ? 'var(--glass-2)' : 'transparent',
+                    }}
+                    onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--glass-1)' }}
+                    onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <ListMusic size={12} style={active ? { color: 'var(--accent)' } : undefined} />
+                    <span className="flex-1 text-left truncate">{pl.name}</span>
+                    <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-faint)' }}>{pl.songIds.length}</span>
+                    <ChevronRight size={10} style={{ opacity: 0.3 }} />
+                  </motion.button>
+                )
+              })}
+            </AnimatePresence>
+          </div>
+        )}
+
+        <RailDivider collapsed={collapsed} />
+
+        {/* LISTENING & TOOLS */}
+        {!collapsed && <SectionLabel>Listening &amp; Tools</SectionLabel>}
+        <LiquidTabs<string>
+          variant="row"
+          hideLabels={collapsed}
+          items={TOOLS.map(({ id, label, title, icon: Icon }) => ({
+            id, label,
+            title: collapsed ? label : title,
+            icon: <Icon size={15} style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
+          }))}
+          value={groupValue(TOOLS.map((d) => d.id))}
+          onChange={(id) => setActiveView(id as View)}
+          ariaLabel="Listening and tools navigation"
+        />
+      </div>
 
       {/* Now playing chip — artwork-only in the rail */}
       <SidebarNowPlaying collapsed={collapsed} />
 
-      {/* Destinations — v3.2.0: the travelling gel pill (LiquidTabs row),
-          icons-only when collapsed; the pill re-parks via the ResizeObserver.
-          Same selection language as Library/Favorites above. */}
-      <div className={collapsed ? 'px-1.5 pt-3' : 'px-2.5 pt-3'}>
-        <LiquidTabs<string>
-          variant="row"
-          hideLabels={collapsed}
-          items={destinations.map(({ id, label, title, icon: Icon }) => ({
-            id,
-            label,
-            title: collapsed ? label : title,
-            icon: <Icon size={15} className="transition-colors" style={activeView === id ? { color: 'var(--accent)' } : undefined} />,
-          }))}
-          value={destinationView}
-          onChange={(id) => setActiveView(id as 'studio' | 'explore' | 'smart' | 'history' | 'rewind')}
-          ariaLabel="Destinations"
-        />
-      </div>
-
-      {/* Settings — separated from the nav groups since it's a different kind
-          of view. Inside the floating card the divider is an inset hairline.
-          The label rides the shared CollapseLabel motion (fade/slide with the
-          collapse, no mount pop). */}
-      <div className={collapsed ? 'p-1.5 pt-2' : 'p-2.5 pt-2'}>
-        <div className="mx-1 mb-2 h-px" style={{ background: 'var(--border-subtle)' }} />
+      {/* Settings — a different kind of destination, pinned below the
+          scrollable middle and the now-playing chip. */}
+      <div className={collapsed ? 'p-1.5 pt-1.5' : 'p-2.5 pt-1.5'}>
+        {!collapsed && <div className="mx-1 mb-2 h-px" style={{ background: 'var(--border-subtle)' }} />}
         <button
           onClick={() => setActiveView('settings')}
           className={collapsed
@@ -317,6 +439,27 @@ export function Sidebar() {
   )
 }
 
+// ── Pieces ──────────────────────────────────────────────────────────────────
+
+/** Uppercase micro-label above a nav group (expanded only). */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="px-3 pb-1 pt-1.5 text-[9.5px] font-semibold uppercase select-none"
+      style={{ color: 'var(--text-faint)', letterSpacing: 'var(--tracking-caps)' }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** Hairline between rail groups (collapsed) — invisible when expanded, where
+    the section labels already carry the separation. */
+function RailDivider({ collapsed }: { collapsed: boolean }) {
+  if (!collapsed) return null
+  return <div aria-hidden className="mx-2.5 my-1 h-px" style={{ background: 'var(--border-subtle)' }} />
+}
+
 // Shared menu-item styling for the import dropdown.
 function SidebarMenuItem({ icon: Icon, label, onClick }: {
   icon: typeof FolderOpen; label: string; onClick: () => void
@@ -333,10 +476,10 @@ function SidebarMenuItem({ icon: Icon, label, onClick }: {
 }
 
 // CollapseLabel — the coordinated fade for sidebar text that appears/
-// disappears with the collapse state (v3.2.0 motion language). Exit runs
+// disappears with the collapse state (v3.2.0 motion language, kept). Exit runs
 // during the first ~120ms of the 200ms width collapse (opacity + small
-// slide — compositor-only); enter is delayed ~80ms so the label arrives
-// as the card is still settling into its expanded width. Reduced motion
+// slide — compositor-only); enter is delayed ~80ms so the label arrives as
+// the card is still settling into its expanded width. Reduced motion
 // collapses both to instant placement — the state still changes, just
 // without the movement.
 function CollapseLabel({ children, reduceMotion }: { children: React.ReactNode; reduceMotion: boolean }) {
@@ -366,7 +509,7 @@ function SidebarNowPlaying({ collapsed }: { collapsed: boolean }) {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       className={collapsed ? 'px-2 pt-1' : 'p-2.5 pt-1'}>
-      <div className="mx-1 mb-2 h-px" style={{ background: 'var(--border-subtle)' }} />
+      {!collapsed && <div className="mx-1 mb-2 h-px" style={{ background: 'var(--border-subtle)' }} />}
       <div
         className={collapsed
           ? 'flex items-center justify-center p-1 rounded-xl'

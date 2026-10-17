@@ -1,6 +1,6 @@
 import { useState, useMemo, useDeferredValue } from 'react'
 import { motion } from 'framer-motion'
-import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUpDown, ArrowUp, ArrowDown, Check, AudioLines, Sparkles } from 'lucide-react'
+import { Search, LayoutGrid, List, FolderOpen, Loader2, X, Heart, ListX, ArrowUpDown, ArrowUp, ArrowDown, Check, AudioLines, Sparkles, Music2 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
@@ -117,31 +117,50 @@ export function Library() {
           backdropFilter: 'none',
         }}
       >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1
-              className="text-2xl font-semibold tracking-tight"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Identity chip — Library and Favorites speak in the same visual
+                voice as Local Music's header (one header language app-wide). */}
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{
+                background: isFavorites ? 'var(--favorite-veil)' : 'var(--accent-dim)',
+                border: `1px solid ${isFavorites ? 'color-mix(in srgb, var(--favorite) 40%, transparent)' : 'var(--accent-border)'}`,
+                color: isFavorites ? 'var(--favorite)' : 'var(--accent)',
+              }}
             >
-              {isFavorites ? 'Favorites' : 'Library'}
-            </h1>
-            {username ? (
-              <p className="text-xs mt-1" style={{ color: 'var(--accent)' }} data-welcome-greeting>
-                {daypart}, {username} — welcome back
+              {isFavorites ? <Heart size={16} /> : <Music2 size={16} />}
+            </div>
+            <div className="min-w-0">
+              <h1
+                className="text-2xl font-semibold tracking-tight leading-tight"
+                style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}
+              >
+                {isFavorites ? 'Favorites' : 'Library'}
+              </h1>
+              {/* Meta row — the count and the personal greeting share one
+                  quiet line (Aura 3.0 §13: greeting only ever decorates). */}
+              <p className="text-xs mt-1 tabular-nums" style={{ color: 'var(--text-faint)' }}>
+                {songs.length} {songs.length === 1 ? 'song' : 'songs'}
+                {username && (
+                  <>
+                    <span aria-hidden> · </span>
+                    <span style={{ color: 'var(--accent)' }} data-welcome-greeting>
+                      {daypart}, {username}
+                    </span>
+                  </>
+                )}
               </p>
-            ) : null}
-            <p className="text-xs mt-1 tabular-nums" style={{ color: 'var(--text-faint)' }}>
-              {songs.length} {songs.length === 1 ? 'song' : 'songs'}
-            </p>
+            </div>
           </div>
 
           {/* Genre filter (Phase 1) + Sort + segmented view toggle */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {genres.length > 0 && (
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button
-                    className="flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-xl text-xs font-medium transition-all"
+                    className="flex items-center gap-1.5 pl-2.5 pr-2 py-2 rounded-xl text-xs font-medium transition-all"
                     style={{
                       background: genreFilter ? 'var(--accent-dim)' : 'var(--glass-1)',
                       border: `1px solid ${genreFilter ? 'var(--accent-border)' : 'var(--border-default)'}`,
@@ -206,7 +225,7 @@ export function Library() {
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button
-                  className="flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-xl text-xs font-medium transition-all"
+                  className="flex items-center gap-1.5 pl-2.5 pr-2 py-2 rounded-xl text-xs font-medium transition-all"
                   style={{
                     background: 'var(--glass-1)',
                     border: '1px solid var(--border-default)',

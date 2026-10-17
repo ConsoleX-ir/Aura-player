@@ -2,12 +2,12 @@
 
 > A modern, elegant, and lightweight desktop music player built with Electron, React, TypeScript, and Vite.
 
-![Version](https://img.shields.io/badge/version-v3.2.1-blue)
+![Version](https://img.shields.io/badge/version-v4.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
 ![Electron](https://img.shields.io/badge/Electron-Latest-47848F?logo=electron)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript)
 
 ---
 
@@ -17,7 +17,7 @@ Aura Player is a modern desktop music player focused on performance, simplicity,
 
 Instead of copying the look of existing players, Aura combines a premium glassmorphism interface with dynamic colors extracted from album artwork to create a unique listening experience.
 
-v3 is the liquid-glass generation. A wide glass play bar breathes with the real bass of the track, eight complete theme identities each carry their own light paper and secondary accent, the sidebar truly collapses, the Now Playing view became a stage that crossfades between synchronized lyrics and three live visualizers, and the audio engine gained an effects rack with importable presets. Your music got more personal too — custom cover art, searchable track notes, and a first launch that greets you by name. Online, Explore reads as an editorial discovery page, Radio is filtered to music, and every failure state still tells you the truth.
+v4 is the measurement generation. The Audio Studio became a true audio workstation — a live signal-chain strip, the equalizer's real transfer-response curve with the spectrum it is acting on, and a measurement bench (spectrum, output meters, stereo field) that reads the engine's own nodes, never synthesized numbers. The sidebar was re-architected into grouped navigation with a collapsed rail that is its own composition, not a shrink-to-fit. The Theme Engine carries ten complete identities, each with a bespoke emblem in the picker, and every studio visualization re-skins itself through theme tokens. Everything still rides the one authoritative audio engine — bypass is still the neutral graph, flat is still perfect transparency.
 
 ---
 
@@ -91,23 +91,27 @@ v3 is the liquid-glass generation. A wide glass play bar breathes with the real 
 - Repeat (all / one)
 - Crossfade — smooth fade between songs, adjustable 0–12s
 - **10-band Equalizer** — 10 preset curves plus fully custom band control and user-saved curves, persisted; flat = true bypass — now living in the dedicated **Audio Studio** (see below)
-- **Audio Studio** — a dedicated Sidebar destination for all sound shaping: Master (preamp, balance, limiter), Equalizer, Effects, Presets, and a global Bypass — see below
+- **Audio Studio** — a dedicated Sidebar destination for all sound shaping: a live signal-chain overview, Master (preamp, balance, limiter), Equalizer with its real frequency-response curve, Effects, an analysis bench, and a global Bypass — see below
 - Sleep Timer — auto-pause after 15/30/45/60 minutes (Now Playing view)
 - Volume Control + scroll-wheel fine adjustment
 - Seek bar with hover time labels
 - **The queue survives restarts** — it persists as ID references, rebuilds against your library at launch, and Aura never autoplays on startup
 - **Aura Pulse** — the play bar's aurora field breathes with the track's real low-frequency energy; rests smoothly on pause, and freezes in Performance Mode
 
-### 🎛 Audio Studio (v3.2.0)
+### 🎛 Audio Studio (4.0.0 workstation)
 
-A dedicated workspace for everything that shapes the sound, reachable from the Sidebar (or Ctrl+K → "Open Audio Studio"). It edits the same live playback graph the main player, Playbar and Mini Player use — there is exactly one audio engine, and the Studio is a control surface over it, never a second one.
+A dedicated workspace for everything that shapes the sound, reachable from the Sidebar (or Ctrl+K → "Open Audio Studio"). It edits the same live playback graph the main player, Playbar and Mini Player use — there is exactly one audio engine, and the Studio is a control surface over it, never a second one. Every visualization is either real analyser data or the mathematically exact response of the current settings — nothing decorative, no fake meters.
 
+- **Signal Chain strip** — the whole chain at a glance: Source → Preamp → Equalizer → Dynamics & FX → Balance → Limiter → Output, each stage showing its true current state. The two dynamics stages carry **live gain-reduction meters** read straight from their `DynamicsCompressorNode.reduction` values — the same numbers the DSP is applying right now
+- **Equalizer with a real transfer-response curve** — the curve is computed with the exact RBJ biquad formulas Web Audio implements, from your actual settings (10 bands + bass/treble shelves + preamp, gated by EQ enable and Bypass exactly as the engine gates them). The live spectrum floats under it as a soft ghost, so you see both what the material puts in and what the chain does to it. Band dots sit at the cumulative response value at each band's frequency
+- **Measurement bench** — a log-frequency **Spectrum** analyzer with peak-hold caps (post-master, what you hear), **L/R output meters** with RMS + true-peak ballistics and hold-and-fall peaks on a dB scale, and a **Stereo field** panel with a correlation meter (mono +1 ↔ out-of-phase −1) and a goniometer drawn from the live L/R signal, plus reference markers for your configured balance and stereo width
 - **Master** — input **Preamp** (−12…+12 dB with a 0 dB reference tick), stereo **Balance** (double-click or press 0 to recenter), and an honest **Output Limiter** protection stage that catches peaks a boosted EQ or preamp would clip
-- **Equalizer** — the 10-band graphic EQ (31 Hz – 16 kHz) with drag, double-click reset and arrow-key nudging; 10 built-in curves (Flat, Bass Boost, Vocal, Treble, Pop, Rock, Jazz, Electronic, Classical, Acoustic); an **Enable gate** that flattens the bands while keeping your curve intact; **custom curves** with save / rename / duplicate / delete
+- **Equalizer controls** — the 10-band graphic EQ (31 Hz – 16 kHz) with drag, double-click reset and arrow-key nudging; 10 built-in curves (Flat, Bass Boost, Vocal, Treble, Pop, Rock, Jazz, Electronic, Classical, Acoustic); an **Enable gate** that flattens the bands while keeping your curve intact; **custom curves** with save / rename / duplicate / delete
 - **Effects** — the five real controls (Bass, Treble, Compression, Reverb, Stereo Width) on the Web Audio chain, built-in presets, and **custom effect presets** with full rename/duplicate/delete support; export/import as JSON configuration (never processed audio)
-- **Bypass & Reset** — one toggle suspends the whole chain (every stage glides to its transparent neutral point; your settings are kept), one button resets everything
+- **Bypass & Reset** — one toggle suspends the whole chain (every stage glides to its transparent neutral point; your settings are kept — the response curve flattens, the strip reads *off/neutral*), one button resets everything
 - A live status pill tells you what the engine is actually doing: Neutral, Active (N stages), or Bypassed
-- **Zero-cost architecture** — every stage sits at an acoustically transparent neutral value until you touch it; parameter changes glide through scheduled AudioParam updates; the graph is built once and never rebuilt
+- **Zero-cost architecture** — every stage sits at an acoustically transparent neutral value until you touch it; parameter changes glide through scheduled AudioParam updates; the graph is built once and never rebuilt. The stereo analysis tap is a read-only leaf branch off the master gain — the audible path is untouched
+- **Performance-aware** — all live panels share ONE animation loop, which drops to ~20 fps in Performance Mode; nothing animates when the page is closed
 
 ### 🪟 Windows Integration
 
@@ -175,13 +179,13 @@ Every keyboard action gives visible confirmation — a small toast rises above t
 
 ### 🎨 UI
 
-- **Twelve theme identities** — ConsoleX, Ocean Deep, Amethyst, Cyan Frost, Emerald, Crimson, Amber, Mono, plus the v3.2.0 Specials **Orchid, Indigo, Champagne and Aurora** — each remapping the entire palette (ink scale, ambient clouds, and a curated secondary accent) and carrying its own light "paper" for light mode; a fully Custom accent color is still available; every switch crossfades
+- **Ten complete theme identities** — Aurora, Ember, Abyss, Vector, Nebula, Verdant, Obsidian, Solstice, Cryo and Sakura, each a full, designed identity: its own surfaces, depth, shadow tint and **designed brightness** (five dark, five light — brightness is a property of the theme, not a second toggle), its accent family, and a full CSS identity block; a fully **Custom accent color** is still available and renders the neutral base identity. Every theme has a **bespoke SVG emblem** in the Settings picker — shape identity on a themed swatch tile — so the set reads as designed, and selection is marked by a check glyph, never color alone
+- **Theme Engine** — themes are typed data (registry ↔ CSS blocks are kept in lockstep by a unit test), legacy theme ids migrate appearance-aware so a light-mode user is never dropped into a dark theme, and switching crossfades through the existing animation window. Studio visualizations, meters and the EQ curve all recolor through theme tokens — every identity plays its own instrument panel
+- **Sidebar 4.0** — a re-designed information architecture in both states: expanded, a grouped hierarchy that mirrors how the app is used (Discover / Your Music / Listening & Tools, with a Playlists section of its own); collapsed, a deliberate 56px icon rail with its own composition — brand mark, the accent Add-Music action, compact icon stacks separated by hairlines, a Playlists **dropdown** so playlist management survives without text, and the now-playing artwork chip. Selection keeps the travelling gel pill, every icon carries a tooltip, everything is keyboard-reachable, and the state is remembered across restarts
 - **Liquid-glass play bar** — a wide glass slab (no more pill) with a top sheen, an accent-tinted hairline border, and a two-layer aurora field that breathes with the track's real bass; still when paused, calm in Performance Mode and reduced-motion
-- **Collapsible sidebar** — the floating glass card folds from 246px to a 56px icon rail and back, remembers its state across restarts, and keeps every destination reachable; v3.2.0 gives it a designed collapse chip, a travelling selection pill across all destination rows, and coordinated label fades (all reduced-motion aware)
 - **Now Playing stage** — one quiet segmented toggle crossfades between synchronized **Lyrics** and a full-size **Visualizer** (Aurora, Particles, or Radial) on a single efficient canvas that only animates while music plays
-- **Mini Player 3.2** — the independent desktop widget now adds a real **seek bar** with elapsed/remaining times, a **volume slider with mute**, keyboard-focusable transport buttons, and inherits your theme, accent, and adaptive on-accent ink; keeps its full draggable, always-on-top lifecycle and position memory
+- **Mini Player 3.2 + Liquid Glass** — the independent desktop widget has a real **seek bar** with elapsed/remaining times, a **volume slider with mute**, keyboard-focusable transport buttons, and inherits your theme, accent, and adaptive on-accent ink; an optional **Liquid Glass mode** gives the widget its own frosted, artwork-tinted depth (visual only — playback is never affected); keeps its full draggable, always-on-top lifecycle and position memory
 - **A first launch that greets you** — an optional display name (never an account, never sent anywhere), a time-of-day "welcome back" greeting in the Library, and an honest "make Aura your default player" offer that opens your OS settings — no registry hacks, no fake success
-- **Dark & Light themes** — dark is Aura's true form; light is a designed, glow-first paper look with an animated cross-fade between them
 - Dynamic Accent Colors: your chosen theme stays consistent everywhere, except the Now Playing view, which pulls its ambient color from the current song's actual album art
 - Living Background: soft ambient light behind the interface, following the active theme (frozen automatically in Performance Mode)
 - Glassmorphism with depth — layered translucency, soft shadows, refined hover and press states everywhere (never a layout shift)
@@ -260,11 +264,13 @@ Package for Linux — builds an **AppImage** and a **.deb** (targets defined in 
 npm run build:linux
 ```
 
-The packages are optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and every non-English Electron locale is stripped from the package (about 46 MB lighter unpacked) while keeping full functionality. The Windows installer comes out **around 80 MB**; the Linux AppImage and .deb land **around 90 MB** each.
+The packages are optimized for size — only true runtime dependencies (`music-metadata`) ship inside the app package, the renderer bundle is fully produced by Vite at build time, and every non-English Electron locale is stripped from the package while keeping full functionality. Packaging size methodology and measurements live in `docs/PERFORMANCE_REPORT.md`.
 
 ---
 
 # 🕘 Version History
+
+> v4.0.0 — **The workstation & identity wave.** The Audio Studio became a real audio workstation: a **Signal Chain strip** shows every stage's true state with live gain-reduction meters on the compressor and limiter (read straight from the nodes); the **Equalizer gained its real transfer-response curve** — computed with the exact RBJ biquad formulas Web Audio implements, from the actual settings, with the live spectrum floating underneath as a ghost — and a **measurement bench**: log-frequency spectrum with peak-hold, L/R RMS+peak output meters with proper ballistics on a dB scale, and a stereo field panel (correlation meter + goniometer) driven by a read-only L/R tap off the master gain. All live panels share one animation loop that drops to ~20 fps in Performance Mode, and every panel recolors through new `--viz-*` theme tokens so all ten identities play their own instrument panel. **Sidebar 4.0**: the navigation was re-architected into grouped sections (Discover / Your Music / Listening & Tools) with a playlists section of its own, and the collapsed state became a designed 56px rail — brand mark, accent import action, icon stacks with hairline separators, a playlists dropdown, and the now-playing artwork chip — with tooltips, roving keyboard focus and the travelling gel pill in both states. **Theme Engine 4.0**: ten complete identities (Aurora, Ember, Abyss, Vector, Nebula, Verdant, Obsidian, Solstice, Cryo, Sakura) each carry a bespoke SVG emblem in the picker, designed brightness (five dark / five light), and appearance-aware legacy migration; the old twelve-preset list is fully migrated. Under the hood: the response math is a pure module (`lib/eqResponse.ts`) with 10 new unit tests (flat = 0 dB everywhere, presets land at their design values, gates flatten honestly, shelves hit their corners), the studio's response is cached by settings key so the live ghost redraws cost one polyline stroke, and the analyzer data path allocates nothing per frame. Verified: `tsc -b` clean, production build, **22/22 unit suites**, and a headless browser session (first-launch → Studio → presets → bypass → theme switch → collapsed rail) with zero console errors.
 
 > v3.2.1 — **The stability & efficiency wave.** A focused optimization release on top of the unchanged 3.2.0 feature set. **Fixed**: dragging a *folder* onto the window now imports it again — the drag-drop resolver passed an unresolved scan promise to the importer, so every folder drop threw (`TypeError`) and silently did nothing; loose file drops were unaffected. **Main process de-blocking**: the `aura://` media/cover-art protocol handler now stats files asynchronously instead of running two synchronous filesystem calls per request on the main thread; cover-art caching during large imports writes asynchronously (`wx`, skip-if-cached semantics preserved); the mini player's position file is debounced instead of being re-written synchronously on every drag step; all window/dialog IPC handlers tolerate a mid-teardown window. **Renderer**: library import dedupe is now Set-based and idempotent — importing a 2,000-file batch into a 5,000-song library drops the dedupe cost from ~21 ms to <1 ms (measured; ~140× on a 20k×20k worst case, byte-identical output); the window-state listener is properly unsubscribed. **Packaging**: four runtime-unused `public/` copies (the 404 KB installer icon, the Linux icon PNG, and two unused SVGs) no longer ship inside the app — the packaged `app.asar` shrank from 2,185,722 to 1,655,327 bytes (−518 KB, −24.3%) with the installer, window icon and file associations untouched. **Dependency hygiene**: `music-metadata` bumped within the same major (11.13 → 11.16.1) to clear GHSA crafted-file parsing advisories; `npm audit` (runtime deps) is now clean. **Verified**: `tsc -b`, production build, 19/19 unit suites (18 existing + 8 new regression tests in `scripts/v321_optimization.test.ts`), and a headless CDP smoke probe of the *packaged* app on Linux — zero renderer console errors, interactive in ~275 ms (baseline ~298 ms, same machine/method). Windows installer sizing still requires a Windows host (see `docs/PERFORMANCE_REPORT.md`).
 
@@ -337,10 +343,12 @@ src/
  │                 #   HistoryPage, SmartPlaylists, ArtistPage, AlbumPage
  ├── store/        # Zustand stores — playerStore (playback/library/queue), toastStore, uiStore, radioStore
  │                 #   + domain stores: notesStore, artworkStore, userPrefsStore (separately persisted)
- ├── styles/       # tokens.css (design tokens) + themes.css (8 theme identities)
+ ├── theme/        # Theme Engine — registry (10 identities), DOM application, picker emblems, types
+ ├── styles/       # tokens.css (design tokens + studio visualization family) + themes.css (10 theme identities)
  ├── types/        # Shared TS types, incl. the ElectronAPI contract
  └── lib/          # Pure modules — playbackController (audio engine + FX chain), queueEngine, sort, eq,
-                   #   audioFx, radioMusic, search, smartEngine, smartQueue, rewind, scrobbleStore, ...
+                   #   eqResponse (RBJ chain response math), audioFx, radioMusic, search, smartEngine,
+                   #   smartQueue, rewind, scrobbleStore, ...
 
 electron/
  ├── main.cjs      # Main process — window, IPC handlers, fs watchers, file associations,
@@ -348,16 +356,6 @@ electron/
  ├── findinfo.cjs  # Keyless metadata lookup (Deezer / iTunes / MusicBrainz), scored + merged
  └── preload.cjs   # contextBridge — the only surface the renderer can reach into Node with
 ```
-
----
-
-# 📸 Screenshots
-
-![Home](./docs/sc2.png)
-![Preview](./docs/sc5.png)
-![PlayList](./docs/sc1.png)
-![Setting](./docs/sc3.png)
-![Setting](./docs/sc4.png)
 
 ---
 

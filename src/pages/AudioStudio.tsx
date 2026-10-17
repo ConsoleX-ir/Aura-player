@@ -4,23 +4,23 @@ import { isFlat as isFlatEq } from '@/lib/eq'
 import { MasterCard, isStudioNeutral } from '@/components/Studio/MasterCard'
 import { EqualizerCard } from '@/components/Studio/EqualizerCard'
 import { AudioFxCard } from '@/components/Studio/AudioFxCard'
+import { ChainStrip } from '@/components/Studio/ChainStrip'
+import { StudioAnalysis } from '@/components/Studio/StudioAnalysis'
 
-// ── Audio Studio (Aura 3.2.0) ───────────────────────────────────────────────
-// The dedicated audio workspace — a real Sidebar destination, not a Settings
-// subsection. Sections:
-//
-//   Audio Studio
-//   ├── Master      — preamp, balance, output limiter
-//   ├── Equalizer   — 10-band graphic EQ + built-in & custom curves
-//   └── Effects     — bass / treble / compression / reverb / stereo width
-//       + Bypass & Reset live in the page header (spec §5.1's "Reset/Bypass")
+// ── Audio Studio (4.0.0 — the workstation) ───────────────────────────────────
+// A real audio workspace laid out like one: the SIGNAL FLOW at the top (the
+// chain strip — every stage's true state, live gain reduction under the two
+// dynamics stages), the tonal core in the middle (Equalizer with its REAL
+// transfer-response curve), the staging controls (Master / Effects), and the
+// measurement bench at the bottom (spectrum, output meters, stereo field —
+// all read from the engine's own nodes, never synthesized).
 //
 // Everything here edits the SAME authoritative playback graph the main
 // player, Playbar and Mini Player use — the studio is a control surface,
-// never a second engine (spec §5.4). All state lives in playerStore as
-// serializable values; runtime AudioNodes stay inside playbackController.
-// The layout language (sections, cards, toggles) is Settings' — the page
-// reads as native to Aura rather than a bolted-on mixing desk.
+// never a second engine. All state lives in playerStore as serializable
+// values; runtime AudioNodes stay inside playbackController. The layout
+// language (sections, cards, toggles) is Settings' — the page reads as
+// native to Aura rather than a bolted-on mixing desk.
 
 export function AudioStudio() {
   const studioBypass = usePlayerStore((s) => s.studioBypass)
@@ -51,7 +51,7 @@ export function AudioStudio() {
   return (
     <div className="h-full overflow-y-auto px-7 py-6">
       {/* Header — title, live status, and the two global controls */}
-      <div className="flex items-start justify-between gap-4 mb-6 max-w-2xl">
+      <div className="flex items-start justify-between gap-4 mb-6 max-w-5xl">
         <div className="min-w-0">
           <h1
             className="text-2xl font-semibold tracking-tight flex items-center gap-2.5"
@@ -61,7 +61,7 @@ export function AudioStudio() {
             Audio Studio
           </h1>
           <p className="text-xs mt-1.5" style={{ color: 'var(--text-tertiary)' }}>
-            Shape the sound of everything Aura plays — one live signal chain, applied in real time.
+            Shape the sound of everything Aura plays — one live signal chain, measured in real time.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -95,7 +95,7 @@ export function AudioStudio() {
       </div>
 
       {/* Live status pill — what the engine is actually doing right now */}
-      <div className="max-w-2xl mb-5">
+      <div className="max-w-5xl mb-4">
         <span
           data-studio-status
           role="status"
@@ -119,17 +119,29 @@ export function AudioStudio() {
         </span>
       </div>
 
-      <div className="max-w-2xl space-y-8">
-        <StudioSection title="Master">
-          <MasterCard bypassed={studioBypass} />
+      {/* ── The workstation ─────────────────────────────────────────────── */}
+      <div className="max-w-5xl space-y-6 pb-8">
+        {/* Signal flow — the chain as the engine holds it right now */}
+        <StudioSection title="Signal Chain">
+          <ChainStrip bypassed={studioBypass} />
         </StudioSection>
 
+        {/* Tonal core — the EQ with its real transfer-response curve */}
         <StudioSection title="Equalizer">
           <EqualizerCard bypassed={studioBypass} />
         </StudioSection>
 
-        <StudioSection title="Effects">
-          <AudioFxCard bypassed={studioBypass} />
+        {/* Staging — master levels and the effects rack, side by side */}
+        <StudioSection title="Staging">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+            <MasterCard bypassed={studioBypass} />
+            <AudioFxCard bypassed={studioBypass} />
+          </div>
+        </StudioSection>
+
+        {/* Measurement bench — spectrum, output, stereo field */}
+        <StudioSection title="Analysis">
+          <StudioAnalysis bypassed={studioBypass} />
         </StudioSection>
       </div>
     </div>

@@ -40,6 +40,7 @@ import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
 import { sanitizeFx, BASS_SHELF_HZ, TREBLE_SHELF_HZ, compressionParams } from '@/lib/audioFx'
 import { clampPreampDb, clampBalance, limiterEngagedParams, limiterNeutralParams } from '@/lib/audioStudio'
+import { chainResponseDb } from '@/lib/eqResponse'
 import { toast } from '@/store/toastStore'
 
 // ── Module state (singleton — the app has exactly one audio engine) ─────────
@@ -81,6 +82,22 @@ let fxIrGenerated = false
 // (Same export shape useAudio exposed in v1.x, so existing consumers keep
 // working unchanged.)
 export const audioAnalyserRef: { current: AnalyserNode | null } = { current: null }
+
+// ── Studio 4.0 analysis tap ─────────────────────────────────────────────────
+// Stereo analysis for the Audio Studio's correlation / L / R meters. Built
+// ONCE at init as a leaf branch off the master gain (gain → splitter → two
+// small analysers that go nowhere) — the audible path is untouched, the
+// branch carries no duplicate of the main analyser, and unread analysers
+// cost nothing. The Studio page merely READS these while it is mounted.
+// Post-gain placement is deliberate: the meters show the output the user
+// actually hears (volume, fades, balance and width all included).
+let tapL: AnalyserNode | null = null
+let tapR: AnalyserNode | null = null
+
+/** L/R time-domain analysers for the Studio meters (null before init). */
+export function getStereoTap(): { L: AnalyserNode; R: AnalyserNode } | null {
+  return tapL && tapR ? { L: tapL, R: tapR } : null
+}
 
 // Generation token for track loads — see doPlay().
 let loadGeneration = 0
@@ -262,6 +279,16 @@ export function initPlayback() {
   limiter.connect(gainNode)
   gainNode.connect(analyserNode)
   analyserNode.connect(ctx.destination)
+
+  // Studio 4.0 — the analysis tap (leaf branch off the master gain; see the
+  // note above tapL/tapR). 1024-point time-domain reads are plenty for meter
+  // ballistics and keep the per-frame copy small while the Studio is open.
+  const tapSplitter = ctx.createChannelSplitter(2)
+  tapL = ctx.createAnalyser(); tapR = ctx.createAnalyser()
+  tapL.fftSize = 1024; tapR.fftSize = 1024
+  gainNode.connect(tapSplitter)
+  tapSplitter.connect(tapL, 0)
+  tapSplitter.connect(tapR, 1)
 
   gainNode.gain.value = usePlayerStore.getState().volume
   audioAnalyserRef.current = analyserNode
@@ -490,13 +517,59 @@ export function initPlayback() {
   // Stats schema marker — fire-and-forget, purely for future migrations.
   ensureStatsSchemaMeta()
 
-  // Exposed for Wave 3's EQ UI (not used anywhere yet — reserved).
+  // eqBands stays resident for the Studio's real response readouts
+  // (getChainFrequencyResponse reads the live filters directly).
   void eqBands
 }
 
 /** Direct analyser access for render loops (VisualizerPanel etc.). */
 export function getAnalyser(): AnalyserNode | null {
   return analyserNode
+}
+
+// ── Studio 4.0 — real measurements (read-only; the graph is never touched) ──
+
+/**
+ * The chain's true magnitude response, in dB, at each frequency in `freqs`.
+ *
+ * Computed with the exact RBJ biquad formulas WebAudio implements, from the
+ * REAL settings the engine is driven by (store gains/preamp/shelves + the
+ * eqEnabled/bypass gates + the live sample rate). Deliberately NOT a read of
+ * the live BiquadFilterNodes: while the AudioContext is suspended (nothing
+ * has played yet), scheduled setTargetAtTime values have not landed on the
+ * node params, so a node read would show a transparent chain while the
+ * user's freshly shaped curve is real. The math response is the settled
+ * truth the graph glides to — display and settings can never disagree.
+ * The compressor/limiter stages are time-domain processors with no static
+ * magnitude response; their live action shows in the chain strip's gain-
+ * reduction meters instead.
+ * Returns null before init (the Studio treats that as "no curve yet").
+ */
+export function getChainFrequencyResponse(freqs: Float32Array<ArrayBuffer>): Float32Array | null {
+  if (!ctx || eqBands.length === 0) return null
+  const s = usePlayerStore.getState()
+  const fx = sanitizeFx(s.audioFx)
+  return chainResponseDb(freqs, {
+    eqGains: sanitizeGains(s.eqGains),
+    eqEnabled: eqEnabledState,
+    bypass: bypassState,
+    preampDb: clampPreampDb(s.preampDb),
+    bassGain: fx.bassGain,
+    trebleGain: fx.trebleGain,
+    sampleRate: ctx.sampleRate,
+  })
+}
+
+/**
+ * Live gain reduction of the two DynamicsCompressors, in dB (negative
+ * numbers — a value of −3 means the stage is currently pulling the level
+ * down 3 dB). Zero when idle. Real values read straight off the nodes.
+ */
+export function getDynamicsReduction(): { comp: number; limiter: number } {
+  return {
+    comp: fxComp ? fxComp.reduction : 0,
+    limiter: limiterNode ? limiterNode.reduction : 0,
+  }
 }
 
 // ── EQ (Wave 3) ─────────────────────────────────────────────────────────────
