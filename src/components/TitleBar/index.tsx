@@ -61,7 +61,7 @@ export function TitleBar() {
           hoverVeil="var(--glass-3)"
           hoverColor="var(--text-primary)"
         >
-          <Keyboard size={11} strokeWidth={2.2} />
+          <Keyboard size={13} strokeWidth={2.2} />
         </TitleBarButton>
         <TitleBarButton
           onClick={() => window.electronAPI?.minimize()}
@@ -71,7 +71,7 @@ export function TitleBar() {
           hoverVeil="color-mix(in srgb, var(--warning) 30%, transparent)"
           hoverColor="var(--warning)"
         >
-          <Minus size={10} strokeWidth={2.5} />
+          <Minus size={12} strokeWidth={2.5} />
         </TitleBarButton>
         <TitleBarButton
           onClick={() => window.electronAPI?.maximize()}
@@ -81,7 +81,7 @@ export function TitleBar() {
           hoverVeil="color-mix(in srgb, var(--success) 30%, transparent)"
           hoverColor="var(--success)"
         >
-          {isMaximized ? <Copy size={8} strokeWidth={2.5} /> : <Square size={8} strokeWidth={2.5} />}
+          {isMaximized ? <Copy size={10} strokeWidth={2.5} /> : <Square size={10} strokeWidth={2.5} />}
         </TitleBarButton>
         <TitleBarButton
           onClick={() => window.electronAPI?.close()}
@@ -91,7 +91,7 @@ export function TitleBar() {
           hoverVeil="color-mix(in srgb, var(--danger) 40%, transparent)"
           hoverColor="var(--danger)"
         >
-          <X size={10} strokeWidth={2.5} />
+          <X size={12} strokeWidth={2.5} />
         </TitleBarButton>
       </div>
     </div>

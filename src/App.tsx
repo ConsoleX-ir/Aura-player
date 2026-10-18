@@ -195,15 +195,33 @@ export default function App() {
           accent orbs and all content, never intercepts input. */}
       <div aria-hidden className="theme-deco" />
 
+      {/* ── 4.0.1 App frame — a two-column × two-row grid ─────────────────
+
+              ┌──────────┬────────────────────────────┐
+              │          │                            │
+              │ SIDEBAR  │         MAIN CONTENT       │  row 1
+              │ (spans   │                            │
+              │  both    ├────────────────────────────┤
+              │  rows)   │   DOCKED PLAYER BAR (56px) │  row 2
+              └──────────┴────────────────────────────┘
+
+          The sidebar is a full-height rail — it extends THROUGH the
+          playback bar's row to the bottom of the window — and the bar
+          docks under the main content column only, so the transport
+          centers on the content area, not on the whole window (the old
+          floating pill's awkward offset). The bar is a normal grid row:
+          nothing floats, nothing hides beneath it, and the old 96px
+          bottom padding reservation is gone entirely. In Now Playing the
+          sidebar unmounts; its `auto` column collapses to 0 and both the
+          content and the bar span the full width — no special casing. */}
       <div
-        className="flex flex-1 overflow-hidden"
-        // In Now Playing the immersive artwork backdrop must flow BEHIND the
-        // floating player pill (the page reserves its own clearance below) —
-        // a hard 90px shell padding here used to shear the backdrop off above
-        // the bar and leave a bare strip of root background around the pill.
-        style={{ paddingBottom: isNowPlaying ? 0 : 'var(--spacing-player)' }}
+        className="flex-1 min-h-0 grid"
+        style={{
+          gridTemplateColumns: 'auto minmax(0, 1fr)',
+          gridTemplateRows: 'minmax(0, 1fr) auto',
+        }}
       >
-        {/* Sidebar hidden in Now Playing view */}
+        {/* Sidebar hidden in Now Playing/Properties/Rewind/Explore */}
         <AnimatePresence>
           {!isNowPlaying && !isPropertiesView && !isRewindView && !isExploreView && (
             <motion.div
@@ -212,14 +230,15 @@ export default function App() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -20, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="shrink-0 flex"
+              className="min-h-0 min-w-0"
+              style={{ gridRow: '1 / span 2', gridColumn: '1' }}
             >
               <Sidebar />
             </motion.div>
           )}
         </AnimatePresence>
 
-        <main className="flex-1 overflow-hidden">
+        <main className="min-h-0 min-w-0 overflow-hidden" style={{ gridColumn: 2, gridRow: 1 }}>
           <Suspense fallback={<PageLoadingFallback />}>
           <AnimatePresence mode="wait">
             {isNowPlaying ? (
@@ -380,13 +399,18 @@ export default function App() {
           </AnimatePresence>
           </Suspense>
         </main>
+
+        {/* Docked playback bar — row 2 of the content column. In flow, so
+            content can never be obscured by it (the old floating pill was
+            `fixed` and needed a 96px padding reservation instead). */}
+        <div style={{ gridColumn: 2, gridRow: 2 }}>
+          <PlayerBar />
+        </div>
       </div>
 
-      {/* Player pill — always the main window's bottom bar now. The mini
-          player is a separate desktop window (toggled with P / the pill
-          button / the command palette, or auto-shown on minimize) and no
-          longer replaces anything in here. */}
-      <PlayerBar />
+      {/* Player-bar flyout panels, lifted here so they mount/unmount from
+          the single uiStore.openPanel source (shortcuts + palette + pill
+          all agree). Anchored above the docked bar via --spacing-player. */}
       <PlayerBarPanels />
 
       {/* Global overlays — feedback toasts, the keyboard shortcuts guide,

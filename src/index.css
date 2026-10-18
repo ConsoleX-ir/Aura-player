@@ -69,9 +69,11 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Layout */
-  --spacing-sidebar: 256px;
-  --spacing-player:  90px;
+  /* Layout — 4.0.1: docked rail (sidebar) + docked bottom bar (player).
+     MUST mirror styles/tokens.css (that file is the source of truth). */
+  --spacing-sidebar: 236px;
+  --spacing-player:  64px;
+  --playerbar-height: 56px;
 
   /* Effects */
   --blur-glass: 20px;
@@ -549,22 +551,65 @@ body {
   [data-liquid-tabs] svg { transition: none; }
 }
 
-/* ── Pill Play Bar responsive columns ───────────────────────────────────────
-   The pill keeps 256px info + side columns down to ~960px; below that the
-   side columns slim down, the hint line drops, extra panel buttons fold,
-   and the volume slider shortens — the transport never crowds. Pure CSS:
-   zero resize listeners, zero re-renders. */
-@media (max-width: 960px) {
-  [data-player-bar] .pb-info  { width: 13rem; }
-  [data-player-bar] .pb-side  { width: 13rem; }
-  [data-player-bar] .pb-hint  { display: none; }
+/* ── Docked player bar responsive columns (4.0.1) ─────────────────────────
+   The docked bar is a 3-region grid (info | transport | utilities). As the
+   window narrows: the extra panel buttons fold first, then the info/side
+   columns and the volume slider slim down, then the seek shortens. The
+   transport cluster itself never crowds. Pure CSS: zero resize listeners. */
+@media (max-width: 1120px) {
   [data-player-bar] .pb-extra { display: none; }
-  [data-player-bar] .pb-vol   { width: 4.5rem; }
 }
-@media (max-width: 720px) {
-  [data-player-bar] .pb-info  { width: 9rem; }
+@media (max-width: 960px) {
+  [data-player-bar] .pb-info  { width: 12rem; }
+  [data-player-bar] .pb-side  { width: 12rem; }
+  [data-player-bar] .pb-vol   { width: 4.5rem; }
+  [data-player-bar] .pb-seek  { max-width: 320px; }
+}
+@media (max-width: 760px) {
+  [data-player-bar] .pb-info  { width: 8rem; }
   [data-player-bar] .pb-side  { width: auto; }
   [data-player-bar] .pb-vol   { width: 3rem; }
+  [data-player-bar] .pb-seek  { max-width: 240px; }
+}
+
+/* ── Sidebar nav rows (4.0.1 structural redesign) ───────────────────────
+   State styling lives here (not inline JS hover handlers) so active/hover/
+   focus states are one token-driven vocabulary for both sidebar states.
+   Active = accent-tinted surface + accent icon + the 3px left indicator
+   bar (a separate .aura-nav-glyph span, so no layout shift). */
+.aura-nav-row {
+  position: relative;
+  transition: background-color var(--dur-instant) var(--ease-smooth),
+              color var(--dur-instant) var(--ease-smooth);
+}
+.aura-nav-row:hover {
+  background-color: var(--glass-1);
+}
+.aura-nav-row:active { transform: scale(0.99); }
+.aura-nav-row[data-active='true'] {
+  background-color: var(--accent-dim);
+}
+.aura-nav-row[data-active='true']:hover {
+  background-color: var(--accent-dim);
+}
+.aura-nav-glyph {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-smooth);
+}
+.aura-nav-row[data-active='true'] .aura-nav-glyph { opacity: 1; }
+/* Collapsed rail: the indicator hugs the rail's left edge, full-height dot */
+.aura-nav-rail .aura-nav-glyph { height: 18px; }
+@media (prefers-reduced-motion: reduce) {
+  .aura-nav-row, .aura-nav-glyph { transition: none; }
+  .aura-nav-row:active { transform: none; }
 }
 
 /* ── Theme switch cross-fade (v2.0.0 light mode) ────────────────────────────

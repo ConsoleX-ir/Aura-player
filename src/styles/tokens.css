@@ -227,11 +227,15 @@
 
 /* ── Layout constants (not theme-dependent — live on :root) ────────────── */
 :root {
-  --spacing-sidebar: 256px;
-  /* Wave 3: the player is a floating capsule (72px + 10px bottom offset +
-     breathing room) — content still reserves this space so nothing hides
-     permanently beneath the pill. */
-  --spacing-player:  96px;
+  /* 4.0.1 — the sidebar is a full-height docked rail (no floating-card
+     insets), so the token IS the rail width. */
+  --spacing-sidebar: 236px;
+  /* 4.0.1 — the player is a DOCKED bottom bar (56px, in normal grid flow,
+     no floating pill, nothing hidden beneath it). Flyout panels and toasts
+     anchor above it through this clearance token (bar 56px + 8px gap). */
+  --spacing-player:  64px;
+  /* The docked bar's own height — consumed by the PlayerBar shell. */
+  --playerbar-height: 56px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
