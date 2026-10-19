@@ -109,14 +109,13 @@ export function Sidebar() {
       animate={{ width: collapsed ? 64 : 'var(--spacing-sidebar)' }}
       transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       onKeyDown={onNavKeyDown}
-      className={`h-full flex flex-col overflow-hidden shrink-0 ${collapsed ? 'aura-nav-rail' : ''}`}
+      className={`h-full flex flex-col overflow-hidden shrink-0 sidebar-rail perf-blur ${collapsed ? 'aura-nav-rail' : ''}`}
       style={{
-        // A docked rail, not a floating card: flat column, one right
-        // hairline, and a quiet raised surface the ambient background can
-        // tint through. Every value is token-driven — light mode and every
-        // theme identity remap this automatically.
-        background: 'color-mix(in srgb, var(--surface-raised) 64%, transparent)',
-        borderRight: '1px solid var(--border-subtle)',
+        // v5 layered material: a translucent rail the ambient background
+        // glows softly through (.sidebar-rail owns surface + blur + the
+        // right hairline; .perf-blur swaps to an opaque surface when the
+        // user trades blur for speed). Token-driven — every theme identity
+        // and light mode remap it automatically.
       }}
     >
       <SidebarHeader collapsed={collapsed} onToggle={toggleCollapsed} />
@@ -424,12 +423,15 @@ function RailDivider() {
 /** Aura brand chip — the equalizer glyph wearing the live accent. */
 function BrandMark({ size = 28 }: { size?: number }) {
   return (
+    // v5 — the brand chip gets the liquid treatment: an accent-gradient
+    // fill under a top sheen, so the mark reads as lit glass rather than
+    // a flat tile. Pure static CSS; Performance Mode costs nothing.
     <div
-      className="rounded-[9px] flex items-center justify-center shrink-0"
+      className="chrome-sheen rounded-[9px] flex items-center justify-center shrink-0 overflow-hidden"
       style={{
         width: size,
         height: size,
-        background: 'var(--accent-dim)',
+        background: 'linear-gradient(150deg, var(--accent-veil), transparent 55%), var(--glass-2)',
         border: '1px solid var(--accent-border)',
         boxShadow: '0 0 14px var(--accent-whisper)',
       }}

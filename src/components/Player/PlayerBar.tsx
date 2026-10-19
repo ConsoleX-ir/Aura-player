@@ -131,25 +131,35 @@ export function PlayerBar() {
   }
 
   return (
+    // v5 — the bar is a FLOATING GLASS SLAB, still docked in normal grid
+    // flow (the 4.0.1 guarantee stands: nothing floats over content, the
+    // layout reservation is exactly the slab's height + inset), but now
+    // with the layered liquid-chrome material: 18px radius, top sheen,
+    // accent-tinted hairline, elevation shadow.
     <motion.div
       initial={{ y: 12, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
       className="relative w-full"
-      style={{ height: 'var(--playerbar-height)' }}
+      style={{
+        height: 'calc(var(--playerbar-height) + var(--playerbar-inset))',
+        paddingLeft: 'var(--playerbar-inset)',
+        paddingRight: 'var(--playerbar-inset)',
+        paddingBottom: 'var(--playerbar-inset)',
+      }}
       data-player-bar
     >
       <div
-        className="perf-blur relative h-full w-full grid items-center"
+        className="perf-blur chrome-sheen playerbar-slab relative grid items-center h-[var(--playerbar-height)] w-full"
         style={{
           gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
           columnGap: 12,
           paddingLeft: 12,
           paddingRight: 12,
-          // Docked chrome: near-opaque surface under ONE hairline separator.
-          // Token-driven — every theme (and light mode) remaps this for free.
-          background: 'color-mix(in srgb, var(--surface-chrome) 88%, transparent)',
-          borderTop: '1px solid var(--border-strong)',
+          // Liquid chrome: translucent material + blur + accent-tinted
+          // hairline (v5). Token-driven — every theme remaps it for free.
+          background: 'var(--surface-chrome)',
+          border: '1px solid var(--chrome-hairline)',
           backdropFilter: 'blur(var(--blur-chrome)) saturate(1.15)',
           WebkitBackdropFilter: 'blur(var(--blur-chrome)) saturate(1.15)',
         }}

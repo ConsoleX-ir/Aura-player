@@ -68,6 +68,10 @@
   --shadow-2: 0 8px 24px rgba(1, 9, 7, 0.55);
   --shadow-3: 0 24px 64px rgba(1, 9, 7, 0.60);
   --shadow-overlay: 0 16px 44px rgba(1, 9, 7, 0.60);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(1, 9, 7, 0.28), 0 2px 8px rgba(1, 9, 7, 0.22);
+  --elev-2: 0 2px 6px rgba(1, 9, 7, 0.30), 0 12px 32px rgba(1, 9, 7, 0.30);
+  --elev-3: 0 4px 12px rgba(1, 9, 7, 0.32), 0 28px 72px rgba(1, 9, 7, 0.42);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -113,6 +117,10 @@
   --shadow-2: 0 8px 24px rgba(62, 34, 14, 0.13);
   --shadow-3: 0 24px 64px rgba(62, 34, 14, 0.15);
   --shadow-overlay: 0 16px 44px rgba(62, 34, 14, 0.17);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(62, 34, 14, 0.28), 0 2px 8px rgba(62, 34, 14, 0.22);
+  --elev-2: 0 2px 6px rgba(62, 34, 14, 0.30), 0 12px 32px rgba(62, 34, 14, 0.30);
+  --elev-3: 0 4px 12px rgba(62, 34, 14, 0.32), 0 28px 72px rgba(62, 34, 14, 0.42);
 
   /* Amber-mist ambient */
   --aura-cloud-500: #C79E76;
@@ -158,6 +166,10 @@
   --shadow-2: 0 8px 24px rgba(0, 2, 6, 0.60);
   --shadow-3: 0 24px 64px rgba(0, 2, 6, 0.65);
   --shadow-overlay: 0 16px 44px rgba(0, 2, 6, 0.65);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(0, 2, 6, 0.28), 0 2px 8px rgba(0, 2, 6, 0.22);
+  --elev-2: 0 2px 6px rgba(0, 2, 6, 0.30), 0 12px 32px rgba(0, 2, 6, 0.30);
+  --elev-3: 0 4px 12px rgba(0, 2, 6, 0.32), 0 28px 72px rgba(0, 2, 6, 0.42);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -199,6 +211,10 @@
   --shadow-2: 0 6px 20px rgba(15, 18, 24, 0.10);
   --shadow-3: 0 20px 56px rgba(15, 18, 24, 0.12);
   --shadow-overlay: 0 14px 40px rgba(15, 18, 24, 0.14);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(15, 18, 24, 0.28), 0 2px 8px rgba(15, 18, 24, 0.22);
+  --elev-2: 0 2px 6px rgba(15, 18, 24, 0.30), 0 12px 32px rgba(15, 18, 24, 0.30);
+  --elev-3: 0 4px 12px rgba(15, 18, 24, 0.32), 0 28px 72px rgba(15, 18, 24, 0.42);
 
   /* Silver-mist ambient */
   --aura-cloud-500: #9AA6B5;
@@ -249,6 +265,10 @@
   --shadow-2: 0 8px 24px rgba(3, 2, 8, 0.60);
   --shadow-3: 0 24px 64px rgba(3, 2, 8, 0.65);
   --shadow-overlay: 0 16px 44px rgba(3, 2, 8, 0.65);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(15, 18, 24, 0.28), 0 2px 8px rgba(15, 18, 24, 0.22);
+  --elev-2: 0 2px 6px rgba(15, 18, 24, 0.30), 0 12px 32px rgba(15, 18, 24, 0.30);
+  --elev-3: 0 4px 12px rgba(15, 18, 24, 0.32), 0 28px 72px rgba(15, 18, 24, 0.42);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -282,6 +302,10 @@
   --shadow-2: 0 8px 24px rgba(1, 7, 3, 0.55);
   --shadow-3: 0 24px 64px rgba(1, 7, 3, 0.60);
   --shadow-overlay: 0 16px 44px rgba(1, 7, 3, 0.60);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(3, 2, 8, 0.28), 0 2px 8px rgba(3, 2, 8, 0.22);
+  --elev-2: 0 2px 6px rgba(3, 2, 8, 0.30), 0 12px 32px rgba(3, 2, 8, 0.30);
+  --elev-3: 0 4px 12px rgba(3, 2, 8, 0.32), 0 28px 72px rgba(3, 2, 8, 0.42);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -316,6 +340,10 @@
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.60);
   --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.65);
   --shadow-overlay: 0 16px 44px rgba(0, 0, 0, 0.65);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(1, 7, 3, 0.28), 0 2px 8px rgba(1, 7, 3, 0.22);
+  --elev-2: 0 2px 6px rgba(1, 7, 3, 0.30), 0 12px 32px rgba(1, 7, 3, 0.30);
+  --elev-3: 0 4px 12px rgba(1, 7, 3, 0.32), 0 28px 72px rgba(1, 7, 3, 0.42);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -358,6 +386,10 @@
   --shadow-2: 0 8px 24px rgba(112, 72, 20, 0.12);
   --shadow-3: 0 24px 64px rgba(112, 72, 20, 0.14);
   --shadow-overlay: 0 16px 44px rgba(112, 72, 20, 0.16);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.22);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, 0.30), 0 12px 32px rgba(0, 0, 0, 0.30);
+  --elev-3: 0 4px 12px rgba(0, 0, 0, 0.32), 0 28px 72px rgba(0, 0, 0, 0.42);
 
   /* Golden ambient */
   --aura-cloud-500: #F2CD88;
@@ -410,6 +442,10 @@
   --shadow-2: 0 8px 24px rgba(30, 58, 84, 0.12);
   --shadow-3: 0 24px 64px rgba(30, 58, 84, 0.14);
   --shadow-overlay: 0 16px 44px rgba(30, 58, 84, 0.16);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(112, 72, 20, 0.28), 0 2px 8px rgba(112, 72, 20, 0.22);
+  --elev-2: 0 2px 6px rgba(112, 72, 20, 0.30), 0 12px 32px rgba(112, 72, 20, 0.30);
+  --elev-3: 0 4px 12px rgba(112, 72, 20, 0.32), 0 28px 72px rgba(112, 72, 20, 0.42);
 
   /* Ice-mist ambient */
   --aura-cloud-500: #B5D9EA;
@@ -463,6 +499,10 @@
   --shadow-2: 0 8px 24px rgba(88, 52, 62, 0.12);
   --shadow-3: 0 24px 64px rgba(88, 52, 62, 0.14);
   --shadow-overlay: 0 16px 44px rgba(88, 52, 62, 0.16);
+  /* v5 liquid material: elevation ladder rides the theme shadow tint */
+  --elev-1: 0 1px 2px rgba(30, 58, 84, 0.28), 0 2px 8px rgba(30, 58, 84, 0.22);
+  --elev-2: 0 2px 6px rgba(30, 58, 84, 0.30), 0 12px 32px rgba(30, 58, 84, 0.30);
+  --elev-3: 0 4px 12px rgba(30, 58, 84, 0.32), 0 28px 72px rgba(30, 58, 84, 0.42);
 
   /* Blush ambient */
   --aura-cloud-500: #EFC6D2;

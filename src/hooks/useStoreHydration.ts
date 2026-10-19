@@ -3,6 +3,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useNotesStore } from '@/store/notesStore'
 import { useArtworkStore } from '@/store/artworkStore'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
+import { useRadioStore } from '@/store/radioStore'
 import { markHydrationComplete } from '@/lib/idbStorage'
 
 /* ── Store hydration gate ────────────────────────────────────────────────────
@@ -20,12 +21,18 @@ import { markHydrationComplete } from '@/lib/idbStorage'
    Aura 3.0 (Wave 1): the app now has FOUR persisted stores — the main
    player store plus the notes / artwork / user-prefs domain stores. The
    gate waits for ALL of them (cheap — same shared IndexedDB) so a view
-   can never observe a hydrated library but default-valued notes/prefs. */
+   can never observe a hydrated library but default-valued notes/prefs.
+
+   v5: the radio-favorites store joined the persisted family in 2.6 but
+   was missing here — a pre-hydration write of THAT key could still slip
+   past the gate. It now waits for every persisted store, so the Wave 0
+   "no pre-hydration write reaches disk" invariant holds structurally. */
 const PERSISTED_STORES = [
   usePlayerStore,
   useNotesStore,
   useArtworkStore,
   useUserPrefsStore,
+  useRadioStore,
 ] as const
 
 function allHydrated(): boolean {

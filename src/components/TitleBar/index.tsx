@@ -18,7 +18,7 @@ export function TitleBar() {
   }, [])
 
   return (
-    <div className="titlebar-drag h-9 flex items-center justify-between px-4 shrink-0 perf-blur"
+    <div className="titlebar-drag chrome-sheen h-9 flex items-center justify-between pl-4 pr-3 shrink-0 perf-blur"
       style={{
         borderBottom: '1px solid var(--border-subtle)',
         background: 'color-mix(in srgb, var(--surface-raised) 55%, transparent)',
@@ -26,14 +26,19 @@ export function TitleBar() {
       }}
     >
       <div className="titlebar-no-drag flex items-center gap-2">
-        {/* Aura brand mark — the equalizer glyph, wearing the live accent */}
+        {/* v5 — the titlebar brand chip mirrors the sidebar's liquid mark:
+            accent-lit equalizer glyph under the shared sheen, so the two
+            chips read as one object that moved, not two designs. */}
         <div
-          className="w-5 h-5 rounded-md flex items-center justify-center"
-          style={{ background: 'var(--glass-3)', border: '1px solid var(--border-strong)' }}
+          className="chrome-sheen overflow-hidden w-5 h-5 rounded-md flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(150deg, var(--accent-veil), transparent 60%), var(--glass-2)',
+            border: '1px solid var(--accent-border)',
+          }}
         >
           <div className="flex items-end gap-[1.5px] h-3">
             {[2, 3, 4, 3, 2].map((h, i) => (
-              <div key={i} className="w-[2px] rounded-full" style={{ height: h * 3, background: 'var(--text-primary)', opacity: 0.7 }} />
+              <div key={i} className="w-[2px] rounded-full" style={{ height: h * 3, background: 'var(--accent)', opacity: 0.85 }} />
             ))}
           </div>
         </div>

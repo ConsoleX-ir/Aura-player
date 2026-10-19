@@ -231,6 +231,7 @@ export function LocalMusic() {
               placeholder="Search this device's music, or try artist: album: genre: year:…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              data-library-search
               className="w-full pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-all"
               style={{
                 background: 'var(--glass-1)',

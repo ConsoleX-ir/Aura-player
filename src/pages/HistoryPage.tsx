@@ -107,6 +107,7 @@ export function HistoryPage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search title, artist, album…"
               aria-label="Search history"
+              data-library-search
               className="w-full pl-9 pr-3 py-2 rounded-xl text-sm outline-none"
               style={{ background: 'var(--glass-1)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
             />

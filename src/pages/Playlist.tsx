@@ -20,6 +20,8 @@ export function PlaylistPage() {
   const playSong = usePlayerStore((s) => s.playSong)
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle)
   const deletePlaylist = usePlayerStore((s) => s.deletePlaylist)
+  // v5 — reorder songs inside the playlist (row chevrons / ⋯ menu).
+  const moveInPlaylist = usePlayerStore((s) => s.moveInPlaylist)
 
   const playlist = playlists.find((p) => p.id === selectedPlaylistId)
   const songs = (playlist?.songIds ?? []).map((id) => library.find((s) => s.id === id)).filter(Boolean) as typeof library
@@ -181,6 +183,7 @@ export function PlaylistPage() {
             queue={songs}
             playlistId={playlist.id}
             className="h-full overflow-y-auto px-7 pb-4"
+            onMove={(from, to) => moveInPlaylist(playlist.id, from, to)}
           />
         )}
       </div>

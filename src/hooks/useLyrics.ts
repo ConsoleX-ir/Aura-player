@@ -35,7 +35,13 @@ export function useLyrics(song: Song | null) {
     // *after* the current song's fetch and overwrite its lyrics with stale
     // data. The cleanup below flips this before the next effect run starts,
     // so a late response from an abandoned fetch is silently ignored.
+    //
+    // v5 fix: the guard now also ABORTS the in-flight request (an
+    // AbortController) instead of only ignoring its result — skipping
+    // through a long queue no longer lets up to two stale lrclib.net
+    // downloads finish in the background for songs nobody is looking at.
     let cancelled = false
+    const controller = new AbortController()
 
     setLoading(true)
     setLines([])
@@ -53,11 +59,11 @@ export function useLyrics(song: Song | null) {
       duration:    String(dur),
     })
 
-    fetch(`https://lrclib.net/api/get?${params}`)
+    fetch(`https://lrclib.net/api/get?${params}`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) {
           // Try again without album/duration as fallback
-          return fetch(`https://lrclib.net/api/get?${new URLSearchParams({ artist_name: artist, track_name: title })}`)
+          return fetch(`https://lrclib.net/api/get?${new URLSearchParams({ artist_name: artist, track_name: title })}`, { signal: controller.signal })
         }
         return r
       })
@@ -67,10 +73,13 @@ export function useLyrics(song: Song | null) {
         if (data.syncedLyrics) setLines(parseLrc(data.syncedLyrics))
         else if (data.plainLyrics) setPlain(data.plainLyrics)
       })
-      .catch(() => { /* no lyrics */ })
+      .catch(() => { /* no lyrics, or aborted */ })
       .finally(() => { if (!cancelled) setLoading(false) })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [song?.id])
 
   return { lines, plain, loading }

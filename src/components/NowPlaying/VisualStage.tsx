@@ -14,7 +14,7 @@ import { usePlayerStore } from '@/store/playerStore'
 //   • ONE canvas, DPR-aware, sized by a ResizeObserver (no per-frame layout).
 //   • The rAF loop runs ONLY while the stage is mounted AND the track is
 //     playing; paused/unmount draws one resting frame and stops — zero
-//     continuous work when idle (same rule as AuraPulse).
+//     continuous work when idle.
 //   • Accent colors are CSS-var reads cached and refreshed ~2×/s inside the
 //     loop (not per frame).
 //   • Performance Mode / prefers-reduced-motion: draw ONE calm rest frame,

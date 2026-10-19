@@ -22,11 +22,32 @@ export function useMediaShortcuts() {
   // it's a chord, not a stray keypress, and being able to summon the palette
   // from inside any input is what makes it a real "do anything" surface.
   // Everything else in this hook stays text-input-safe.
+  //
+  // v5 — Ctrl+F: focus the Library search when a Library-family view is
+  // on screen. Like Ctrl+K it's a chord, so it also works while typing.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.code === "KeyK") {
         e.preventDefault();
         useUiStore.getState().toggleCommand();
+        return;
+      }
+      // Ctrl+F — search where you are. Only hijacks the browser's find
+      // when a search field actually exists to receive the focus; plain
+      // browser find stays untouched everywhere else. (Plain "/" stays
+      // with the shortcuts guide — HelpModal owns it; one key, one
+      // meaning.)
+      const isSearchableView = ["library", "favorites", "local", "history"].includes(
+        usePlayerStore.getState().activeView,
+      );
+      if (!isSearchableView) return;
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyF") {
+        const field = document.querySelector<HTMLInputElement>("[data-library-search]");
+        if (field) {
+          e.preventDefault();
+          field.focus();
+          field.select();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);

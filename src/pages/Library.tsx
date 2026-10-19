@@ -307,6 +307,7 @@ export function Library() {
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
           <input type="text" placeholder="Search, or try artist: album: genre: year:…"
             value={search} onChange={(e) => setSearch(e.target.value)}
+            data-library-search
             className="w-full pl-9 pr-9 py-2 rounded-xl text-sm outline-none transition-all"
             style={{
               background: 'var(--glass-1)',
@@ -314,8 +315,18 @@ export function Library() {
               color: 'var(--text-primary)',
               transitionDuration: 'var(--dur-fast)',
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.background = 'var(--glass-2)' }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.background = 'var(--glass-1)' }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = 'var(--accent-border)'
+              e.currentTarget.style.background = 'var(--glass-2)'
+              // v5 — the liquid focus treatment: a soft accent halo, not a
+              // hard outline. Static CSS via inline shadow; removed on blur.
+              e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-whisper)'
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-default)'
+              e.currentTarget.style.background = 'var(--glass-1)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
           />
           {search && (
             <button onClick={() => setSearch('')} title="Clear search" aria-label="Clear search"

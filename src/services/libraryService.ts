@@ -20,6 +20,23 @@ export interface SyncResult { added: number; removed: number; updated: number }
 type ProgressCb = (p: ImportProgress) => void
 
 /**
+ * Separator-aware "is this path inside this folder?" check (v5 fix).
+ * The previous plain `startsWith(folder)` mis-matched sibling folders whose
+ * names share a prefix — `/Music/Rock` claimed every `/Music/Rockabilly`
+ * file, which could both miscount a folder's songs and (dangerously) mark
+ * files "deleted" during a sync of the wrong folder. Normalizing the
+ * separators also makes a Windows-style path match regardless of which
+ * slash flavor each API happened to return.
+ */
+export function isPathInside(path: string, folder: string): boolean {
+  if (!folder) return false
+  const p = path.replace(/\\/g, '/')
+  const f = folder.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (f === '') return p.startsWith('/') // folder is filesystem root
+  return p.startsWith(f + '/')
+}
+
+/**
  * Parses metadata for whichever of the given files aren't already in the
  * library (song IDs are a hash of the file path, so this is a cheap check)
  * and adds the results. Skipping known paths BEFORE parsing — not just
@@ -134,7 +151,7 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
     const tombstones = usePlayerStore.getState().removedPaths
     if (tombstones.length > 0) {
       const staleTombstones = tombstones.filter(
-        (p) => p.startsWith(folder) && !scannedByPath.has(p)
+        (p) => isPathInside(p, folder) && !scannedByPath.has(p)
       )
       if (staleTombstones.length > 0) {
         usePlayerStore.getState().restoreImportedPaths(staleTombstones)
@@ -145,7 +162,7 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
     )
 
     const library = usePlayerStore.getState().library
-    const librarySongsInFolder = library.filter((s) => s.path.startsWith(folder))
+    const librarySongsInFolder = library.filter((s) => isPathInside(s.path, folder))
     const existingByPath = new Map(librarySongsInFolder.map((s) => [s.path, s]))
 
     // A folder that previously had songs but now scans back completely
@@ -166,14 +183,18 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
     // Tombstoned paths (user-deleted from the library) are skipped — that
     // is the whole point of the tombstone: sync reconciles the library
     // with disk, but it must never override an explicit removal decision.
-    const toParse: { path: string; id: string; mtimeMs: number; isUpdate: boolean }[] = []
+    const toParse: { path: string; id: string; mtimeMs: number; isUpdate: boolean; addedAt?: number }[] = []
     for (const file of scanned) {
       if (tombstonedPaths.has(file.path)) continue
       const existing = existingByPath.get(file.path)
       if (!existing) {
         toParse.push({ path: file.path, id: hashStr(file.path), mtimeMs: file.mtimeMs, isUpdate: false })
       } else if (existing.mtimeMs !== file.mtimeMs) {
-        toParse.push({ path: file.path, id: existing.id, mtimeMs: file.mtimeMs, isUpdate: true })
+        // v5 fix: carry the original addedAt through the re-parse so a
+        // changed file keeps its original "entered the library" date —
+        // refreshing it reshuffled the Recently Added sort on every
+        // Folder Sync that merely touched a file's mtime.
+        toParse.push({ path: file.path, id: existing.id, mtimeMs: file.mtimeMs, isUpdate: true, addedAt: existing.addedAt })
       }
     }
 
@@ -201,10 +222,17 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
       toParse.forEach((c, i) => {
         // addedAt (v2.1.0): when the song entered the library — powers the
         // Library's "Recently Added" sort. Set only on first import; a
-        // re-parse of a changed file must not refresh it (that would reshuffle
-        // the user's Recently Added view on every Folder Sync touch). Songs
-        // from before this field existed fall back to mtimeMs at sort time.
-        const song: Song = { id: c.id, path: c.path, mtimeMs: c.mtimeMs, addedAt: now, ...metas[i] }
+        // re-parse of a changed file preserves the original value (v5 fix,
+        // see the toParse collection above). The metadata spread runs FIRST
+        // and the library-owned identity fields are asserted after it, so a
+        // provider/parser can never overwrite them.
+        const song: Song = {
+          ...metas[i],
+          id: c.id,
+          path: c.path,
+          mtimeMs: c.mtimeMs,
+          addedAt: c.isUpdate ? (c.addedAt ?? now) : now,
+        }
         if (c.isUpdate) changedSongs.push(song)
         else newSongs.push(song)
       })

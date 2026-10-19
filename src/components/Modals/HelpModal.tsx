@@ -44,6 +44,8 @@ const SECTIONS: { title: string; rows: ShortcutRow[] }[] = [
     title: 'General',
     rows: [
       { label: 'Command palette — everything, one spot', keys: ['Ctrl', 'K'] },
+      { label: 'Search the current list (Library, Local, History)', keys: ['Ctrl', 'F'] },
+      { label: 'Reorder songs inside a playlist', hint: 'hover a row → ⌃ ⌄' },
       { label: 'Toggle this shortcuts guide',       keys: ['?'] },
       { label: 'Close panels & dialogs',          keys: ['Esc'] },
       { label: 'Play / pause, next & previous from hardware media keys', hint: 'system-wide' },

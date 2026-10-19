@@ -134,10 +134,21 @@ if (!gotSingleInstanceLock) {
   app.on('second-instance', (_event, argv) => {
     const filePath = getFilePathFromArgv(argv)
 
-    if (mainWindow) {
+    // v5 fix: also guard isDestroyed() — on macOS the process can outlive
+    // the main window, and a second launch then sent to a destroyed
+    // webContents ("Object has been destroyed" throw). Recreate the
+    // window instead, matching the activate handler's behavior.
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
       if (filePath) mainWindow.webContents.send('file:opened', filePath)
+    } else {
+      createWindow()
+      if (filePath) {
+        mainWindow?.webContents.once('did-finish-load', () => {
+          mainWindow?.webContents.send('file:opened', filePath)
+        })
+      }
     }
   })
 }
@@ -215,14 +226,27 @@ function scheduleMiniBoundsSave(bounds) {
   }, 500)
 }
 
-/** Is (x, y) plausibly visible on one of the connected displays? */
-function isPointOnAnyDisplay(x, y) {
+/**
+ * v5 fix: is the RECT plausibly visible on one of the connected displays?
+ * The previous check validated only the saved top-left point with ±40px
+ * slack — a widget parked near a right/bottom edge (or a monitor whose
+ * resolution shrank since the last session) could leave most of its 460px
+ * width off-screen. We now require a meaningful overlap: at least 120×56px
+ * of the widget's rect must land inside some display's bounds.
+ */
+function isRectOnAnyDisplay(x, y, width, height) {
   const { screen } = require('electron')
-  return screen.getAllDisplays().some((d) =>
-    x >= d.bounds.x - 40 &&
-    x < d.bounds.x + d.bounds.width - 40 &&
-    y >= d.bounds.y - 40 &&
-    y < d.bounds.y + d.bounds.height - 40)
+  const MIN_W = 120
+  const MIN_H = 56
+  return screen.getAllDisplays().some((d) => {
+    const bx = d.bounds.x
+    const by = d.bounds.y
+    const bw = d.bounds.x + d.bounds.width
+    const bh = d.bounds.y + d.bounds.height
+    const overlapW = Math.min(x + width, bw) - Math.max(x, bx)
+    const overlapH = Math.min(y + height, bh) - Math.max(y, by)
+    return overlapW >= MIN_W && overlapH >= MIN_H
+  })
 }
 
 function miniTargetBounds() {
@@ -231,7 +255,7 @@ function miniTargetBounds() {
   // extra height the seek bar (spec §6: progress, seek, volume).
   const width = 460
   const height = 112
-  if (miniLastBounds && isPointOnAnyDisplay(miniLastBounds.x, miniLastBounds.y)) {
+  if (miniLastBounds && isRectOnAnyDisplay(miniLastBounds.x, miniLastBounds.y, width, height)) {
     return { ...miniLastBounds, width, height }
   }
   // Default anchor: bottom-right of the work area, with a small margin.
@@ -1014,7 +1038,12 @@ ipcMain.handle('fs:parseMetadataBatch', async (event, filePaths) => {
       const i = nextIndex++
       results[i] = await parseOneFile(filePaths[i])
       done++
-      event.sender.send('metadata:progress', done, filePaths.length)
+      // v5 fix: guard the progress send — closing the window mid-import
+      // destroys the webContents and the raw .send threw "Object has been
+      // destroyed", rejecting the whole import batch.
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('metadata:progress', done, filePaths.length)
+      }
     }
   }
 

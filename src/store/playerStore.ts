@@ -61,6 +61,10 @@ interface PlayerState {
   renamePlaylist: (id: string, name: string) => boolean
   addToPlaylist: (playlistId: string, songId: string) => void
   removeFromPlaylist: (playlistId: string, songId: string) => void
+  // v5 — reorder a song within a playlist (drag / keyboard move in the
+  // playlist page). No-ops on out-of-range indices; a no-op never touches
+  // state, so persisted snapshots stay byte-identical.
+  moveInPlaylist: (playlistId: string, from: number, to: number) => void
 
   favorites: string[]
   toggleFavorite: (songId: string) => void
@@ -439,6 +443,18 @@ export const usePlayerStore = create<PlayerState>()(
           p.id === pid ? { ...p, songIds: p.songIds.filter((id) => id !== sid) } : p
         )
       })),
+      moveInPlaylist: (pid, from, to) => set((s) => {
+        if (from === to || from < 0 || to < 0) return s
+        return {
+          playlists: s.playlists.map((p) => {
+            if (p.id !== pid || from >= p.songIds.length || to >= p.songIds.length) return p
+            const ids = [...p.songIds]
+            const [moved] = ids.splice(from, 1)
+            ids.splice(to, 0, moved)
+            return { ...p, songIds: ids }
+          }),
+        }
+      }),
 
       favorites: [],
       toggleFavorite: (songId) => set((s) => ({
@@ -468,7 +484,21 @@ export const usePlayerStore = create<PlayerState>()(
           // this song anchored where it was — the queue view then shows the
           // truth about what plays next.
           const playQueue = shuffle ? shuffledAround(q, song.id) : q
-          set({ currentSong: song, naturalQueue: q, queue: playQueue, queueIndex: idx, isPlaying: true, progress: 0 })
+          // v5 fix: re-invoking the SAME song (double-clicking the current
+          // row, re-picking it from the palette) is a resume intent — the
+          // engine skips the song-changed branch for a matching id and
+          // keeps playing from the paused position, so zeroing the store's
+          // progress here desynced the UI (it showed 0% until the next
+          // timeupdate). Keep the live progress for a same-song replay.
+          const sameSong = get().currentSong?.id === song.id
+          set({
+            currentSong: song,
+            naturalQueue: q,
+            queue: playQueue,
+            queueIndex: idx,
+            isPlaying: true,
+            progress: sameSong ? get().progress : 0,
+          })
         } else {
           // Song isn't part of the given context (e.g. launched from a file
           // association with an empty library). v1.x pointed queueIndex at 0
@@ -496,7 +526,15 @@ export const usePlayerStore = create<PlayerState>()(
           smartRemovedIds: wasSmart ? [...s.smartRemovedIds, removedId] : s.smartRemovedIds,
         }
       }),
-      togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
+      togglePlay: () => set((s) => {
+        // v5 fix: Space with nothing loaded used to flip isPlaying to true
+        // with no audio element behind it — the store state lied, so the
+        // NEXT real playSong would set true again and the following Space
+        // paused instead of playing. A transport toggle without a song is
+        // a no-op; the SMTC handlers already guarded the same way.
+        if (!s.currentSong) return s
+        return { isPlaying: !s.isPlaying }
+      }),
       // LATENT CRASH FIX (Phase 11): declared + consumed by useSleepTimer and
       // useMediaKeys (SMTC pause/play) but never implemented — the sleep
       // timer firing and the SMTC pause/play handlers would throw
@@ -806,7 +844,10 @@ export const usePlayerStore = create<PlayerState>()(
       setSelectedAlbum: (key) => set({ selectedAlbum: key }),
 
       librarySortKey: 'added',
-      librarySortDir: 'asc',
+      // v5 fix: the label says "Recently Added", so the default direction
+      // is descending — the old 'asc' default listed OLDEST first under a
+      // newest-first name.
+      librarySortDir: 'desc',
       libraryViewMode: 'list',
       setLibrarySortKey: (k) => set({ librarySortKey: k }),
       setLibrarySortDir: (d) => set({ librarySortDir: d }),

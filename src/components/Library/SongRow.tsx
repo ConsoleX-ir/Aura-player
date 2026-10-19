@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Play, Heart, MoreHorizontal, ListPlus, ListX, Trash2, FolderOpen, Info, Sparkles, Radio, Mic2, Disc3, ListEnd, ArrowRightToLine } from 'lucide-react'
+import { Play, Heart, MoreHorizontal, ListPlus, ListX, Trash2, FolderOpen, Info, Sparkles, Radio, Mic2, Disc3, ListEnd, ArrowRightToLine, ChevronUp, ChevronDown } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { usePlayerStore } from '@/store/playerStore'
 import { useArtworkStore } from '@/store/artworkStore'
@@ -19,6 +19,12 @@ interface SongRowProps {
   /** When the row is rendered inside a specific playlist's view, this enables
    *  a "Remove from Playlist" action scoped to just that playlist. */
   playlistId?: string
+  /** v5 — playlist reordering: when provided, the row renders move up/down
+   *  controls (hover actions + ⋯ menu). The parent owns index math. */
+  onMove?: (from: number, to: number) => void
+  /** Whether the row can actually move in that direction (edges). */
+  canMoveUp?: boolean
+  canMoveDown?: boolean
 }
 
 // Narrow selectors only — the previous full `usePlayerStore()` destructure
@@ -30,7 +36,7 @@ interface SongRowProps {
 // Selecting individual primitives (and a per-song boolean for `favorites`,
 // rather than the whole array) means each row only re-renders when something
 // about *that row* actually changed.
-export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt = true, playlistId }: SongRowProps) {
+export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt = true, playlistId, onMove, canMoveUp, canMoveDown }: SongRowProps) {
   // Aura 3.0 — artwork override (Wave 11): primitive selector, re-renders
   // only when THIS row's override changes.
   const coverOverride = useArtworkStore((s) => (s.overrides[song.id]?.url ?? null))
@@ -158,6 +164,36 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
           would fade the controls and reset the background, making the open
           menu look orphaned. :has() keeps both anchored while data-state=open. */}
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 has-[button[data-state='open']]:opacity-100 transition-opacity shrink-0">
+        {/* v5 — playlist reordering: quiet chevrons, mirroring the Now Playing
+            queue row's move controls so both surfaces speak one language. */}
+        {onMove && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMove(index, index - 1) }}
+              disabled={!canMoveUp}
+              aria-label={`Move ${song.title} up in playlist`}
+              title="Move up"
+              className="p-1.5 rounded-lg transition-all disabled:opacity-25 disabled:cursor-default"
+              style={{ color: 'var(--text-faint)' }}
+              onMouseEnter={(e) => { if (canMoveUp) e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)' }}
+            >
+              <ChevronUp size={12} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMove(index, index + 1) }}
+              disabled={!canMoveDown}
+              aria-label={`Move ${song.title} down in playlist`}
+              title="Move down"
+              className="p-1.5 rounded-lg transition-all disabled:opacity-25 disabled:cursor-default"
+              style={{ color: 'var(--text-faint)' }}
+              onMouseEnter={(e) => { if (canMoveDown) e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)' }}
+            >
+              <ChevronDown size={12} />
+            </button>
+          </>
+        )}
         <button onClick={(e) => { e.stopPropagation(); toggleFavorite(song.id) }}
           aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
           className="p-1.5 rounded-lg transition-all"
@@ -283,6 +319,28 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
                   <ListX size={13} />
                   Remove from Playlist
                 </DropdownMenu.Item>
+              )}
+
+              {/* v5 — reorder from the menu too, for discoverability. */}
+              {onMove && (
+                <>
+                  <DropdownMenu.Item
+                    onClick={() => onMove(index, index - 1)}
+                    disabled={!canMoveUp}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg outline-none transition-colors"
+                  >
+                    <ChevronUp size={13} />
+                    Move Up
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    onClick={() => onMove(index, index + 1)}
+                    disabled={!canMoveDown}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg outline-none transition-colors"
+                  >
+                    <ChevronDown size={13} />
+                    Move Down
+                  </DropdownMenu.Item>
+                </>
               )}
 
               <DropdownMenu.Item

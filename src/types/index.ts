@@ -230,38 +230,42 @@ export interface ElectronAPI {
   // transport/window actions arrive via onMediaCommand-style funnels. Both
   // windows share one preload, so every method here is optional-guarded at
   // call sites that may run in a plain browser.
-  pushMiniState: (state: {
-    hasSong: boolean
-    title: string
-    artist: string
-    coverArt: string | null
-    isPlaying: boolean
-    progress: number
-    appearance: 'dark' | 'light'
-    /** Aura 3.0 — theme identity + resolved accent vars (artwork-aware). */
-    theme?: string
-    accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
-    /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
-    nextTitle?: string | null
-  }) => void
+  pushMiniState: (state: MiniPlayerSnapshot) => void
   setMiniVisible: (visible: boolean) => void
   miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') => void
   // v3.2.0 — widget-side seek + volume asks (main clamps and forwards).
   miniSeek: (fraction: number) => void
   setMiniVolume: (volume: number) => void
-  onMiniState: (cb: (state: {
-    hasSong: boolean
-    title: string
-    artist: string
-    coverArt: string | null
-    isPlaying: boolean
-    progress: number
-    appearance: 'dark' | 'light'
-    theme?: string
-    accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
-    nextTitle?: string | null
-  }) => void) => () => void
+  onMiniState: (cb: (state: MiniPlayerSnapshot) => void) => () => void
   onMiniVisibility: (cb: (visible: boolean) => void) => () => void
+}
+
+/**
+ * One playback-snapshot frame pushed from the main renderer to the mini
+ * player widget over IPC (v5: a named contract — the bridge has shipped
+ * durationSec/volume/muted/liquidGlass/perf since v3.2 and the old inline
+ * literals had drifted from what actually flies over the wire).
+ */
+export interface MiniPlayerSnapshot {
+  hasSong: boolean
+  title: string
+  artist: string
+  coverArt: string | null
+  isPlaying: boolean
+  progress: number
+  appearance: 'dark' | 'light'
+  /** Aura 3.0 — theme identity + resolved accent vars (artwork-aware). */
+  theme?: string
+  accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
+  /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
+  nextTitle?: string | null
+  /** v3.2.0 — widget-hosted seek bar + volume/mute mirror. */
+  durationSec: number
+  volume: number
+  muted: boolean
+  /** v3.2.0 — Liquid Glass visual mode + Performance Mode flags. */
+  liquidGlass: boolean
+  perf: boolean
 }
 
 declare global {

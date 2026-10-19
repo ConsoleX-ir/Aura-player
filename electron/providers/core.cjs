@@ -126,7 +126,7 @@ const MAX_BODY_BYTES = 10 * 1024 * 1024
  *
  * @returns {Promise<{ status: number, headers: http.IncomingHttpHeaders, body: Buffer, finalUrl: string }>}
  */
-function rawRequest(urlStr, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, signal, method = 'GET' } = {}) {
+function rawRequest(urlStr, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, signal, method = 'GET', _redirectDepth = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const url = new NodeURL(urlStr)
     const isHttps = url.protocol === 'https:'
@@ -138,7 +138,7 @@ function rawRequest(urlStr, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, sign
       port,
       path: url.pathname + url.search,
       method,
-      headers: { 'User-Agent': 'AuraPlayer/3.0.0 (desktop music player)', Accept: 'application/json', ...headers },
+      headers: { 'User-Agent': 'AuraPlayer/5.0.0 (desktop music player)', Accept: 'application/json', ...headers },
       // Manual happy-eyeballs: resolve up-front, v4 first (see file header).
       // NOTE: with autoSelectFamily the caller passes all:true and expects
       // an array of { address, family } — honor opts.all or node throws
@@ -160,19 +160,20 @@ function rawRequest(urlStr, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, sign
       },
     }, (res) => {
       // Redirects (GET/HEAD only — providers never redirect POSTs).
+      // v5 fix: the depth counter rides a per-call parameter instead of a
+      // URL-keyed module-global — two concurrent requests to the same URL
+      // used to share one counter (premature "too many redirects" or
+      // cross-request over-counting).
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location &&
           (method === 'GET' || method === 'HEAD')) {
         res.resume() // drain
         const next = new NodeURL(res.headers.location, urlStr).toString()
-        if (redirectDepth[urlStr] === undefined) redirectDepth[urlStr] = 0
-        if (redirectDepth[urlStr] >= MAX_REDIRECTS) {
+        if (_redirectDepth >= MAX_REDIRECTS) {
           reject(new ProviderFetchError('http', `Too many redirects (> ${MAX_REDIRECTS})`, { status: res.statusCode }))
           return
         }
-        redirectDepth[urlStr]++
-        rawRequest(next, { headers, timeoutMs, signal, method })
+        rawRequest(next, { headers, timeoutMs, signal, method, _redirectDepth: _redirectDepth + 1 })
           .then(resolve, reject)
-          .finally(() => { delete redirectDepth[urlStr] })
         return
       }
 
@@ -219,7 +220,7 @@ function rawRequest(urlStr, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, sign
 }
 
 // Redirect depth tracking per in-flight chain (keyed by first URL).
-const redirectDepth = {}
+// (v5: redirect depth now rides a per-call _redirectDepth parameter)
 
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
   const t = setTimeout(resolve, ms)

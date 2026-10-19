@@ -1,7 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   AURA DESIGN TOKENS — v2 design system (Wave 2)
+   AURA DESIGN TOKENS — v5 "Liquid Horizon"
    ═══════════════════════════════════════════════════════════════════════════
    The single source of truth for every visual constant in Aura.
+
+   v5 design direction — LAYERED LIQUID MATERIAL, used selectively:
+   chrome (player bar, titlebar, sidebar, popovers) reads as refined
+   liquid glass — translucent, blurred, lit by a top sheen and an
+   accent-tinted hairline — while content surfaces stay calm, opaque
+   paper so lists and text keep perfect legibility. Depth comes from
+   the elevation ladder (--elev-*), never from heavy borders.
 
    Architecture (three layers):
 
@@ -77,6 +84,16 @@
   --glass-2: rgba(255, 255, 255, 0.08);
   --glass-3: rgba(255, 255, 255, 0.12);
 
+  /* v5 liquid-material lighting: every glass chrome surface gets a top
+     sheen (light source from above) and an inner hairline highlight.
+     Components consume these through the .playerbar-slab / .glass-chrome
+     utilities — set once here, re-skinned by every theme for free. */
+  --glass-highlight: rgba(255, 255, 255, 0.09);
+  --glass-hairline:  rgba(255, 255, 255, 0.10);
+  /* Accent-tinted chrome hairline — the subtle color rim on floating
+     chrome (player bar, popovers). Tracks the live accent via color-mix. */
+  --chrome-hairline: color-mix(in srgb, var(--color-dynamic-1) 16%, rgba(255, 255, 255, 0.08));
+
   /* Text — a 4-step legibility ladder */
   --text-primary:   rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.55);
@@ -126,6 +143,13 @@
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.50);
   --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.55);
   --shadow-overlay: 0 16px 44px rgba(0, 0, 0, 0.55);
+
+  /* v5 elevation ladder — material depth for floating chrome. Layered
+     soft shadows (contact + ambient) instead of one heavy drop; themes
+     re-tint these through their own shadow ladder remaps. */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.22);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, 0.30), 0 12px 32px rgba(0, 0, 0, 0.30);
+  --elev-3: 0 4px 12px rgba(0, 0, 0, 0.32), 0 28px 72px rgba(0, 0, 0, 0.42);
 
   /* ── Typography ── */
   --font-display: 'Geist', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
@@ -215,6 +239,15 @@
   --shadow-3: 0 24px 64px rgba(16, 16, 24, 0.12);
   --shadow-overlay: 0 16px 44px rgba(16, 16, 24, 0.14);
 
+  /* v5 liquid material, light-paper values: the sheen reads as pressed-
+     glass light; hairlines go ink-tinted; elevation softens. */
+  --glass-highlight: rgba(255, 255, 255, 0.65);
+  --glass-hairline:  rgba(255, 255, 255, 0.80);
+  --chrome-hairline: color-mix(in srgb, var(--color-dynamic-1) 14%, rgba(16, 16, 24, 0.10));
+  --elev-1: 0 1px 2px rgba(16, 16, 24, 0.06), 0 2px 8px rgba(16, 16, 24, 0.05);
+  --elev-2: 0 2px 6px rgba(16, 16, 24, 0.07), 0 12px 32px rgba(16, 16, 24, 0.09);
+  --elev-3: 0 4px 12px rgba(16, 16, 24, 0.08), 0 28px 72px rgba(16, 16, 24, 0.14);
+
   --cloud:       #6B7488;
   --cloud-soft:  rgba(107, 116, 136, 0.16);
   --cloud-glow:  rgba(107, 116, 136, 0.10);
@@ -227,15 +260,27 @@
 
 /* ── Layout constants (not theme-dependent — live on :root) ────────────── */
 :root {
-  /* 4.0.1 — the sidebar is a full-height docked rail (no floating-card
-     insets), so the token IS the rail width. */
-  --spacing-sidebar: 236px;
-  /* 4.0.1 — the player is a DOCKED bottom bar (56px, in normal grid flow,
-     no floating pill, nothing hidden beneath it). Flyout panels and toasts
-     anchor above it through this clearance token (bar 56px + 8px gap). */
-  --spacing-player:  64px;
-  /* The docked bar's own height — consumed by the PlayerBar shell. */
-  --playerbar-height: 56px;
+  /* v5 — the sidebar keeps its full-height docked rail structure. */
+  --spacing-sidebar: 240px;
+  /* v5 — the player bar is a floating glass SLAB, docked at the bottom of
+     the content column: 64px tall, inset 12px from the content column's
+     sides and bottom (still normal grid flow — nothing floats over
+     content, the 4.0.1 guarantee stands). Flyout panels and toasts anchor
+     above it through --spacing-player (bar 64 + inset 12 + 12 gap). */
+  --spacing-player:  88px;
+  /* The slab's own height and inset — consumed by the PlayerBar shell. */
+  --playerbar-height: 64px;
+  --playerbar-inset:  12px;
+
+  /* v5 spacing scale — the first general spacing scale in the token file.
+     4-based steps; existing components keep their layout-specific values,
+     but new work should speak this dialect. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

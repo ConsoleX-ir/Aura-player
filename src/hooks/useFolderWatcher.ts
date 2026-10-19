@@ -22,6 +22,12 @@ export function useFolderWatcher() {
   const importedFolders = usePlayerStore((s) => s.importedFolders)
   const watchFolders = usePlayerStore((s) => s.watchFolders)
   const syncingRef = useRef(false)
+  // v5 fix: a change event arriving WHILE a sync is already running used to
+  // be dropped on the floor (the re-entrancy guard silently returned). The
+  // burst is lost until the NEXT fs event or a manual sync — a file copied
+  // into a watched folder during a large sync simply never appeared. The
+  // pending flag now defers one trailing reconciliation instead.
+  const pendingRef = useRef(false)
 
   const key = watchFolders ? importedFolders.join('\n') : ''
 
@@ -43,8 +49,7 @@ export function useFolderWatcher() {
       api.watchFolders([]).catch(() => {})
     }
 
-    const onWatchChange = api.onWatchChange((change) => {
-      if (disposed || syncingRef.current) return
+    const runSync = () => {
       syncingRef.current = true
       // Reconcile quietly; surface a toast only when something actually
       // changed — silence for a no-op scan keeps the feature invisible.
@@ -64,7 +69,25 @@ export function useFolderWatcher() {
           }
         })
         .catch(() => {})
-        .finally(() => { syncingRef.current = false })
+        .finally(() => {
+          // v5: if a change arrived mid-sync, run exactly one trailing
+          // reconciliation so the deferred burst still lands.
+          if (pendingRef.current && !disposed) {
+            pendingRef.current = false
+            runSync()
+          } else {
+            syncingRef.current = false
+          }
+        })
+    }
+
+    const onWatchChange = api.onWatchChange((change) => {
+      if (disposed) return
+      if (syncingRef.current) {
+        pendingRef.current = true
+        return
+      }
+      runSync()
       void change
     })
 

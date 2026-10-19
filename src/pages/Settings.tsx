@@ -142,7 +142,7 @@ export function Settings() {
 
           <SettingRow
             label="Ambient Visuals"
-            description="The artwork-tinted background glow and the Aura Pulse ring. Turn off for a completely still interface — your theme and accent stay exactly as chosen."
+            description="The artwork-tinted background glow behind the interface. Turn off for a completely still interface — your theme and accent stay exactly as chosen."
           >
             <Toggle checked={ambientEffects} onChange={setAmbientEffects} ariaLabel="Toggle Ambient Visuals" />
           </SettingRow>
@@ -342,7 +342,7 @@ export function Settings() {
                   className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold tabular-nums"
                   style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
                 >
-                  v3.2.0
+                  v{__APP_VERSION__}
                 </span>
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>

@@ -18,9 +18,12 @@ interface VirtualSongListProps {
   /** Rendered once above the list, scrolls away with it (matches the old
    *  non-virtualized layout where the column header wasn't sticky). */
   header?: ReactNode
+  /** v5 — playlist reordering: pass the store's moveInPlaylist partially
+   *  applied (playlistId bound). Rows receive it + computed edge flags. */
+  onMove?: (from: number, to: number) => void
 }
 
-export function VirtualSongList({ songs, queue, playlistId, className, header }: VirtualSongListProps) {
+export function VirtualSongList({ songs, queue, playlistId, className, header, onMove }: VirtualSongListProps) {
   // Windowing math lives in the SHARED hook (Phase 10) — the Listening
   // History page uses the same implementation, so a fix here fixes both.
   // The hook binds scroll/resize listeners once on mount and always attaches
@@ -30,6 +33,14 @@ export function VirtualSongList({ songs, queue, playlistId, className, header }:
   const isVirtualized = songs.length >= VIRTUALIZE_THRESHOLD
   const visible = isVirtualized ? songs.slice(vw.start, vw.end) : songs
 
+  const rowProps = onMove
+    ? (realIndex: number) => ({
+        onMove,
+        canMoveUp: realIndex > 0,
+        canMoveDown: realIndex < songs.length - 1,
+      })
+    : null
+
   return (
     <div ref={vw.containerRef} className={className}>
       {header}
@@ -37,20 +48,22 @@ export function VirtualSongList({ songs, queue, playlistId, className, header }:
         <div style={{ position: 'relative', height: vw.totalHeight }}>
           {visible.map((song, i) => {
             const realIndex = vw.start + i
+            const extra = rowProps?.(realIndex)
             return (
               <div
                 key={song.id}
                 style={{ position: 'absolute', top: realIndex * ROW_HEIGHT, left: 0, right: 0, height: ROW_HEIGHT }}
               >
-                <SongRow song={song} index={realIndex} queue={queue} playlistId={playlistId} />
+                <SongRow song={song} index={realIndex} queue={queue} playlistId={playlistId} {...extra} />
               </div>
             )
           })}
         </div>
       ) : (
-        visible.map((song, i) => (
-          <SongRow key={song.id} song={song} index={i} queue={queue} playlistId={playlistId} />
-        ))
+        visible.map((song, i) => {
+          const extra = rowProps?.(i)
+          return <SongRow key={song.id} song={song} index={i} queue={queue} playlistId={playlistId} {...extra} />
+        })
       )}
     </div>
   )
