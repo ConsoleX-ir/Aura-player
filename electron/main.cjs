@@ -582,7 +582,20 @@ const MIME = {
 app.whenReady().then(() => {
   fs.mkdirSync(coversDir, { recursive: true })
 
-  // Stream local audio files via fs — net.fetch(file://) is unreliable on Windows
+  // Serve local audio + cover art via the aura:// custom protocol.
+  // net.fetch(file://) is unreliable on Windows, so this handler reads files
+  // directly with fs and returns Buffer-backed Responses.
+  //
+  // v5: replaced fs.createReadStream with direct Buffer reads. The stream
+  // approach caused ERR_INVALID_STATE ("ReadableStream is already closed")
+  // at startup: when a Node.js Readable finishes reading a file (emits
+  // 'end'), the Web ReadableStream controller is closed. Undici's internal
+  // body cleanup then calls close() on the already-closed controller,
+  // throwing. This race is most likely on small files (cover art images
+  // loaded at startup) where fs.createReadStream completes before Undici
+  // has finished consuming the stream. Buffer-backed Responses have no
+  // ReadableStream lifecycle — no controller to double-close.
+  //
   // v3.2.1: callback is async now (the handler awaits one fs.promises.stat
   // per request instead of blocking the main thread with the sync pair).
   // v4.0.3d: registered as a shared handler — the DEFAULT session AND the
@@ -660,8 +673,23 @@ app.whenReady().then(() => {
 
           const chunkSize = end - start + 1
 
-          const stream = fs.createReadStream(filePath, { start, end })
-          return new Response(stream, {
+          // v5: read the byte range into a Buffer instead of streaming with
+          // fs.createReadStream. Same data, no ReadableStream lifecycle.
+          let buffer
+          try {
+            const handle = await fs.promises.open(filePath, 'r')
+            try {
+              buffer = Buffer.alloc(chunkSize)
+              await handle.read(buffer, 0, chunkSize, start)
+            } finally {
+              await handle.close()
+            }
+          } catch (e) {
+            console.error('Protocol handler read error:', e)
+            return new Response('Internal error', { status: 500 })
+          }
+
+          return new Response(buffer, {
             status: 206,
             headers: {
               ...corsHeaders,
@@ -674,9 +702,19 @@ app.whenReady().then(() => {
         }
       }
 
-      // Full file response
-      const stream = fs.createReadStream(filePath)
-      return new Response(stream, {
+      // Full file response — read the entire file into a Buffer.
+      // Cover art images (the typical non-Range case) are small, so this
+      // is cheap. Audio files always use Range requests from the <audio>
+      // element, so this path is rarely hit for large files.
+      let buffer
+      try {
+        buffer = await fs.promises.readFile(filePath)
+      } catch (e) {
+        console.error('Protocol handler read error:', e)
+        return new Response('Internal error', { status: 500 })
+      }
+
+      return new Response(buffer, {
         status: 200,
         headers: {
           ...corsHeaders,
