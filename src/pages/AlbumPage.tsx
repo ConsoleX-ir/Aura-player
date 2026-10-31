@@ -4,6 +4,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { songsByArtist, albumsOfArtist, totalRuntimeSec, type AlbumKey } from '@/lib/artistAlbum'
 import { formatRuntime } from '@/lib/utils'
 
@@ -86,9 +87,14 @@ export function AlbumPage() {
         {/* Hero */}
         <div className="flex items-center gap-5 mb-6">
           <div className="w-28 h-28 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}>
-            {cover
-              ? <img src={cover} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-              : <ArtworkPlaceholder seed={key.normAlbum} size="lg" />}
+            <CoverImage
+              src={cover}
+              seed={key.normAlbum}
+              songPath={tracks.find((t) => t.coverArt === cover)?.path ?? null}
+              className="w-full h-full object-cover"
+              placeholderSize="lg"
+              fallback={<ArtworkPlaceholder seed={key.normAlbum} size="lg" />}
+            />
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-semibold tracking-tight" style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>

@@ -4,6 +4,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { VirtualSongList } from '@/components/Library/VirtualSongList'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { startSmartRadio } from '@/lib/smartRadioActions'
 import {
   songsByArtist, albumsOfArtist, relatedArtists, totalRuntimeSec, normName,
@@ -93,7 +94,7 @@ export function ArtistPage() {
           <div className="w-24 h-24 rounded-2xl overflow-hidden shrink-0 grid grid-cols-2" style={{ background: 'var(--glass-2)' }}>
             {covers.length > 0
               ? covers.map((c) => (
-                  <img key={c} src={c} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                  <CoverImage key={c} src={c} seed={c} songPath={tracks.find((t) => t.coverArt === c)?.path ?? null} className="w-full h-full object-cover" fallback={null} />
                 ))
               : <div className="col-span-2 w-full h-full flex items-center justify-center"><User size={28} style={{ color: 'var(--text-faint)' }} /></div>}
           </div>
@@ -150,9 +151,15 @@ export function ArtistPage() {
                     title={`Open album ${a.key.album}`}
                   >
                     <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}>
-                      {cover
-                        ? <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                        : <ArtworkPlaceholder seed={a.key.normAlbum} size="sm" />}
+                      <CoverImage
+                        src={cover}
+                        seed={a.key.normAlbum}
+                        songPath={a.songs.find((s) => s.coverArt === cover)?.path ?? null}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        placeholderSize="sm"
+                        fallback={<ArtworkPlaceholder seed={a.key.normAlbum} size="sm" />}
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>{a.key.album}</p>

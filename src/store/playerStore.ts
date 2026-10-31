@@ -44,6 +44,15 @@ interface PlayerState {
   // preserving their position. Used by Folder Sync when a file's mtime has
   // changed since it was last imported.
   updateSongs: (songs: Song[]) => void
+  // v4.0.3c — cover self-healing, store-wide. When a dead aura:// cover is
+  // recovered (re-extracted from the source file into the covers cache),
+  // the healed cache-busted URL is written back HERE so every surface
+  // showing that song re-renders the real cover at once — instead of each
+  // mounted <img> healing privately and every other surface (album grid,
+  // queue, sidebar, mini widget snapshot) staying on the dead URL until a
+  // remount. Matched by the song's source file path; unknown paths are a
+  // silent no-op.
+  healCoverArt: (songPath: string, healedUrl: string) => void
   clearLibrary: () => void
 
   // Top-level folders the user has imported via "Add Folder..." — tracked so
@@ -368,6 +377,28 @@ export const usePlayerStore = create<PlayerState>()(
           // Same freshness for the natural-order snapshot — otherwise a
           // shuffle-off restore would resurrect stale titles/cover art.
           naturalQueue: s.naturalQueue.map((song) => updatesById.get(song.id) ?? song),
+        }
+      }),
+
+      // v4.0.3c — see the interface comment. One healed URL, written once,
+      // every surface updates through their existing store subscriptions
+      // (play bar, Now Playing, album grid, queue panel, sidebar, and the
+      // mini player's next 250ms snapshot all read currentSong/library).
+      healCoverArt: (songPath, healedUrl) => set((s) => {
+        const patchById = new Map<string, Song>()
+        for (const song of s.library) {
+          if (song.path === songPath && song.coverArt !== healedUrl) {
+            patchById.set(song.id, { ...song, coverArt: healedUrl })
+          }
+        }
+        if (patchById.size === 0) return s
+        return {
+          library: s.library.map((song) => patchById.get(song.id) ?? song),
+          currentSong: s.currentSong && patchById.has(s.currentSong.id)
+            ? patchById.get(s.currentSong.id)!
+            : s.currentSong,
+          queue: s.queue.map((song) => patchById.get(song.id) ?? song),
+          naturalQueue: s.naturalQueue.map((song) => patchById.get(song.id) ?? song),
         }
       }),
       clearLibrary: () => set({

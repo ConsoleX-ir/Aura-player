@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAsDefaultMusicPlayer: () => ipcRenderer.invoke('sys:setDefaultPlayer'),
   parseMetadata: (p)      => ipcRenderer.invoke('fs:parseMetadata', p),
   parseMetadataBatch: (paths) => ipcRenderer.invoke('fs:parseMetadataBatch', paths),
+  // v4.0.3b — cover self-healing: re-extract embedded art from the source
+  // file into the covers cache after its cache copy was lost; returns a
+  // cache-busted aura:// URL (or null when nothing could be recovered).
+  recoverCover: (p)       => ipcRenderer.invoke('fs:recoverCover', String(p)),
   // Library Health (Phase 1): batch existence check for every library entry.
   // Per-path exists:false results instead of throws, so one vanished file
   // can't fail a whole health scan.
@@ -72,7 +76,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('media:command', listener)
   },
   // Lets main process keep the taskbar thumbnail's Play/Pause icon accurate.
-  syncPlaybackState: (isPlaying) => ipcRenderer.send('player:state-sync', { isPlaying }),
+  // v4.0.3e — main derives the mini player's visibility rule from isPlaying:
+  // playing → the widget may be visible; paused/stopped (even with a selected
+  // song) → never. hasTrack stays in the payload for compatibility but the
+  // visibility decision no longer reads it.
+  syncPlaybackState: (isPlaying, hasTrack) =>
+    ipcRenderer.send('player:state-sync', { isPlaying: !!isPlaying, hasTrack: !!hasTrack }),
+  // v4.0.3d/e — the minimize auto-show revalidates before showing: main asks
+  // ('media:queryTrack') and the RENDERER answers with its live store truth
+  // ('media:trackReply'), so a stale/delayed push can never pop the widget
+  // over an app whose music is not actually playing.
+  onQueryTrackState: (cb) => {
+    const listener = () => cb()
+    ipcRenderer.on('media:queryTrack', listener)
+    return () => ipcRenderer.removeListener('media:queryTrack', listener)
+  },
+  replyTrackState: (isPlaying) =>
+    ipcRenderer.send('media:trackReply', { isPlaying: !!isPlaying }),
   // ── Folder watching (Wave 4) ──────────────────────────────────────────────
   // Sends the FULL desired watch set every time — main replaces its live
   // watchers wholesale, so renderer-side bookkeeping stays trivial.

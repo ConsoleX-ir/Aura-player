@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, globalShortcut, nativeImage, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, globalShortcut, nativeImage, shell, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 // Phase 3 — the one networking layer all online providers go through.
@@ -70,6 +70,21 @@ const COVER_EXT_BY_MIME = {
   'image/webp': '.webp',
   'image/gif':  '.gif',
 }
+
+// v4.0.3 — Application icon (window/taskbar). Neither BrowserWindow used to
+// set `icon`, so the OS fell back to whatever Chromium could scrape: the page
+// favicon (icon.svg) rasterized at tiny bitmap sizes, or the default Electron
+// icon — the icon effectively rendered far too small / blurry in the taskbar
+// and Alt-Tab. Both windows now get the real bundled asset: the multi-size
+// .ico on Windows (exact 16→256px ladder, no resampling) and the 256px PNG
+// everywhere else. Same source artwork as the installer icon (public/icon.ico)
+// — nothing redesigned, the icon is just finally CONFIGURED where it displays.
+// These copies ship inside app.asar (electron/** is packaged), unlike the
+// dist/ excludes in package.json, so the path resolves in dev AND production.
+const ICON_DIR = path.join(__dirname, 'assets')
+const WINDOW_ICON = process.platform === 'win32'
+  ? path.join(ICON_DIR, 'icon.ico')
+  : path.join(ICON_DIR, 'icon.png')
 
 // Windows taskbar thumbnail controls — the small Previous/Play-Pause/Next
 // buttons that appear when hovering Aura's icon in the taskbar, same as
@@ -182,6 +197,30 @@ let miniVisible = false
 // with P" — only the auto flavor is auto-hidden on restore. An explicitly
 // opened mini player survives minimize/restore cycles.
 let miniAutoShown = false
+// v4.0.3e — IS MUSIC ACTUALLY PLAYING? The widget's one visibility rule is
+// now "playing → visible, not playing → never" (user rule: a selected but
+// paused/stopped song must NOT surface it). The main renderer reports every
+// load/unload/play/pause transition through 'player:state-sync' (see
+// useMediaKeys), and the minimize auto-show revalidates against the LIVE
+// store before showing. Every entry point lands in showMiniPlayer, which
+// refuses to show while this is false — the gate is fail-closed.
+let miniIsPlaying = false
+// v4.0.3e — the user explicitly closed the widget while the main window was
+// minimized (its own X button is the only user-close that can happen in
+// that state). Blocks the pause→resume re-show until the minimize period
+// ends, so the close button keeps meaning "stay closed" even though
+// playback paused and resumed underneath. Cleared when the minimize period
+// ends (restore / app close) and on each new minimize entry.
+let miniDismissedWhileMinimized = false
+// v4.0.3e — event-tracked mirror of the main window's minimized state. The
+// minimize/restore events are the SAME signals the mini coupling already
+// reacts to, so tracking the flag right beside them keeps the resume rule
+// consistent with the coupling under every platform path (and under the
+// test hooks, which emit the real events).
+let mainMinimized = false
+// v4.0.3d — set by the minimize handler while it waits for the renderer's
+// live track-state answer ('media:trackReply'); consumed exactly once.
+let miniAutoShowPending = false
 // Phase 13 — position memory now SURVIVES RESTARTS: bounds persist to a tiny
 // JSON file in userData, and are sanity-checked against the connected
 // displays at show time (a saved position on an unplugged monitor falls back
@@ -274,6 +313,10 @@ function createMiniWindow() {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
+    // v4.0.3 — same explicit application icon as the main window (see
+    // WINDOW_ICON above): a window with no icon configured falls back to the
+    // tiny favicon-derived bitmap instead of the real app icon.
+    icon: WINDOW_ICON,
     // v3.2.0: focusable = true — the widget stays a click-once surface that
     // never steals focus when it APPEARS (showInactive everywhere), but a
     // click now focuses it so every button is reachable by TAB as well as by
@@ -286,6 +329,30 @@ function createMiniWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // v4.0.3d — the widget runs in an IN-MEMORY session partition. Root
+      // cause found at runtime this session: with the default (persistent)
+      // session, the SECOND and later boots of a profile serve this window's
+      // file:// entry chunk and CSS from the profile's disk HTTP/code cache,
+      // and those cached file:// entries fail to load — the module fetch
+      // rejects ("Failed to fetch dynamically imported module:
+      // …/mini-<hash>.js") and the stylesheet CORS-blocks. The React root
+      // then stays EMPTY for the lifetime of the window: the widget shows as
+      // a blank, half-painted, seemingly dimmed card (or frozen on its
+      // initial frame) — 7 of 8 boots reproduced on an existing profile,
+      // always instantly cured by wiping the profile's Cache/Code Cache and
+      // by a manual Page.reload. A fresh profile NEVER reproduced (nothing
+      // cached yet), which is why dev/testing on throwaway profiles missed
+      // it. The main window loads its graph FIRST at boot and was never
+      // observed to lose that race — only the lazily-created widget hits
+      // poisoned entries. The widget persists NOTHING (its state arrives
+      // over IPC snapshots and it reads no storage), so an in-memory
+      // partition costs nothing user-visible: every boot re-reads the
+      // (local, hashed) assets from disk and the widget can never again
+      // load a stale cache entry. The aura:// protocol handler is
+      // registered on this partition as well (see whenReady) so widget
+      // cover art keeps working. Same file:// failure class already fixed
+      // for the main renderer in v4.0.3c (App.tsx eager-view conversion).
+      session: session.fromPartition('aura-mini-widget'),
       webSecurity: !isDev,
     },
   })
@@ -295,6 +362,37 @@ function createMiniWindow() {
   } else {
     miniWindow.loadFile(path.join(__dirname, '../dist/mini.html'))
   }
+  // v4.0.3e — blank-mount self-heal. The v4.0.3d in-memory session partition
+  // made the file:// cache-poisoning blank render rare, but a residual
+  // load race still occasionally drops this window's CSS/entry-module
+  // subresources (net::ERR_FAILED on some file:// assets while others
+  // succeed), leaving the React root EMPTY for the window's lifetime — a
+  // visible but frozen/blank card. A manual Page.reload was proven to cure
+  // it instantly (v4.0.3d diagnosis), so: after each finished load, verify
+  // the React root actually mounted (MiniApp renders .mini-card on mount
+  // regardless of state — a perfect boot detector) and, if not, reload the
+  // page. Bounded to 3 attempts per window: a genuinely broken environment
+  // must not become a reload loop.
+  let miniSelfHeals = 0
+  miniWindow.webContents.on('did-finish-load', () => {
+    const wc = miniWindow && !miniWindow.isDestroyed() ? miniWindow.webContents : null
+    if (!wc) return
+    setTimeout(() => {
+      if (!miniWindow || miniWindow.isDestroyed() || wc.isDestroyed()) return
+      wc.executeJavaScript("!!document.querySelector('.mini-card')", true)
+        .then((mounted) => {
+          if (mounted || !miniWindow || miniWindow.isDestroyed()) return
+          if (miniSelfHeals >= 3) {
+            console.error('Mini player: React root still empty after 3 reload attempts — giving up')
+            return
+          }
+          miniSelfHeals++
+          console.warn('Mini player: blank mount detected — reloading (attempt ' + miniSelfHeals + '/3)')
+          wc.reload()
+        })
+        .catch(() => { /* window died mid-check — nothing to heal */ })
+    }, 1500)
+  })
   // Remember where the user dragged it — within this session AND across
   // restarts (Phase 13). Disk write debounced (see scheduleMiniBoundsSave).
   miniWindow.on('moved', () => {
@@ -307,6 +405,17 @@ function createMiniWindow() {
 }
 
 function showMiniPlayer({ auto = false } = {}) {
+  // v4.0.3e — ONE rule at the ONLY place a widget window can appear: music
+  // must be PLAYING. Not "a track is loaded" — actually playing (user rule:
+  // "when music is not playing — even the song is selected — I don't want to
+  // see the mini player; if music is playing the mini player should be
+  // visible"). No entry point can bypass this: P key, pill button, command
+  // palette, the raw visibility IPC, the minimize auto-show — they all land
+  // here, and the gate refuses (fail-closed) while playback is stopped or
+  // paused. Returns whether the widget was actually shown; the
+  // 'mini:setVisible' handler uses that to answer refused requests so the
+  // renderer's mirror flag can never stick true.
+  if (!miniIsPlaying) return false
   const mini = createMiniWindow()
   if (!mini.isVisible()) {
     mini.setBounds(miniTargetBounds())
@@ -315,6 +424,7 @@ function showMiniPlayer({ auto = false } = {}) {
   miniVisible = true
   if (auto) miniAutoShown = true
   broadcastMiniVisibility()
+  return true
 }
 
 function hideMiniPlayer() {
@@ -340,6 +450,10 @@ function createWindow() {
     minHeight: 700,
     frame: false,
     backgroundColor: '#0A0A0F',
+    // v4.0.3 — explicit application icon: without it the taskbar/Alt-Tab icon
+    // falls back to the tiny rasterized page favicon (or Electron's default),
+    // which rendered effectively too small. Full discussion at WINDOW_ICON.
+    icon: WINDOW_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -406,15 +520,33 @@ function createWindow() {
   mainWindow.on('maximize',   () => mainWindow.webContents.send('window:maximized', true))
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized', false))
 
-  // ── Mini player coupling (v2.1.2) ────────────────────────────────────────
+  // ── Mini player coupling (v2.1.2, gated v4.0.3, playing-only v4.0.3e) ──
   // Minimizing Aura surfaces the desktop mini player; restoring hides it —
   // but ONLY if the widget was auto-shown by THIS minimize (an explicitly
-  // opened mini player survives the cycle). Closing/hiding the widget never
-  // touches the main window.
+  // opened mini player survives the cycle), and — since v4.0.3e — only when
+  // music is actually PLAYING. A selected-but-paused song is not enough:
+  // minimizing a paused Aura is just minimize, nothing is sounding, so no
+  // widget appears (user rule).
+  // The gate REVALIDATES against the renderer's LIVE store instead of
+  // trusting main's `miniIsPlaying` mirror alone. The mirror is the last
+  // player:state-sync push, which can be stale relative to the store (a
+  // pause whose follow-up push is delayed or raced a minimize). Main asks
+  // the renderer for the CURRENT truth ('media:queryTrack' →
+  // replyTrackState, which answers with the live isPlaying) and shows only
+  // on confirmation; a hung renderer simply never shows the widget
+  // (fail-closed), which is the correct bias for this rule.
   mainWindow.on('minimize', () => {
-    if (!miniVisible) showMiniPlayer({ auto: true })
+    mainMinimized = true
+    miniDismissedWhileMinimized = false // fresh minimize period
+    if (miniVisible || !miniIsPlaying) return
+    const wc = liveMainWindow()?.webContents
+    if (!wc || wc.isDestroyed()) return
+    miniAutoShowPending = true
+    wc.send('media:queryTrack')
   })
   mainWindow.on('restore', () => {
+    mainMinimized = false
+    miniDismissedWhileMinimized = false // the minimize context is over
     if (miniAutoShown) hideMiniPlayer()
   })
   // The widget cannot outlive the app's main window — otherwise Aura would
@@ -425,6 +557,7 @@ function createWindow() {
     miniWindow = null
     miniVisible = false
     miniAutoShown = false
+    miniDismissedWhileMinimized = false
   })
 }
 
@@ -452,7 +585,10 @@ app.whenReady().then(() => {
   // Stream local audio files via fs — net.fetch(file://) is unreliable on Windows
   // v3.2.1: callback is async now (the handler awaits one fs.promises.stat
   // per request instead of blocking the main thread with the sync pair).
-  protocol.handle('aura', async (request) => {
+  // v4.0.3d: registered as a shared handler — the DEFAULT session AND the
+  // mini widget's in-memory session partition (see createMiniWindow) both
+  // need it, since a custom partition does not inherit protocol handlers.
+  const auraProtocolHandler = async (request) => {
     try {
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -553,7 +689,9 @@ app.whenReady().then(() => {
       console.error('Protocol handler error:', e)
       return new Response('Internal error: ' + e.message, { status: 500 })
     }
-  })
+  }
+  protocol.handle('aura', auraProtocolHandler)
+  session.fromPartition('aura-mini-widget').protocol.handle('aura', auraProtocolHandler)
 
   createWindow()
 
@@ -987,6 +1125,37 @@ ipcMain.handle('net:findMetadata', async (_e, query) => {
   }
 })
 
+// v4.0.3b — cover SELF-HEALING: a cover URL can outlive its cache file
+// (disk cleanup, a wiped/migrated profile) while the artwork itself still
+// sits inside the audio file. The old behavior was permanent: one 404
+// swapped that cover to the placeholder forever, because the deterministic
+// cache name makes a re-populated cache produce the SAME URL the renderer
+// already marked as failed. This handler re-extracts the embedded art from
+// the SOURCE file and re-writes the cache copy, then returns a cache-busted
+// URL — the aura:// handler ignores the extra query param, but the different
+// string lets the renderer's <img> (and its per-source failure state) start
+// over. Called at most ONCE per dead source per session (renderer-side set).
+ipcMain.handle('fs:recoverCover', async (_e, filePath) => {
+  try {
+    if (typeof filePath !== 'string' || !AUDIO_EXTS.includes(path.extname(filePath).toLowerCase())) return null
+    const st = await fs.promises.stat(filePath).catch(() => null)
+    if (!st || !st.isFile()) return null
+    const { parseFile, selectCover } = await import('music-metadata')
+    const meta = await parseFile(filePath, { duration: false, skipCovers: false })
+    const cover = selectCover(meta.common.picture)
+    if (!cover) return null
+    const ext = COVER_EXT_BY_MIME[cover.format] || '.jpg'
+    const cachedPath = path.join(coversDir, hashStr(filePath) + ext)
+    // Unconditional 'w' write (not 'wx'): a CORRUPTED cache copy must be
+    // healed too, not skipped because it exists.
+    await fs.promises.writeFile(cachedPath, Buffer.from(cover.data))
+    return `aura://local?path=${encodeURIComponent(cachedPath)}&r=${Date.now()}`
+  } catch (e) {
+    console.error('Cover recovery failed:', e && e.message)
+    return null
+  }
+})
+
 // Downloads a remote artwork image (Deezer / iTunes CDN) into the same
 // covers cache local art uses, so an applied online match behaves exactly like
 // artwork embedded in the file: served via aura://, persistent, offline-safe.
@@ -1120,8 +1289,18 @@ ipcMain.on('mini:state', (event, state) => {
 
 // Renderer-initiated visibility (P key / command palette / pill button).
 ipcMain.on('mini:setVisible', (_e, visible) => {
-  if (visible) showMiniPlayer()
-  else hideMiniPlayer()
+  if (visible) {
+    // v4.0.3b — a refused show answers back with visibility=false so a
+    // renderer that asked for the widget (stale flag, raced state push)
+    // resyncs instead of waiting for an event that will never come.
+    // v4.0.3e — showMiniPlayer refuses while music is not playing, so a
+    // paused app cannot open the widget through ANY renderer path either.
+    if (!showMiniPlayer()) broadcastMiniVisibility()
+  } else {
+    // An explicit renderer hide is a USER decision — a later resume must
+    // not second-guess it by re-showing.
+    hideMiniPlayer()
+  }
 })
 
 // Transport + window actions from the mini widget. Transport remaps onto the
@@ -1149,9 +1328,16 @@ ipcMain.on('mini:action', (_e, action) => {
         mainWindow.show()
         mainWindow.focus()
       }
+      miniDismissedWhileMinimized = false
       hideMiniPlayer()
       break
     case 'close':
+      // User closed the widget. If this happened while the main window is
+      // minimized, remember it for THIS minimize period: a pause→resume
+      // underneath must not pop the widget back over the user's decision.
+      if (mainMinimized) {
+        miniDismissedWhileMinimized = true
+      }
       hideMiniPlayer() // hides the widget only — the main window is untouched
       break
   }
@@ -1180,7 +1366,50 @@ ipcMain.on('mini:setVolume', (_e, volume) => {
   }
 })
 
-// Renderer pushes isPlaying here whenever it changes (in-app toggle, a song
-// ending and auto-advancing, etc.) so the taskbar thumbnail's Play/Pause
-// icon stays accurate even though the renderer has no way to update it directly.
-ipcMain.on('player:state-sync', (_e, { isPlaying }) => updateThumbarButtons(isPlaying))
+// Renderer pushes playback state here whenever it changes (in-app toggle, a
+// song ending and auto-advancing, a track loading/unloading, etc.) so the
+// taskbar thumbnail's Play/Pause icon stays accurate even though the renderer
+// has no way to update it directly. v4.0.3e — the payload's isPlaying is the
+// widget's visibility truth: PLAYING → the widget may be visible; NOT
+// playing (paused/stopped/unloaded, even with a selected song) → the widget
+// must not be, so a visible one hides immediately. Every transition pushes
+// here (the renderer's effect subscribes to isPlaying AND currentSong), and
+// FIFO IPC ordering guarantees a push that says "not playing" cannot arrive
+// before an older show request it should override.
+ipcMain.on('player:state-sync', (_e, { isPlaying, hasTrack } = {}) => {
+  updateThumbarButtons(!!isPlaying)
+  const wasPlaying = miniIsPlaying
+  miniIsPlaying = !!isPlaying
+  if (!miniIsPlaying || (!hasTrack && miniVisible)) {
+    // The rule runs BACKWARDS: the moment playback stops (or the playing
+    // track is unloaded — kept from v4.0.3b as defense for a corrupt
+    // isPlaying-without-track push), a visible widget hides immediately.
+    // FIFO IPC ordering guarantees this push cannot arrive before an older
+    // show request it should override.
+    if (miniVisible) hideMiniPlayer()
+  } else if (!wasPlaying && !miniVisible) {
+    // Resume (pause → play) while the widget is hidden and the main window
+    // is still minimized: playing → visible again (the widget is the app's
+    // only face while minimized). The ONE exception is user intent: an
+    // explicit widget close during this minimize period. If the main window
+    // is up, the user is controlling playback there — no pop-up.
+    if (mainMinimized && !miniDismissedWhileMinimized) {
+      showMiniPlayer({ auto: true })
+    }
+  }
+})
+
+// v4.0.3d/e — the answer to the minimize auto-show's pre-show revalidation
+// (see the 'minimize' handler). The renderer reports its LIVE store truth —
+// since v4.0.3e that truth is "is music actually playing right now", not
+// merely "is a track loaded". Main refreshes the mirror with it and only
+// then may the pending auto-show proceed. One pending minimize is consumed
+// exactly once, so a reply that arrives after the user already restored the
+// window can never surface the widget late; a missing reply (hung/crashed
+// renderer) simply leaves the widget unshown — fail-closed by design.
+ipcMain.on('media:trackReply', (_e, { isPlaying } = {}) => {
+  miniIsPlaying = !!isPlaying
+  if (!miniAutoShowPending) return
+  miniAutoShowPending = false
+  if (miniIsPlaying && !miniVisible) showMiniPlayer({ auto: true })
+})

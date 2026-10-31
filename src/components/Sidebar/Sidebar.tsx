@@ -10,6 +10,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 import { PlaylistModal } from '../Modals/PlaylistModal'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { EmptyState } from '@/components/States/EmptyState'
 import type { AppView } from '@/types'
 
@@ -736,12 +737,18 @@ function SidebarNowPlaying({ collapsed }: { collapsed: boolean }) {
           className="relative shrink-0"
           aria-label={collapsed ? `Now playing: ${currentSong.title}` : undefined}
         >
-          {currentSong.coverArt
-            ? <img src={currentSong.coverArt} alt="" className={collapsed ? 'w-10 h-10 rounded-xl object-cover' : 'w-9 h-9 rounded-lg object-cover'} />
-            : <div className={collapsed ? 'w-10 h-10 rounded-xl overflow-hidden' : 'w-9 h-9 rounded-lg overflow-hidden'}>
+          <CoverImage
+            src={currentSong.coverArt}
+            seed={currentSong.id}
+            songPath={currentSong.path}
+            className={collapsed ? 'w-10 h-10 rounded-xl object-cover' : 'w-9 h-9 rounded-lg object-cover'}
+            placeholderSize="sm"
+            fallback={(
+              <div className={collapsed ? 'w-10 h-10 rounded-xl overflow-hidden' : 'w-9 h-9 rounded-lg overflow-hidden'}>
                 <ArtworkPlaceholder seed={currentSong.id} size="sm" />
               </div>
-          }
+            )}
+          />
           {isPlaying && (
             <div
               className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full flex items-center justify-center"

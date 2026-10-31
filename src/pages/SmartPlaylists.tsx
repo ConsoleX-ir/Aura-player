@@ -4,6 +4,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { assembleSmartContext } from '@/lib/smartRadioActions'
 import { buildSmartRadio, type SmartResult, type SmartContext } from '@/lib/smartEngine'
 import { formatTime, cn } from '@/lib/utils'
@@ -214,9 +215,15 @@ export function SmartPlaylists() {
                         >
                           <span className="text-[10px] tabular-nums w-5 text-right shrink-0" style={{ color: 'var(--text-faint)' }}>{i + 1}</span>
                           <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden" style={{ background: 'var(--glass-2)' }}>
-                            {song.coverArt
-                              ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                              : <ArtworkPlaceholder seed={song.id} size="sm" />}
+                            <CoverImage
+                              src={song.coverArt}
+                              seed={song.id}
+                              songPath={song.path}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              placeholderSize="sm"
+                              fallback={<ArtworkPlaceholder seed={song.id} size="sm" />}
+                            />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm truncate" style={{ color: isCurrent ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isCurrent ? 500 : 400 }}>

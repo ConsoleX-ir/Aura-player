@@ -5,6 +5,7 @@ import { useArtworkStore } from '@/store/artworkStore'
 import { useNotesStore } from '@/store/notesStore'
 import { downscaleToCoverDataUrl, isImageFile } from '@/lib/imageTools'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── PersonalTab — Artwork & Notes (Aura 3.0 Wave 11) ────────────────────────
 // The user-owned side of a track, in one place:
@@ -107,9 +108,19 @@ export function PersonalTab({ song }: { song: Song }) {
             className="w-28 h-28 rounded-xl overflow-hidden shrink-0"
             style={{ background: 'var(--glass-2)', border: overrideUrl ? '1.5px solid var(--accent-border)' : '1px solid var(--border-default)', boxShadow: 'var(--shadow-2)' }}
           >
-            {(overrideUrl ?? song.coverArt)
-              ? <img src={(overrideUrl ?? song.coverArt)!} alt="Track artwork preview" className="w-full h-full object-cover" />
-              : <ArtworkPlaceholder seed={song.id} size="lg" />}
+            <CoverImage
+              src={overrideUrl ?? song.coverArt}
+              seed={song.id}
+              alt="Track artwork preview"
+              // v4.0.3c — self-heal only when the TRACK's own artwork is on
+              // display; a dead override is handled by the picker, and
+              // re-extracting embedded art must never masquerade as the
+              // user's chosen override.
+              songPath={overrideUrl ? null : song.path}
+              className="w-full h-full object-cover"
+              placeholderSize="lg"
+              fallback={<ArtworkPlaceholder seed={song.id} size="lg" />}
+            />
           </div>
 
           <div className="flex-1 min-w-0">

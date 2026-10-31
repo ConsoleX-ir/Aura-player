@@ -8,6 +8,7 @@ import type { Song, OnlineMatch, SongFileStats } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── Song Properties + "Find Info Online" (keyless) ──────────────────────────
 // Two tabs in one dialog:
@@ -99,9 +100,13 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
               {/* Header */}
               <div className="flex items-center gap-3 p-5 border-b border-[var(--color-border)] shrink-0">
                 <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 bg-[var(--color-glass-mid)] flex items-center justify-center">
-                  {song.coverArt
-                    ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" />
-                    : <Sparkles size={16} className="text-white/20" />}
+                  <CoverImage
+                    src={song.coverArt}
+                    seed={song.id}
+                    songPath={song.path}
+                    className="w-full h-full object-cover"
+                    fallback={<Sparkles size={16} className="text-white/20" />}
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-[15px] font-semibold text-white/90 truncate" style={{ fontFamily: 'var(--font-display)' }}>
@@ -404,9 +409,13 @@ function FindTab({
                     style={{ background: i === selIdx ? 'var(--color-dynamic-1)' : 'transparent' }}
                   />
                   <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-black/30 flex items-center justify-center">
-                    {c.artworkUrl
-                      ? <img src={c.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      : <Music2 size={12} className="text-white/20" />}
+                    <CoverImage
+                      src={c.artworkUrl}
+                      seed={`${c.title}|${c.artist}|${i}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      fallback={<Music2 size={12} className="text-white/20" />}
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-white/85 truncate flex items-center gap-1.5">
@@ -447,7 +456,13 @@ function FindTab({
             {cand?.artworkUrl && (
               <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-glass)] border border-[var(--color-border)]">
                 <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-black/30">
-                  <img src={cand.artworkUrl} alt="" className="w-full h-full object-cover" />
+                  <CoverImage
+                    src={cand.artworkUrl}
+                    seed={`${cand.title}|${cand.artist}`}
+                    className="w-full h-full object-cover"
+                    placeholderSize="md"
+                    fallback={<Music2 size={14} className="text-white/20" />}
+                  />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <DiffCheckbox

@@ -3,6 +3,39 @@ import { Play, Pause, SkipBack, SkipForward, Maximize2, X, Music2, Volume2, Volu
 import { formatTime } from '@/lib/utils'
 import { applyThemeToDocument } from '@/theme/engine'
 
+// v4.0.3 — failed-cover guard: a cover whose source is dead (lost cache file,
+// offline remote art) must fall back to the widget's own designed placeholder
+// instead of rendering a broken image. One failure flag per src; the img is
+// unmounted on error so nothing retries (no error loops), and a NEW src
+// (track change, restored cache) resets the flag and tries again.
+// v4.0.3b — SELF-HEALING: a dead aura:// cover usually means the CACHE copy
+// was lost while the artwork still lives inside the audio file. Like the main
+// window's CoverImage, one recovery attempt per source re-extracts it, and a
+// cache-busted URL (different string → failure state resets naturally) makes
+// the real cover come back without any loops.
+const miniRecoveryAttempted = new Set<string>()
+
+function useCoverFailure(src: string | null | undefined, songPath?: string | null) {
+  const [failedFor, setFailedFor] = useState<string | null>(null)
+  const [healedSrc, setHealedSrc] = useState<string | null>(null)
+  useEffect(() => {
+    setFailedFor((f) => (f && f !== src ? null : f))
+    setHealedSrc(null)
+  }, [src])
+  const showSrc = healedSrc ?? src
+  const onError = () => {
+    setFailedFor(showSrc ?? null)
+    if (songPath && showSrc && showSrc.startsWith('aura://') && !miniRecoveryAttempted.has(showSrc)) {
+      miniRecoveryAttempted.add(showSrc)
+      window.electronAPI?.recoverCover?.(songPath)
+        .then((healed) => { if (typeof healed === 'string' && healed) setHealedSrc(healed) })
+        .catch(() => { /* the designed fallback stays */ })
+    }
+  }
+  const failed = !!showSrc && failedFor === showSrc
+  return { showSrc, failed, onError }
+}
+
 // ── Mini state contract ──────────────────────────────────────────────────────
 // Pushed by the MAIN window's useMiniPlayerBridge over 'mini:state'. Kept as a
 // flat, serializable snapshot — nothing live crosses the context bridge.
@@ -26,6 +59,8 @@ export interface MiniState {
   accent?: { d1: string; d2: string; d3: string; glow: string; onAccent?: string }
   /** Honest next-up preview (null when shuffle/repeat make it unknowable). */
   nextTitle?: string | null
+  /** v4.0.3b — source audio path, enables dead-cover self-healing. */
+  songPath?: string | null
   /** v3.3.1 — Liquid Glass visual mode. FALSE = matte fallback. The main
    *  window's playerStore is the single source of truth; undefined (a stale
    *  pre-upgrade sender) resolves to the designed default: glass ON. */
@@ -89,6 +124,8 @@ export function MiniApp() {
   }, [state.perf])
 
   const glass = state.liquidGlass !== false // deterministic default: glass ON
+  const { showSrc: coverSrc, failed: coverFailed, onError: onCoverError } = useCoverFailure(state.coverArt, state.songPath)
+  const showCover = !!coverSrc && !coverFailed
 
   const act = (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') =>
     window.electronAPI?.miniAction?.(action)
@@ -99,8 +136,8 @@ export function MiniApp() {
           Glass mode only (matte fades it out; Performance Mode removes it). */}
       {glass && (
         <div className="mini-glow" aria-hidden>
-          {state.coverArt
-            ? <img src={state.coverArt} alt="" draggable={false} />
+          {showCover
+            ? <img src={coverSrc!} alt="" draggable={false} onError={onCoverError} />
             : null}
         </div>
       )}
@@ -119,8 +156,8 @@ export function MiniApp() {
           className="mini-art"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          {state.coverArt ? (
-            <img src={state.coverArt} alt="" draggable={false} />
+          {showCover ? (
+            <img src={coverSrc!} alt="" draggable={false} onError={onCoverError} />
           ) : (
             <div className="mini-art-fallback">
               <Music2 size={18} style={{ color: 'rgba(255,255,255,0.45)' }} />

@@ -60,9 +60,33 @@ export function useMediaKeys() {
   }, [])
 
   // Push the thumbar icon state to main (existing v1.x integration).
+  // v4.0.3e — the same push feeds the mini player's playing-only visibility
+  // rule: main shows the widget only while isPlaying is true and hides a
+  // visible widget the moment playback stops (a selected-but-paused song is
+  // NOT enough to keep it up). Subscribing to currentSong too keeps main's
+  // picture honest across every transition — play/pause AND load/unload
+  // (queue cleared, playing song removed, restore of the persisted playhead
+  // on boot, which changes currentSong while isPlaying stays false).
   useEffect(() => {
-    window.electronAPI?.syncPlaybackState?.(isPlaying)
-  }, [isPlaying])
+    window.electronAPI?.syncPlaybackState?.(isPlaying, !!currentSong)
+  }, [isPlaying, currentSong])
+
+  // v4.0.3d — answer main's pre-show revalidation. The minimize auto-show
+  // used to trust main's MIRROR of the last player:state-sync push; a stale
+  // or delayed push could then surface the widget over an app whose music
+  // was not playing (runtime-verified). Main now asks before showing, and
+  // this handler — registered once, reading the store at call time like
+  // every other media funnel — replies with the LIVE truth. v4.0.3e — the
+  // truth the rule needs is "is music ACTUALLY playing right now" (the
+  // user's playing-only rule), not merely "is a track loaded": a selected
+  // but paused song must never surface the widget.
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.onQueryTrackState || !api?.replyTrackState) return
+    return api.onQueryTrackState(() => {
+      api.replyTrackState(!!usePlayerStore.getState().isPlaying)
+    })
+  }, [])
 
   // ── SMTC: action handlers — registered once, read state at call time ──
   useEffect(() => {

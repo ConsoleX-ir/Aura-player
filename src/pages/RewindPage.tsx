@@ -13,6 +13,7 @@ import {
 } from '@/lib/rewind'
 import type { RewindMonthData } from '@/types'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── Aura Rewind (Wave 4) ─────────────────────────────────────────────────────
 // The monthly listening experience: a scroll-told story built ONLY from the
@@ -51,8 +52,10 @@ export default function RewindPage() {
 
   // Wire the cover resolver once — aggregateRewind stays data-only.
   useEffect(() => {
-    setSongCoverResolver((songId) =>
-      usePlayerStore.getState().library.find((s) => s.id === songId)?.coverArt ?? null)
+    setSongCoverResolver((songId) => {
+      const s = usePlayerStore.getState().library.find((x) => x.id === songId)
+      return s ? { coverArt: s.coverArt ?? null, path: s.path } : null
+    })
   }, [])
 
   // Escape = back out of where I am (same contract as the Properties page).
@@ -165,6 +168,7 @@ export default function RewindPage() {
               kicker="On repeat"
               title={data.topSongs[0] ? `“${data.topSongs[0].title}” knew the way` : undefined}
               cover={data.topSongCover}
+              songPath={data.topSongPath}
               rows={data.topSongs.map((t) => ({ key: t.key, primary: t.title, secondary: t.artist, ms: t.ms, plays: t.plays }))}
               icon={<Headphones size={13} />}
             />
@@ -307,10 +311,12 @@ function HeroScene({ data, monthText, perf }: { data: RewindMonthData; monthText
 }
 
 // ── Top-N ranking scene (songs / artists / albums share one shape) ──────────
-function TopScene({ kicker, title, rows, cover, icon }: {
+function TopScene({ kicker, title, cover, songPath, rows, icon }: {
   kicker: string
   title?: string
   cover?: string | null
+  /** v4.0.3c — enables dead-cache self-heal for the #1 song's cover. */
+  songPath?: string | null
   rows: { key: string; primary: string; secondary: string; ms: number; plays: number }[]
   icon: React.ReactNode
 }) {
@@ -328,10 +334,16 @@ function TopScene({ kicker, title, rows, cover, icon }: {
           >
             {/* Rank + art */}
             <div className="relative w-10 h-10 shrink-0">
-              {i === 0 && cover ? (
-                <img src={cover} alt="" className="w-10 h-10 rounded-xl object-cover" style={{ boxShadow: '0 0 18px var(--accent-whisper)' }} />
-              ) : i === 0 ? (
-                <div className="w-10 h-10 rounded-xl overflow-hidden"><ArtworkPlaceholder seed={r.key} size="sm" /></div>
+              {i === 0 ? (
+                <CoverImage
+                  src={cover}
+                  seed={r.key}
+                  songPath={songPath}
+                  className="w-10 h-10 rounded-xl object-cover"
+                  style={{ boxShadow: '0 0 18px var(--accent-whisper)' }}
+                  placeholderSize="sm"
+                  fallback={<div className="w-10 h-10 rounded-xl overflow-hidden"><ArtworkPlaceholder seed={r.key} size="sm" /></div>}
+                />
               ) : null}
               {i !== 0 && (
                 <div

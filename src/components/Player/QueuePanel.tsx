@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { X, ListMusic, Music2, Sparkles } from 'lucide-react'
+import { X, ListMusic, Sparkles } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useMemo } from 'react'
 import { useVirtualWindow } from '@/hooks/useVirtualWindow'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // Matches PlayerBar's panel width constant — w-72.
 const PANEL_WIDTH = 288
@@ -140,9 +141,14 @@ export function QueuePanel({ anchorX, onClose }: { anchorX: number; onClose: () 
               title={isActive ? 'Now playing' : `Play ${song.title}`}
             >
               <div className="w-7 h-7 rounded-md overflow-hidden shrink-0" style={{ background: 'var(--glass-2)' }}>
-                {song.coverArt
-                  ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
-                  : <div className="w-full h-full flex items-center justify-center"><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>}
+                <CoverImage
+                  src={song.coverArt}
+                  seed={song.id}
+                  songPath={song.path}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  placeholderSize="sm"
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs truncate flex items-center gap-1" style={{ color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 500 : 400 }}>

@@ -2,7 +2,8 @@ import { motion } from 'framer-motion'
 import { Play, Disc3 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import type { Song } from '@/types'
-import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
+import { UnknownValue } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 
 interface AlbumCardProps {
   album: string; artist: string; songs: Song[]; coverArt: string | null; index: number
@@ -29,12 +30,21 @@ export function AlbumCard({ album, artist, songs, coverArt, index, animateIn = t
   const content = (
     <>
       <div className="relative aspect-square overflow-hidden" style={{ background: 'var(--glass-1)' }}>
-        {coverArt
-          ? <img src={coverArt} alt={album} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600" loading="lazy" />
-          // Missing artwork → the album's own generated aura (stable per
-          // album key), not a dead gray box.
-          : <ArtworkPlaceholder seed={`${album}|||${artist}`} size="lg" />
-        }
+        {/* Missing or failed artwork → the album's own generated aura (stable
+            per album key), not a dead gray box or a broken-image element.
+            v4.0.3c — songPath of the track this cover came from enables the
+            dead-cache self-heal here too: the albums grid used to be the one
+            surface where a lost covers-cache file permanently replaced valid
+            embedded art with the placeholder (no recovery attempt, ever). */}
+        <CoverImage
+          src={coverArt}
+          seed={`${album}|||${artist}`}
+          alt={album}
+          songPath={songs.find((s) => s.coverArt === coverArt)?.path ?? null}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-600"
+          loading="lazy"
+          placeholderSize="lg"
+        />
 
         {/* Overlay */}
         <div

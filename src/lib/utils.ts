@@ -1,3 +1,16 @@
+// v4.0.3b — human labels for the three repeat modes. The repeat control's
+// tooltip/aria used to expose the raw enum values ("Repeat: none"), which
+// both read badly and desynced the accessible name from the visible state.
+// Kept next to formatTime so every surface (play bar, Now Playing) shares
+// ONE label source.
+import type { RepeatMode } from '../types'
+
+export const REPEAT_LABEL: Record<RepeatMode, string> = {
+  none: 'Off',
+  all: 'All',
+  one: 'One',
+}
+
 export function formatTime(seconds: number): string {
   if (!seconds || isNaN(seconds)) return '0:00'
   const m = Math.floor(seconds / 60)

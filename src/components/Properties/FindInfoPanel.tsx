@@ -6,6 +6,7 @@ import type { Song, OnlineMatch } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── "Find Info Online" (keyless) — Properties page section ──────────────────
 // Online metadata lookup against free, keyless sources (Deezer, iTunes/
@@ -232,9 +233,13 @@ export function FindInfoPanel({ song, onApplied }: { song: Song; onApplied: () =
                     style={{ background: i === selIdx ? 'var(--accent)' : 'transparent' }}
                   />
                   <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-black/30 flex items-center justify-center">
-                    {c.artworkUrl
-                      ? <img src={c.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      : <Music2 size={12} className="text-ink-faint" />}
+                    <CoverImage
+                      src={c.artworkUrl}
+                      seed={`${c.title}|${c.artist}|${i}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      fallback={<Music2 size={12} className="text-ink-faint" />}
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs truncate flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
@@ -276,7 +281,13 @@ export function FindInfoPanel({ song, onApplied }: { song: Song; onApplied: () =
             {cand?.artworkUrl && (
               <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--glass-1)', border: '1px solid var(--border-default)' }}>
                 <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-black/30">
-                  <img src={cand.artworkUrl} alt="" className="w-full h-full object-cover" />
+                  <CoverImage
+                    src={cand.artworkUrl}
+                    seed={`${cand.title}|${cand.artist}`}
+                    className="w-full h-full object-cover"
+                    placeholderSize="md"
+                    fallback={<Music2 size={14} className="text-ink-faint" />}
+                  />
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <DiffCheckbox

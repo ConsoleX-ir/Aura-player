@@ -4,6 +4,7 @@ import type { AudiusArtist, AudiusPlaylist, OnlineTrack } from '@/services/provi
 import { toSong } from '@/services/providers/audius'
 import { usePlayerStore } from '@/store/playerStore'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { formatTime } from '@/lib/utils'
 
 // ── Explore cards (v2.16.1 → 3.0) ────────────────────────────────────────────
@@ -28,9 +29,14 @@ export function ArtistCard({ artist, onOpen }: { artist: AudiusArtist; onOpen: (
       title={`Open ${artist.name}`}
     >
       <div className="w-14 h-14 rounded-full overflow-hidden shrink-0" style={{ background: 'var(--glass-2)' }}>
-        {artist.avatarUrl
-          ? <img src={artist.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <div className="w-full h-full flex items-center justify-center"><Mic2 size={18} style={{ color: 'var(--text-faint)' }} /></div>}
+        <CoverImage
+          src={artist.avatarUrl}
+          seed={artist.name}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          placeholderSize="md"
+          fallback={<div className="w-full h-full flex items-center justify-center"><Mic2 size={18} style={{ color: 'var(--text-faint)' }} /></div>}
+        />
       </div>
       <div className="min-w-0 w-full">
         <p className="text-xs font-medium truncate flex items-center justify-center gap-1" style={{ color: 'var(--text-primary)' }}>
@@ -54,9 +60,13 @@ export function PlaylistCard({ playlist, onOpen }: { playlist: AudiusPlaylist; o
       title={`Open ${playlist.name}`}
     >
       <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}>
-        {playlist.artworkUrl
-          ? <img src={playlist.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <ListMusic size={15} style={{ color: 'var(--text-faint)' }} />}
+        <CoverImage
+          src={playlist.artworkUrl}
+          seed={playlist.name}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          fallback={<ListMusic size={15} style={{ color: 'var(--text-faint)' }} />}
+        />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>{playlist.name}</p>
@@ -91,9 +101,13 @@ export function HeroCard({ track, songs }: { track: OnlineTrack; songs: ReturnTy
       data-explore-hero
     >
       <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-xl overflow-hidden shrink-0 relative" style={{ background: 'var(--glass-2)', boxShadow: 'var(--shadow-2)' }}>
-        {track.artworkUrl
-          ? <img src={track.artworkUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <ArtworkPlaceholder seed={track.id} size="lg" />}
+        <CoverImage
+          src={track.artworkUrl}
+          seed={track.id}
+          className="w-full h-full object-cover"
+          placeholderSize="lg"
+          fallback={<ArtworkPlaceholder seed={track.id} size="lg" />}
+        />
         <button
           onClick={() => { if (playable) playSong(song, songs) }}
           disabled={!playable}
@@ -173,9 +187,14 @@ export const TrackTile = memo(function TrackTile({ track, rank, songs }: {
       title={playable ? `Play ${track.title}` : 'This track is not streamable'}
     >
       <div className="relative w-[150px] h-[150px] rounded-xl overflow-hidden" style={{ background: 'var(--glass-2)', boxShadow: active ? '0 0 0 1.5px var(--accent-border)' : undefined }}>
-        {track.artworkUrl
-          ? <img src={track.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <ArtworkPlaceholder seed={track.id} size="md" />}
+        <CoverImage
+          src={track.artworkUrl}
+          seed={track.id}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          placeholderSize="md"
+          fallback={<ArtworkPlaceholder seed={track.id} size="md" />}
+        />
         <span
           className="absolute top-1.5 left-1.5 min-w-5 h-5 px-1 flex items-center justify-center rounded-md text-[10px] font-semibold tabular-nums"
           style={{ background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}
@@ -210,9 +229,14 @@ export function PlaylistCardLarge({ playlist, onOpen }: { playlist: AudiusPlayli
       title={`Open ${playlist.name}`}
     >
       <div className="w-full aspect-[2/1] overflow-hidden" style={{ background: 'var(--glass-2)' }}>
-        {playlist.artworkUrl
-          ? <img src={playlist.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <div className="w-full h-full flex items-center justify-center"><ListMusic size={26} style={{ color: 'var(--text-faint)' }} /></div>}
+        <CoverImage
+          src={playlist.artworkUrl}
+          seed={playlist.name}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          placeholderSize="lg"
+          fallback={<div className="w-full h-full flex items-center justify-center"><ListMusic size={26} style={{ color: 'var(--text-faint)' }} /></div>}
+        />
       </div>
       <div className="p-3">
         <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{playlist.name}</p>

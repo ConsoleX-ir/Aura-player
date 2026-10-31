@@ -77,6 +77,9 @@ export function useMiniPlayerBridge() {
         title: s.currentSong?.title ?? 'Nothing playing',
         artist: s.currentSong?.artist ?? 'Aura mini-player',
         coverArt: s.currentSong ? effectiveCover(overrides, s.currentSong) : null,
+        // v4.0.3b — the source file path lets the widget self-heal a dead
+        // aura:// cover exactly like the main window's CoverImage does.
+        songPath: s.currentSong?.path ?? null,
         isPlaying: s.isPlaying,
         progress: s.duration > 0 ? s.progress : 0,
         // v3.2.0 — the widget renders its own seek bar + elapsed/remaining,

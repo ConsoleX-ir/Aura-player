@@ -9,7 +9,8 @@ import { startSmartRadio } from '@/lib/smartRadioActions'
 import type { Song } from '@/types'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { PlaylistPickerModal } from '@/components/Modals/PlaylistPickerModal'
-import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
+import { UnknownValue } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 
 interface SongRowProps {
   song: Song
@@ -128,10 +129,13 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
 
       {showAlbumArt && (
         <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden">
-          {(coverOverride ?? song.coverArt)
-            ? <img src={(coverOverride ?? song.coverArt)!} alt="" className="w-full h-full object-cover" loading="lazy" />
-            : <ArtworkPlaceholder seed={song.id} size="sm" />
-          }
+          <CoverImage
+            src={coverOverride ?? song.coverArt}
+            seed={song.id}
+            songPath={song.path}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
         </div>
       )}
 

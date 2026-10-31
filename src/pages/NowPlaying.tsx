@@ -11,7 +11,8 @@ import { useLyrics } from '@/hooks/useLyrics'
 import { VisualStage } from '@/components/NowPlaying/VisualStage'
 import { useArtworkStore } from '@/store/artworkStore'
 import { useVirtualWindow } from '@/hooks/useVirtualWindow'
-import { formatTime } from '@/lib/utils'
+import { formatTime, REPEAT_LABEL } from '@/lib/utils'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── Now Playing (Wave 3 redesign) ───────────────────────────────────────────
 // The immersive view. Structure is the Wave-2-approved split — big glowing
@@ -210,26 +211,28 @@ export function NowPlaying() {
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
               className="relative"
             >
-              {(coverOverride ?? currentSong.coverArt) ? (
-                <img
-                  src={(coverOverride ?? currentSong.coverArt)!}
-                  alt={currentSong.title}
-                  className="w-64 h-64 rounded-3xl object-cover"
-                  style={{
-                    boxShadow: isPlaying
-                      ? '0 0 64px var(--accent-veil), 0 24px 60px rgba(0,0,0,0.6)'
-                      : '0 24px 60px rgba(0,0,0,0.6)',
-                    transition: 'box-shadow 1.2s ease',
-                  }}
-                />
-              ) : (
-                <div
-                  className="w-64 h-64 rounded-3xl flex items-center justify-center"
-                  style={{ background: 'var(--glass-2)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-3)' }}
-                >
-                  <Music2 size={64} className="text-ink-faint" />
-                </div>
-              )}
+              <CoverImage
+                src={coverOverride ?? currentSong.coverArt}
+                seed={currentSong.id}
+                songPath={currentSong.path}
+                alt={currentSong.title}
+                className="w-64 h-64 rounded-3xl object-cover"
+                style={{
+                  boxShadow: isPlaying
+                    ? '0 0 64px var(--accent-veil), 0 24px 60px rgba(0,0,0,0.6)'
+                    : '0 24px 60px rgba(0,0,0,0.6)',
+                  transition: 'box-shadow 1.2s ease',
+                }}
+                placeholderSize="lg"
+                fallback={(
+                  <div
+                    className="w-64 h-64 rounded-3xl flex items-center justify-center"
+                    style={{ background: 'var(--glass-2)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-3)' }}
+                  >
+                    <Music2 size={64} className="text-ink-faint" />
+                  </div>
+                )}
+              />
 
               {/* Spin ring when playing — the artwork "wears" the music */}
               {isPlaying && (
@@ -294,7 +297,7 @@ export function NowPlaying() {
             </motion.button>
 
             <NpBtn onClick={nextSong}><SkipForward size={20} /></NpBtn>
-            <NpBtn active={repeat !== 'none'} onClick={cycleRepeat}>
+            <NpBtn active={repeat !== 'none'} engaged={repeat === 'all'} onClick={cycleRepeat} title={`Repeat: ${REPEAT_LABEL[repeat]} (R)`} ariaLabel={`Repeat mode: ${REPEAT_LABEL[repeat]}`}>
               {repeat === 'one' ? <Repeat1 size={15} /> : <Repeat size={15} />}
             </NpBtn>
           </div>
@@ -313,7 +316,10 @@ export function NowPlaying() {
                   style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-strong))' }}
                 />
               </Slider.Track>
-              <Slider.Thumb className="block w-3 h-3 rounded-full bg-white shadow outline-none hover:scale-125 transition-transform" />
+              {/* v4.0.3 — same volume-thumb correction as the play bar: the
+                  circle follows the theme ink (var(--text-primary)) instead of
+                  a literal bg-white that disappears on light themes. */}
+              <Slider.Thumb className="block w-3 h-3 rounded-full shadow outline-none hover:scale-125 transition-transform" style={{ background: 'var(--text-primary)' }} />
             </Slider.Root>
             <span className="text-[11px] w-8 text-right tabular-nums" style={{ color: 'var(--text-faint)' }}>{Math.round(volume * 100)}</span>
           </div>
@@ -463,10 +469,16 @@ export function NowPlaying() {
                       />
                     )}
                     {queueVirtualized ? null : null}
-                    {song.coverArt
-                      ? <img src={song.coverArt} alt="" className="w-7 h-7 rounded-md object-cover shrink-0" />
-                      : <div className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>
-                    }
+                    <CoverImage
+                      src={song.coverArt}
+                      seed={song.id}
+                      songPath={song.path}
+                      className="w-7 h-7 rounded-md object-cover shrink-0"
+                      placeholderSize="sm"
+                      fallback={(
+                        <div className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--glass-2)' }}><Music2 size={10} style={{ color: 'var(--text-faint)' }} /></div>
+                      )}
+                    />
                     <div className="flex-1 min-w-0">
                       <p data-queue-title={song.title} className="text-xs truncate" style={{ color: isActive ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: isActive ? 500 : 400 }}>
                         {song.title}
@@ -673,15 +685,28 @@ function NowPlayingLyrics({ lines, plain }: {
   )
 }
 
-function NpBtn({ children, onClick, active }: {
-  children: React.ReactNode; onClick?: () => void; active?: boolean
+function NpBtn({ children, onClick, active, title, ariaLabel, engaged }: {
+  children: React.ReactNode; onClick?: () => void; active?: boolean; title?: string; ariaLabel?: string; engaged?: boolean
 }) {
   return (
     <button
       onClick={onClick}
+      title={title}
+      aria-label={ariaLabel ?? title}
       className="p-2.5 rounded-xl transition-all duration-150 active:scale-90"
       style={active
-        ? { background: 'var(--glass-2)', color: 'var(--accent)' }
+        ? {
+            // v4.0.3c — same measured fix as the play bar's repeat pill:
+            // var(--accent-veil) is a 12% wash that computed to a 0.07/255
+            // lift over this view's chrome — invisible. The engaged state
+            // now carries a ~22% accent fill + 55% ring so repeat-all and
+            // shuffle-on read as clearly "pressed" at rest.
+            background: engaged
+              ? 'color-mix(in srgb, var(--accent) 22%, transparent)'
+              : 'var(--glass-2)',
+            color: 'var(--accent)',
+            boxShadow: engaged ? 'inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent)' : undefined,
+          }
         : { color: 'var(--text-tertiary)' }
       }
       onMouseEnter={(e) => { if (!active) { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--glass-1)' } }}

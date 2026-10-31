@@ -1,4 +1,4 @@
-import { useEffect, useMemo, lazy, Suspense } from 'react'
+import { useEffect, useMemo, lazy, Suspense, type ComponentType, type LazyExoticComponent } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { Sidebar } from '@/components/Sidebar/Sidebar'
 import { PlayerBar } from '@/components/Player/PlayerBar'
@@ -27,25 +27,47 @@ import { resolveThemeId, themeAppearance } from '@/theme/registry'
 import { noteThemeAppearance } from '@/lib/appearance'
 import { UploadCloud, Loader2 } from 'lucide-react'
 
-// Home is the startup destination (Core Experience redesign), so — exactly
-// like Library before it — it stays a normal eager import: the landing page
-// must paint without waiting on a chunk. Everything else, including Library
-// now that it's a navigation destination rather than the launch default, is
-// split into its own chunk so the startup bundle stays lean (the Orb itself
-// is dependency-free Canvas 2D — no heavy render library rides along).
-const Library = lazy(() => import('@/pages/Library').then((m) => ({ default: m.Library })))
-const LocalMusic = lazy(() => import('@/pages/LocalMusic').then((m) => ({ default: m.LocalMusic })))
-const PlaylistPage = lazy(() => import('@/pages/Playlist').then((m) => ({ default: m.PlaylistPage })))
-const NowPlaying = lazy(() => import('@/pages/NowPlaying').then((m) => ({ default: m.NowPlaying })))
-const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })))
-const PropertiesPage = lazy(() => import('@/pages/PropertiesPage').then((m) => ({ default: m.PropertiesPage })))
-const RewindPage = lazy(() => import('@/pages/RewindPage').then((m) => ({ default: m.default })))
-const Explore = lazy(() => import('@/pages/Explore').then((m) => ({ default: m.Explore })))
-const SmartPlaylists = lazy(() => import('@/pages/SmartPlaylists').then((m) => ({ default: m.SmartPlaylists })))
-const ArtistPage = lazy(() => import('@/pages/ArtistPage').then((m) => ({ default: m.ArtistPage })))
-const AlbumPage = lazy(() => import('@/pages/AlbumPage').then((m) => ({ default: m.AlbumPage })))
-const HistoryPage = lazy(() => import('@/pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
-const AudioStudio = lazy(() => import('@/pages/AudioStudio').then((m) => ({ default: m.AudioStudio })))
+// Home is the startup destination (Core Experience redesign) and every view
+// below is part of the SAME local bundle. They were React.lazy(() => import())
+// chunks until v4.0.3c: the production posture is loadFile() + webSecurity,
+// and Chromium refuses dynamic import() from a file:// origin ("Failed to
+// fetch dynamically imported module") — so opening Settings, Library,
+// Explore, … outside the dev server threw an uncaught TypeError and the
+// WHOLE renderer went blank (root unmounted). Verified at runtime in this
+// session. A desktop app reading its code from local disk gains nothing
+// from network-style code splitting, so every view now ships in the static
+// graph: same lazy() component type, same Suspense boundaries, zero runtime
+// import() left in the renderer.
+import { Library as LibraryImpl } from '@/pages/Library'
+import { LocalMusic as LocalMusicImpl } from '@/pages/LocalMusic'
+import { PlaylistPage as PlaylistPageImpl } from '@/pages/Playlist'
+import { NowPlaying as NowPlayingImpl } from '@/pages/NowPlaying'
+import { Settings as SettingsImpl } from '@/pages/Settings'
+import { PropertiesPage as PropertiesPageImpl } from '@/pages/PropertiesPage'
+import RewindPageImpl from '@/pages/RewindPage'
+import { Explore as ExploreImpl } from '@/pages/Explore'
+import { SmartPlaylists as SmartPlaylistsImpl } from '@/pages/SmartPlaylists'
+import { ArtistPage as ArtistPageImpl } from '@/pages/ArtistPage'
+import { AlbumPage as AlbumPageImpl } from '@/pages/AlbumPage'
+import { HistoryPage as HistoryPageImpl } from '@/pages/HistoryPage'
+import { AudioStudio as AudioStudioImpl } from '@/pages/AudioStudio'
+
+function eager<T extends ComponentType<unknown>>(C: T): LazyExoticComponent<T> {
+  return lazy(() => Promise.resolve({ default: C }))
+}
+const Library = eager(LibraryImpl)
+const LocalMusic = eager(LocalMusicImpl)
+const PlaylistPage = eager(PlaylistPageImpl)
+const NowPlaying = eager(NowPlayingImpl)
+const Settings = eager(SettingsImpl)
+const PropertiesPage = eager(PropertiesPageImpl)
+const RewindPage = eager(RewindPageImpl)
+const Explore = eager(ExploreImpl)
+const SmartPlaylists = eager(SmartPlaylistsImpl)
+const ArtistPage = eager(ArtistPageImpl)
+const AlbumPage = eager(AlbumPageImpl)
+const HistoryPage = eager(HistoryPageImpl)
+const AudioStudio = eager(AudioStudioImpl)
 
 export default function App() {
   const currentSong = usePlayerStore((s) => s.currentSong)

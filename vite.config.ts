@@ -34,7 +34,9 @@ export default defineConfig({
     // (mini.html) — a separate frameless BrowserWindow loads the latter.
     // Shared modules (react, framer-motion, the token CSS) are split into
     // common chunks automatically, so the mini window adds only its own
-    // tiny entry chunk.
+    // tiny entry chunk. v4.0.3c: the renderer no longer emits runtime
+    // dynamic import() at all (see App.tsx) — Chromium refuses dynamic
+    // import() from file:// origins, which blanked every lazy view.
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),

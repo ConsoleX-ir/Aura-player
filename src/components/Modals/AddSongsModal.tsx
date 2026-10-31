@@ -4,6 +4,7 @@ import { ListPlus, Music2, Search, X, Check } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { formatTime } from '@/lib/utils'
 import type { Playlist, Song } from '@/types'
+import { CoverImage } from '@/components/States/CoverImage'
 
 interface AddSongsModalProps {
   open: boolean
@@ -221,13 +222,18 @@ function SongPickRow({
 
       {/* Cover art */}
       <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden">
-        {song.coverArt ? (
-          <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
-        ) : (
-          <div className="w-full h-full bg-[var(--color-glass-mid)] flex items-center justify-center">
-            <Music2 size={12} className="text-ink-faint" />
-          </div>
-        )}
+        <CoverImage
+          src={song.coverArt}
+          seed={song.id}
+          songPath={song.path}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          fallback={(
+            <div className="w-full h-full bg-[var(--color-glass-mid)] flex items-center justify-center">
+              <Music2 size={12} className="text-ink-faint" />
+            </div>
+          )}
+        />
       </div>
 
       {/* Title / artist */}

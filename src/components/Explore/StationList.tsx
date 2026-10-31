@@ -3,6 +3,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { useRadioStore, type RadioStation } from '@/store/radioStore'
 import { clickStation, toStationSong } from '@/services/providers/radiobrowser'
 import { cn } from '@/lib/utils'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── StationList (v2.16.1) — live radio rows ──────────────────────────────────
 // Playing a station makes it a ONE-item queue of a live Song (duration 0 —
@@ -51,9 +52,13 @@ export function StationList({ stations }: { stations: RadioStation[] }) {
             title={playable ? `Play ${station.title}` : 'This station is not reachable right now'}
           >
             <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden flex items-center justify-center" style={{ background: 'var(--glass-2)' }}>
-              {station.artworkUrl
-                ? <img src={station.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                : <Radio size={13} style={{ color: 'var(--text-faint)' }} />}
+              <CoverImage
+                src={station.artworkUrl}
+                seed={station.id ?? station.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                fallback={<Radio size={13} style={{ color: 'var(--text-faint)' }} />}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm truncate" style={{ color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 500 : 400 }}>

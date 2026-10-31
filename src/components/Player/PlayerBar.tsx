@@ -2,14 +2,15 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Shuffle, Repeat, Repeat1, Music2, Mic2, BarChart2, ListMusic,
+  Shuffle, Repeat, Repeat1, Mic2, BarChart2, ListMusic,
   PictureInPicture2, Heart,
 } from 'lucide-react'
 import * as Slider from '@radix-ui/react-slider'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
-import { formatTime } from '@/lib/utils'
+import { formatTime, REPEAT_LABEL } from '@/lib/utils'
 import { useArtworkStore } from '@/store/artworkStore'
+import { CoverImage } from '@/components/States/CoverImage'
 
 // ── Playbar 4.0.1 (Sidebar & Playback Bar redesign) ─────────────────────────
 // The floating liquid-glass capsule is GONE. The transport is now a compact
@@ -181,20 +182,13 @@ export function PlayerBar() {
                   transition={{ type: 'spring', stiffness: 380, damping: 26 }}
                   className="relative shrink-0"
                 >
-                  {(coverOverride ?? currentSong.coverArt)
-                    ? <img
-                        src={(coverOverride ?? currentSong.coverArt)!}
-                        alt=""
-                        className="w-10 h-10 rounded-lg object-cover"
-                        style={{ boxShadow: '0 0 0 1px var(--border-default)' }}
-                      />
-                    : <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ background: 'var(--glass-2)', border: '1px solid var(--border-default)' }}
-                      >
-                        <Music2 size={17} style={{ color: 'var(--text-faint)' }} />
-                      </div>
-                  }
+                  <CoverImage
+                    src={coverOverride ?? currentSong.coverArt}
+                    seed={currentSong.id}
+                    songPath={currentSong.path}
+                    className="w-10 h-10 rounded-lg object-cover"
+                    style={{ boxShadow: '0 0 0 1px var(--border-default)' }}
+                  />
                 </motion.div>
               ) : null}
             </AnimatePresence>
@@ -264,7 +258,7 @@ export function PlayerBar() {
             <IconBtn onClick={nextSong} title="Next (→)" ariaLabel="Next song" hit={32}>
               <SkipForward size={19} />
             </IconBtn>
-            <IconBtn active={repeat !== 'none'} onClick={cycleRepeat} title={`Repeat: ${repeat} (R)`} ariaLabel="Repeat mode" hit={30}>
+            <IconBtn active={repeat !== 'none'} data-repeat-mode={repeat} onClick={cycleRepeat} title={`Repeat: ${REPEAT_LABEL[repeat]} (R)`} ariaLabel={`Repeat mode: ${REPEAT_LABEL[repeat]}`} hit={30}>
               {repeat === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
             </IconBtn>
           </div>
@@ -350,7 +344,12 @@ export function PlayerBar() {
                   style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-strong))' }}
                 />
               </Slider.Track>
-              <Slider.Thumb className="block w-3 h-3 rounded-full shadow outline-none hover:scale-110 transition-transform" style={{ background: 'var(--text-on-accent)' }} />
+              {/* v4.0.3 — the thumb is the control's only circle; it now wears
+                  the theme's primary ink (light in dark themes, near-black in
+                  light ones) instead of the hard-coded #FFFFFF that
+                  --text-on-accent resolves to in BOTH appearances, which
+                  vanished into the light chrome. Shape/size/hover untouched. */}
+              <Slider.Thumb className="block w-3 h-3 rounded-full shadow outline-none hover:scale-110 transition-transform" style={{ background: 'var(--text-primary)' }} />
             </Slider.Root>
           </div>
         </div>
@@ -436,9 +435,9 @@ function SeekCluster() {
   )
 }
 
-function IconBtn({ children, onClick, active, title, ariaLabel, hit = 32 }: {
+function IconBtn({ children, onClick, active, title, ariaLabel, hit = 32, ...rest }: {
   children: React.ReactNode; onClick?: () => void; active?: boolean; title?: string; ariaLabel?: string; hit?: number
-}) {
+} & React.HTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       onClick={() => onClick?.()}
@@ -446,6 +445,7 @@ function IconBtn({ children, onClick, active, title, ariaLabel, hit = 32 }: {
       aria-label={ariaLabel ?? title}
       className={`rounded-full transition-all duration-150 icon-hover flex items-center justify-center ${active ? 'is-active' : ''}`}
       style={{ width: hit, height: hit }}
+      {...rest}
     >
       {children}
     </button>

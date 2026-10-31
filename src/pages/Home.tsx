@@ -9,7 +9,7 @@ import { useUserPrefsStore } from '@/store/userPrefsStore'
 import { useLibraryImport } from '@/hooks/useLibraryImport'
 import { getRecentScrobbles, SCROBBLE_APPENDED_EVENT, type Scrobble } from '@/lib/scrobbleStore'
 import { AuraOrb } from '@/components/Home/AuraOrb'
-import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { EmptyState } from '@/components/States/EmptyState'
 import type { Song } from '@/types'
 
@@ -431,10 +431,14 @@ function ContinueCard({ scrobble, song, index, onPlay }: {
       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-1)' }}
     >
       <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0">
-        {song?.coverArt
-          ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
-          : <ArtworkPlaceholder seed={scrobble.songId} size="sm" />
-        }
+        <CoverImage
+          src={song?.coverArt}
+          seed={scrobble.songId}
+          songPath={song?.path ?? null}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          placeholderSize="sm"
+        />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>
@@ -483,10 +487,14 @@ function RecentCard({ song, index, onPlay }: {
       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-1)' }}
     >
       <div className="relative w-full aspect-square rounded-xl overflow-hidden mb-2.5">
-        {song.coverArt
-          ? <img src={song.coverArt} alt="" className="w-full h-full object-cover" loading="lazy" />
-          : <ArtworkPlaceholder seed={song.id} size="md" />
-        }
+        <CoverImage
+          src={song.coverArt}
+          seed={song.id}
+          songPath={song.path}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          placeholderSize="md"
+        />
         <span
           aria-hidden
           className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"

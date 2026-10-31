@@ -137,9 +137,11 @@ export function aggregateRewind(
   const sessions = rows.length
   // The #1 song's cover art, resolved against the live library (the cover
   // file may be gone, in which case the story renders its aura placeholder).
-  const topSongCover = topSongs.length
-    ? (songCoverResolver?.(topSongs[0].key) ?? null)
-    : null
+  // v4.0.3c — the resolver now also returns the song's source path so the
+  // story's cover can self-heal a dead cache file like every other surface.
+  const topSong = topSongs.length ? (songCoverResolver?.(topSongs[0].key) ?? null) : null
+  const topSongCover = topSong?.coverArt ?? null
+  const topSongPath = topSong?.path ?? null
 
   return {
     monthStart: start,
@@ -162,6 +164,7 @@ export function aggregateRewind(
     longestStreak,
     mostActiveDay,
     topSongCover,
+    topSongPath,
   }
 }
 
@@ -170,8 +173,11 @@ export function aggregateRewind(
 // a cycle (store → queueEngine → …, rewind is a lib module). Instead the
 // RewindPage wires a resolver once at call time. Module-level because
 // aggregateRewind's signature stays data-only for testability.
-let songCoverResolver: ((songId: string) => string | null) | null = null
-export function setSongCoverResolver(fn: (songId: string) => string | null): void {
+// v4.0.3c — the resolver returns the song's source path too, so the story's
+// cover can self-heal a dead covers-cache file (RewindMonthData.topSongPath).
+export interface RewindCoverResolution { coverArt: string | null; path: string | null }
+let songCoverResolver: ((songId: string) => RewindCoverResolution | null) | null = null
+export function setSongCoverResolver(fn: (songId: string) => RewindCoverResolution | null): void {
   songCoverResolver = fn
 }
 

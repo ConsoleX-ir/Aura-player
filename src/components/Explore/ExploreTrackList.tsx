@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { ExternalLink, Pause, Play } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { formatTime, cn } from '@/lib/utils'
 import { toSong, type OnlineTrack } from '@/services/providers/audius'
 
@@ -38,9 +39,14 @@ const TrackRow = memo(function TrackRow({ track, song, active, playing, onPlay, 
       title={playable ? `Play ${track.title}` : 'This track is not streamable'}
     >
       <div className="w-9 h-9 shrink-0 rounded-lg overflow-hidden" style={{ background: 'var(--glass-2)' }}>
-        {track.artworkUrl
-          ? <img src={track.artworkUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <ArtworkPlaceholder seed={track.id} size="sm" />}
+        <CoverImage
+          src={track.artworkUrl}
+          seed={track.id}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          placeholderSize="sm"
+          fallback={<ArtworkPlaceholder seed={track.id} size="sm" />}
+        />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm truncate" style={{ color: active ? 'var(--accent)' : 'var(--text-primary)', fontWeight: active ? 500 : 400 }}>

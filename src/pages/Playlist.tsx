@@ -8,6 +8,7 @@ import { AddSongsModal } from '@/components/Modals/AddSongsModal'
 import { useLibraryExport } from '@/hooks/useLibraryExport'
 import { EmptyState } from '@/components/States/EmptyState'
 import { ArtworkPlaceholder } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 
 export function PlaylistPage() {
   // Narrow selectors — avoids re-rendering the whole page on unrelated store
@@ -54,7 +55,7 @@ export function PlaylistPage() {
         {/* Blurred cover background + scrim so text always reads */}
         {coverArt && (
           <div className="absolute inset-0 overflow-hidden opacity-20" aria-hidden>
-            <img src={coverArt} alt="" className="w-full h-full object-cover blur-3xl scale-110" />
+            <CoverImage src={coverArt} seed={`playlist:${playlist.id}`} songPath={songs.find((s) => s.coverArt === coverArt)?.path ?? null} className="w-full h-full object-cover blur-3xl scale-110" fallback={null} />
           </div>
         )}
         <div
@@ -84,11 +85,15 @@ export function PlaylistPage() {
               boxShadow: 'var(--shadow-3)',
             }}
           >
-            {coverArt
-              ? <img src={coverArt} alt="" className="w-full h-full object-cover" />
-              // Playlist without any artwork → generated aura from its own name
-              : <ArtworkPlaceholder seed={`playlist:${playlist.id}`} size="lg" />
-            }
+            {/* Missing or failed artwork → generated aura from the playlist's own name */}
+            <CoverImage
+              src={coverArt}
+              seed={`playlist:${playlist.id}`}
+              songPath={songs.find((s) => s.coverArt === coverArt)?.path ?? null}
+              className="w-full h-full object-cover"
+              placeholderSize="lg"
+              fallback={<ArtworkPlaceholder seed={`playlist:${playlist.id}`} size="lg" />}
+            />
           </div>
 
           {/* Info */}

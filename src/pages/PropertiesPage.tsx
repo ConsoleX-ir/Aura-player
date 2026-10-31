@@ -11,6 +11,7 @@ import { getSongStats } from '@/lib/scrobbleStore'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { FindInfoPanel } from '@/components/Properties/FindInfoPanel'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
+import { CoverImage } from '@/components/States/CoverImage'
 import { useArtworkStore } from '@/store/artworkStore'
 import { ImageIcon } from 'lucide-react'
 import { PersonalTab } from '@/components/Properties/PersonalTab'
@@ -131,10 +132,13 @@ function SongHero({ song }: { song: Song }) {
   return (
     <div className="flex items-center gap-6 mb-6 p-5 rounded-3xl" style={{ background: 'var(--glass-1)', border: '1px solid var(--border-subtle)' }}>
       <div className="w-28 h-28 rounded-2xl overflow-hidden shrink-0" style={{ boxShadow: 'var(--shadow-2)' }}>
-        {overrideUrl ?? song.coverArt
-          ? <img src={(overrideUrl ?? song.coverArt)!} alt="" className="w-full h-full object-cover" />
-          : <ArtworkPlaceholder seed={song.id} size="lg" />
-        }
+        <CoverImage
+          src={overrideUrl ?? song.coverArt}
+          seed={song.id}
+          className="w-full h-full object-cover"
+          placeholderSize="lg"
+          fallback={<ArtworkPlaceholder seed={song.id} size="lg" />}
+        />
       </div>
 
       <div className="min-w-0 flex-1">

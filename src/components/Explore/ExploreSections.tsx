@@ -4,6 +4,7 @@ import { toSong } from '@/services/providers/audius'
 import { Section, TrackListSkeleton, ErrorBlock, EmptyBlock, type SectionState } from './ExploreStates'
 import { TrackList } from './ExploreTrackList'
 import { PlaylistCardLarge, TrackTile, HeroCard } from './ExploreCards'
+import { CoverImage } from '@/components/States/CoverImage'
 import { useMemo } from 'react'
 
 // ── Discovery sections (v2.16.1) ─────────────────────────────────────────────
@@ -140,9 +141,13 @@ export function ArtistSection({ artist, tracks, state, onBack, onRetry }: {
       </button>
       <div className="flex items-center gap-4 mb-5">
         <div className="w-16 h-16 rounded-full overflow-hidden shrink-0" style={{ background: 'var(--glass-2)' }}>
-          {artist.avatarUrl
-            ? <img src={artist.avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-            : <div className="w-full h-full flex items-center justify-center"><Mic2 size={22} style={{ color: 'var(--text-faint)' }} /></div>}
+          <CoverImage
+            src={artist.avatarUrl}
+            seed={artist.name}
+            className="w-full h-full object-cover"
+            placeholderSize="lg"
+            fallback={<div className="w-full h-full flex items-center justify-center"><Mic2 size={22} style={{ color: 'var(--text-faint)' }} /></div>}
+          />
         </div>
         <div className="min-w-0">
           <h2 className="text-xl font-semibold tracking-tight flex items-center gap-1.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>

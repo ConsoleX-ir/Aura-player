@@ -64,6 +64,27 @@ export const useUiStore = create<UiState>()((set, get) => ({
 
   miniPlayer: false,
   setMiniPlayer: (v) => {
+    // v4.0.3e — the PLAYING-ONLY rule, renderer side: the P key, the pill
+    // button and the command palette ALL funnel through here, so nothing can
+    // even ASK for the widget unless music is actually playing right now.
+    // The user rule is explicit: "when music is not playing (even the song
+    // is selected) I don't want to see the mini player; if music is playing
+    // the mini player should be visible." A loaded-but-paused track is NOT
+    // enough anymore. The main process independently re-checks at the window
+    // boundary (showMiniPlayer) and revalidates the minimize auto-show
+    // against the live store — two gates, one rule.
+    if (v && !usePlayerStore.getState().isPlaying) {
+      // A refused show also NORMALIZES a stale visible flag: if the flag
+      // somehow stayed true while music is not playing (a missed
+      // authoritative broadcast), clear it here and tell main to hide the
+      // real window too, so the mirror flag and the actual widget cannot
+      // disagree in either direction. The hide direction is never gated.
+      if (get().miniPlayer) {
+        set({ miniPlayer: false })
+        try { window.electronAPI?.setMiniVisible?.(false) } catch { /* non-Electron */ }
+      }
+      return
+    }
     set({ miniPlayer: v })
     // Show/hide the real desktop window. Main broadcasts the authoritative
     // visibility back on every actual change (see useMiniPlayerBridge), so a

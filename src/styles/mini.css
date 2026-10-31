@@ -42,6 +42,20 @@
   --mg-radius: 20px;
 }
 
+/* v4.0.3 — the page itself MUST stay transparent. The widget window is
+   frameless + transparent: the card paints its own rounded silhouette inside
+   the window bounds, and the 8px gutter around .mini-root shows whatever is
+   behind it. mini.html declares that inline, but the shared index.css (also
+   imported by the mini entry for token coherence) later sets
+   body { background: var(--surface-base) } — opaque, same specificity, later
+   in source order — so it won the cascade and the whole window rectangle
+   rendered as a solid slab (the "black area" around the card; white under
+   light themes). Restating the transparent contract HERE, after that import,
+   restores the designed see-through window at the correct cascade layer. */
+html, body {
+  background: transparent;
+}
+
 /* ── Root: transparent page, the card paints its own silhouette ────────────
    The 8px inset hosts the painted drop shadow (the window itself is
    frameless + transparent + hasShadow:false, so there is no native frame to

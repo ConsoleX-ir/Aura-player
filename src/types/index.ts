@@ -77,6 +77,9 @@ export interface RewindMonthData {
   // Cover art (aura:// or file path) for the #1 song/album/artist's top song,
   // resolved at query time from the live library when still available.
   topSongCover: string | null
+  // v4.0.3c — the #1 song's source audio path, so the story's cover can
+  // self-heal a dead covers-cache file exactly like the other surfaces.
+  topSongPath: string | null
   // The color the Rewind story is told in — derived from the top song's art
   // by the caller (useDynamicTheme pipeline), not stored here.
 }
@@ -188,6 +191,11 @@ export interface ElectronAPI {
   // Progress arrives separately via onMetadataProgress since callbacks can't cross
   // the context bridge — only serializable data can.
   parseMetadataBatch: (paths: string[]) => Promise<Omit<Song, 'id' | 'path'>[]>
+  // v4.0.3b — cover self-healing: re-extract embedded art from the source
+  // file into the covers cache after its cache copy was lost. Returns a
+  // cache-busted aura:// URL (different string → the <img>'s per-source
+  // failure state resets) or null when nothing could be recovered.
+  recoverCover: (filePath: string) => Promise<string | null>
   onMetadataProgress: (cb: (done: number, total: number) => void) => () => void
   // Task 3 — fired when Aura is opened via a file association (double-clicking
   // an audio file in Explorer), whether that's the launch itself or a second
@@ -200,7 +208,16 @@ export interface ElectronAPI {
   // narrow channels (values pre-clamped by the main process).
   onMediaSeek: (cb: (fraction: number) => void) => () => void
   onMediaVolume: (cb: (volume: number) => void) => () => void
-  syncPlaybackState: (isPlaying: boolean) => void
+  // v4.0.3e — reports playback state; the main process derives the mini
+  // player's playing-only visibility rule from isPlaying (a paused/selected
+  // song must never surface the widget).
+  syncPlaybackState: (isPlaying: boolean, hasTrack?: boolean) => void
+  // v4.0.3d/e — the minimize auto-show revalidates before showing: main asks,
+  // the renderer answers with its live store truth (is music ACTUALLY
+  // playing right now), so a stale/delayed push can never pop the widget
+  // over a paused or empty app.
+  onQueryTrackState: (cb: () => void) => () => void
+  replyTrackState: (isPlaying: boolean) => void
   // ── Folder watching (Wave 4) ────────────────────────────────────────────
   // Replaces the live watcher set with exactly the given folders (recursive).
   // Returns the count of folders actually watched (0 in a plain browser).
