@@ -35,6 +35,7 @@
 // stats can never break playback.
 
 import { usePlayerStore } from '@/store/playerStore'
+import { convertFileSrc, isTauri } from '@tauri-apps/api/core'
 import { safeAppendScrobble } from '@/lib/scrobbleStore'
 import { ensureStatsSchemaMeta } from '@/lib/scrobbleStore'
 import { sanitizeGains } from '@/lib/eq'
@@ -421,10 +422,9 @@ export function initPlayback() {
       playedMs = 0
       lastTickAt = 0
 
-      const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+      const isTauriApp = typeof window !== 'undefined' && isTauri()
       // Phase 4 — online tracks carry an http(s) stream URL in `path` and it
-      // passes through untouched (the aura:// protocol handler only serves
-      // local files). Local files keep the aura:// wrap in Electron.
+      // passes through untouched. Local files use convertFileSrc under Tauri.
       const isRemote = /^https?:\/\//i.test(state.currentSong.path)
       // Phase 5 — CORS mode per stream. The analyser chain needs
       // crossOrigin='anonymous' (aura:// sends ACAO; Audius sends ACAO:* —
@@ -434,8 +434,9 @@ export function initPlayback() {
       audio.crossOrigin = (state.currentSong.source === 'online' && state.currentSong.streamCors === false)
         ? null
         : 'anonymous'
-      const params = new URLSearchParams({ path: state.currentSong.path })
-      audio.src = isElectron && !isRemote ? `aura://local?${params.toString()}` : state.currentSong.path
+      audio.src = isTauriApp && !isRemote
+        ? convertFileSrc(state.currentSong.path)
+        : state.currentSong.path
       audio.load()
       audio.currentTime = 0
 

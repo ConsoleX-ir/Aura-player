@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Minimal initial capability for the Aura main window.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized"
+  ]
+}
+

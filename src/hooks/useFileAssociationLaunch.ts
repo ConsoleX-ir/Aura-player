@@ -1,44 +1,52 @@
 import { useEffect } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
-import { hashStr } from '@/lib/utils'
-import type { Song } from '@/types'
+import { tauriTakePendingAudioFiles, onFileOpened } from '@/services/tauriLibrary'
+import { importFiles } from '@/services/libraryService'
 
-// Task 3 — handles Aura being launched (or focused) via double-clicking an
-// associated audio file in Windows Explorer. If the file's already in the
-// library it just plays it; otherwise it's parsed and added first, exactly
-// like a normal individual-file import, then played.
+// ── Windows file association launch ─────────────────────────────────────────
+// When the user double-clicks an audio file in Explorer, Tauri main routes
+// the path to the running instance (single-instance queue). The renderer
+// drains that queue and imports/plays the file.
 export function useFileAssociationLaunch() {
   const playSong = usePlayerStore((s) => s.playSong)
   const addToLibrary = usePlayerStore((s) => s.addToLibrary)
 
   useEffect(() => {
-    if (!window.electronAPI?.onFileOpened) return
-
-    const unsubscribe = window.electronAPI.onFileOpened(async (filePath) => {
-      const id = hashStr(filePath)
-      const existing = usePlayerStore.getState().library.find((s) => s.id === id)
-
-      if (existing) {
-        playSong(existing, usePlayerStore.getState().library)
-        return
-      }
-
+    // Rust queues startup and forwarded second-instance paths until the
+    // renderer is ready. The event is only a wake-up signal; draining the
+    // queue prevents a launch racing listener registration from being lost.
+    let disposed = false
+    let running = false
+    let requested = false
+    const drain = async () => {
+      requested = true
+      if (running) return
+      running = true
       try {
-        const [meta] = await window.electronAPI.parseMetadataBatch([filePath])
-        const song: Song = { id, path: filePath, ...meta }
-        // Explicit user action (double-clicked the file in Explorer): lift
-        // any tombstone from a previous removal first (Wave 0), then import.
-        usePlayerStore.getState().restoreImportedPaths([filePath])
-        addToLibrary([song])
-        // addToLibrary updates the store synchronously (Zustand's set() is
-        // not async), so re-reading it here already includes `song` — no
-        // need to append it again.
-        playSong(song, usePlayerStore.getState().library)
-      } catch (e) {
-        console.error('Failed to open file from association launch:', filePath, e)
+        while (requested && !disposed) {
+          requested = false
+          const paths = await tauriTakePendingAudioFiles()
+          if (paths.length === 0) continue
+          try {
+            await importFiles(paths.map((path) => ({ path })))
+            const library = usePlayerStore.getState().library
+            const first = library.find((song) => song.path === paths[0])
+            if (first) playSong(first, library)
+          } catch (error: unknown) {
+            console.error('Failed to import files opened through Windows:', paths, error)
+          }
+        }
+      } finally {
+        running = false
+        if (requested && !disposed) void drain()
       }
-    })
+    }
 
-    return unsubscribe
+    const unlisten = onFileOpened(() => {
+      // Single file opened via association — drain the queue to pick it up
+      void drain()
+    })
+    void drain()
+    return () => { disposed = true; unlisten() }
   }, [playSong, addToLibrary])
 }

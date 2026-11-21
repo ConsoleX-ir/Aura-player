@@ -638,17 +638,11 @@ function ShareCardScene({ data, monthText, busy, setBusy }: {
     try {
       const canvas = drawShareCard(data, monthText)
       const dataUrl = canvas.toDataURL('image/png')
-      const api = (window as unknown as { electronAPI?: { saveImageFile?: (n: string, d: string) => Promise<string | null> } }).electronAPI
-      if (api?.saveImageFile) {
-        const savedPath = await api.saveImageFile(`Aura-Rewind-${monthText.replace(' ', '-')}.png`, dataUrl)
-        if (savedPath) toast({ kind: 'rewind-saved', title: 'Share card saved', subtitle: savedPath })
-      } else {
-        // Plain-browser fallback (dev/preview): direct download.
-        const a = document.createElement('a')
-        a.href = dataUrl
-        a.download = `Aura-Rewind-${monthText.replace(' ', '-')}.png`
-        a.click()
-      }
+      // Plain-browser fallback (dev/preview): direct download.
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `Aura-Rewind-${monthText.replace(' ', '-')}.png`
+      a.click()
     } catch {
       toast({ kind: 'metadata-updated', title: 'Could not render the card', subtitle: 'Try again' })
     } finally {

@@ -5,10 +5,10 @@ import '@/index.css'
 import '@/styles/mini.css'
 
 // ── Aura Mini — the desktop mini player window (v3.3.1) ─────────────────────
-// A separate Vite entry loaded by a separate frameless Electron BrowserWindow
-// (see electron/main.cjs, createMiniWindow). It shares NOTHING with the main
-// renderer's React tree: state arrives over IPC ('mini:state' snapshots pushed
-// by the main window's useMiniPlayerBridge) and actions leave via
+// A separate Vite entry loaded by a separate frameless Tauri window
+// (see src-tauri/src/lib.rs and tauri.conf.json). It shares NOTHING with the
+// main renderer's React tree: state arrives over IPC ('mini:state' snapshots
+// pushed by the main window's useMiniPlayerBridge) and actions leave via
 // 'mini:action' (main remaps them onto the existing 'media:command' channel
 // the renderer already speaks).
 //

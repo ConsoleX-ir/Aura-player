@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.consolex.aura.migration",
+  "app": {
+    "appDirectoriesOverride": {
+      "localData": "./dev-data"
+    }
+  }
+}
+

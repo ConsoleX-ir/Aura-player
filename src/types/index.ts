@@ -106,8 +106,8 @@ export interface SongFileStats {
 }
 
 // One de-duplicated candidate returned by the keyless "Find Info Online"
-// lookup (Deezer + iTunes + MusicBrainz merged — see net:findMetadata in
-// main.cjs). `sources` holds which of the three found this candidate, e.g.
+// lookup (Deezer + iTunes + MusicBrainz merged by the shared metadata client).
+// `sources` holds which of the three found this candidate, e.g.
 // ['deezer','itunes'].
 export interface OnlineMatch {
   title: string | null
@@ -144,119 +144,6 @@ export interface ProviderErrorLike {
   status?: number
 }
 
-export interface ElectronAPI {
-  openFolder:    () => Promise<string | null>
-  openFiles:     () => Promise<string[]>
-  scanFolder:    (path: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>
-  // Batch filesystem existence check for the Library Health feature (Phase 1).
-  // Returns one row per requested path; missing/unreadable paths come back
-  // with exists:false instead of throwing — health checks must not be able
-  // to fail just because one path vanished mid-scan.
-  checkPaths:    (paths: string[]) => Promise<PathCheck[]>
-  // ── Provider Core (Phase 3) ──────────────────────────────────────────────
-  // One channel for every online music provider: the renderer names a
-  // provider id + op (both allowlisted in the main process) and never a URL.
-  // Resolves with the op's raw result, or a ProviderErrorLike object
-  // ({ kind, message }) on failure — normalized by the client layer.
-  providerRequest: (requestId: string, providerId: string, op: string, params: Record<string, unknown>) =>
-    Promise<unknown>
-  providerCancel: (requestId: string) => void
-  // Real connectivity probe (HEAD, 4s cap) — navigator.onLine is only a hint.
-  // Resolves a diagnostic { ok, kind, detail?, latencyMs } (the bare boolean
-  // hid WHY a probe failed — network investigation fix). Legacy mocks that
-  // return a plain boolean are still handled.
-  probeOnline:    () => Promise<boolean | { ok: boolean; kind: string; detail?: string; latencyMs: number }>
-  resolveDroppedPaths: (paths: string[]) => Promise<{
-    files: { path: string; name: string; mtimeMs: number }[]
-    folders: string[]
-  }>
-  // Playlist export (M3U) — shows a native save dialog, returns the chosen
-  // path (or null if cancelled), then writeTextFile actually writes it.
-  savePlaylistFile: (defaultName: string) => Promise<string | null>
-  writeTextFile: (filePath: string, content: string) => Promise<boolean>
-  showItemInFolder: (filePath: string) => void
-  setAsDefaultMusicPlayer?: () => Promise<{ ok: boolean; openedSettings?: boolean; reason?: string }>
-  parseMetadata: (path: string) => Promise<Omit<Song, 'id' | 'path'>>
-  // Technical file properties for the Properties dialog — fetched on demand.
-  getFileStats: (path: string) => Promise<SongFileStats>
-  // Keyless online metadata lookup (Deezer + iTunes + MusicBrainz — no API
-  // key, text queries only). Resolves to { ok:true, candidates } — candidates
-  // sorted best-first — or { ok:false, error } on a total network failure.
-  findMetadata: (query: FindMetadataQuery) => Promise<{ ok: true; candidates: OnlineMatch[] } | { ok: false; error: string }>
-  // Downloads a remote artwork image into Aura's covers cache; returns a
-  // persistent aura:// URL, or null if the download failed.
-  cacheArtwork: (url: string) => Promise<string | null>
-  // Parses many files with limited concurrency in the main process — used instead
-  // of calling parseMetadata in a loop, which is slow due to per-call IPC overhead.
-  // Progress arrives separately via onMetadataProgress since callbacks can't cross
-  // the context bridge — only serializable data can.
-  parseMetadataBatch: (paths: string[]) => Promise<Omit<Song, 'id' | 'path'>[]>
-  // v4.0.3b — cover self-healing: re-extract embedded art from the source
-  // file into the covers cache after its cache copy was lost. Returns a
-  // cache-busted aura:// URL (different string → the <img>'s per-source
-  // failure state resets) or null when nothing could be recovered.
-  recoverCover: (filePath: string) => Promise<string | null>
-  onMetadataProgress: (cb: (done: number, total: number) => void) => () => void
-  // Task 3 — fired when Aura is opened via a file association (double-clicking
-  // an audio file in Explorer), whether that's the launch itself or a second
-  // launch attempt routed to the already-running instance.
-  onFileOpened: (cb: (filePath: string) => void) => () => void
-  // Global media keys and Windows taskbar thumbnail controls both arrive here.
-  // v3.2.0 — 'mute' joins the funnel (the mini player's mute button).
-  onMediaCommand: (cb: (command: 'toggle' | 'next' | 'previous' | 'mute') => void) => () => void
-  // v3.2.0 — the mini player's seek/volume requests arrive on their own
-  // narrow channels (values pre-clamped by the main process).
-  onMediaSeek: (cb: (fraction: number) => void) => () => void
-  onMediaVolume: (cb: (volume: number) => void) => () => void
-  // v4.0.3e — reports playback state; the main process derives the mini
-  // player's playing-only visibility rule from isPlaying (a paused/selected
-  // song must never surface the widget).
-  syncPlaybackState: (isPlaying: boolean, hasTrack?: boolean) => void
-  // v4.0.3d/e — the minimize auto-show revalidates before showing: main asks,
-  // the renderer answers with its live store truth (is music ACTUALLY
-  // playing right now), so a stale/delayed push can never pop the widget
-  // over a paused or empty app.
-  onQueryTrackState: (cb: () => void) => () => void
-  replyTrackState: (isPlaying: boolean) => void
-  // ── Folder watching (Wave 4) ────────────────────────────────────────────
-  // Replaces the live watcher set with exactly the given folders (recursive).
-  // Returns the count of folders actually watched (0 in a plain browser).
-  watchFolders: (folders: string[]) => Promise<number>
-  // Fires at most once per watched folder per debounce window, no matter how
-  // noisy the filesystem churn was underneath (main process debounces).
-  onWatchChange: (cb: (change: FolderWatchChange) => void) => () => void
-  // Rewind share-card export: shows a native save dialog, then writes the
-  // given base64 data URL (image/png) to disk as binary. Returns the chosen
-  // path or null if the user cancelled.
-  saveImageFile: (defaultName: string, dataUrl: string) => Promise<string | null>
-  // ── Coordinated shutdown (Wave 0 — persistence stability) ─────────────
-  // Main intercepts window close and asks the renderer to flush any
-  // pending IndexedDB state writes FIRST; the renderer resolves once its
-  // flush has landed (or main force-closes after a hard timeout). This is
-  // what makes a change made <800ms before quitting survive the restart.
-  onShutdown: (cb: () => void | Promise<void>) => () => void
-  notifyShutdownComplete: () => void
-  minimize:      () => void
-  maximize:      () => void
-  close:         () => void
-  isMaximized:   () => Promise<boolean>
-  onMaximized:   (cb: (v: boolean) => void) => () => void
-  // ── Desktop mini player (v2.1.2) ────────────────────────────────────────
-  // The mini player is an independent frameless BrowserWindow. The main
-  // renderer pushes flat state snapshots over pushMiniState; the widget's
-  // transport/window actions arrive via onMediaCommand-style funnels. Both
-  // windows share one preload, so every method here is optional-guarded at
-  // call sites that may run in a plain browser.
-  pushMiniState: (state: MiniPlayerSnapshot) => void
-  setMiniVisible: (visible: boolean) => void
-  miniAction: (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') => void
-  // v3.2.0 — widget-side seek + volume asks (main clamps and forwards).
-  miniSeek: (fraction: number) => void
-  setMiniVolume: (volume: number) => void
-  onMiniState: (cb: (state: MiniPlayerSnapshot) => void) => () => void
-  onMiniVisibility: (cb: (visible: boolean) => void) => () => void
-}
-
 /**
  * One playback-snapshot frame pushed from the main renderer to the mini
  * player widget over IPC (v5: a named contract — the bridge has shipped
@@ -286,7 +173,7 @@ export interface MiniPlayerSnapshot {
 }
 
 declare global {
-  interface Window { electronAPI: ElectronAPI }
+  interface Window {}
 }
 
 // ── Aura 3.0 domain entities (Wave 1/2) ────────────────────────────────────
@@ -316,4 +203,6 @@ export interface UserPrefs {
   onboarded: boolean
   /** "Set Aura as default player" card dismissed — never nag again (§14). */
   defaultAppPromptDismissed: boolean
+  /** Whether the floating Mini Player window is enabled. Default true. */
+  miniPlayerEnabled: boolean
 }

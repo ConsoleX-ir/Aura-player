@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AudioLines, ArrowRight, UserRound } from 'lucide-react'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
+import { isTauriDesktop, tauriSetDefaultPlayer } from '@/services/tauriLibrary'
 
 // ── First Launch Experience (Aura 3.0 Wave 13 — spec §13/§14) ───────────────
 // ONE tasteful screen on first launch: a display-name prompt (optional!) and
@@ -35,7 +36,7 @@ export function FirstLaunch() {
   if (onboarded || !show) return null
 
   const canSetDefault = typeof window !== 'undefined'
-    && !!window.electronAPI?.setAsDefaultMusicPlayer
+    && isTauriDesktop()
 
   const finish = (displayName?: string) => {
     completeOnboarding(displayName ?? '')
@@ -103,7 +104,9 @@ export function FirstLaunch() {
         {canSetDefault && (
           <button
             onClick={() => {
-              try { window.electronAPI?.setAsDefaultMusicPlayer?.() } catch { /* OS declined — not fatal */ }
+              if (isTauriDesktop()) {
+                void tauriSetDefaultPlayer().catch(() => { /* OS declined — not fatal */ })
+              }
             }}
             className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition-all mb-5"
             style={{ background: 'var(--glass-1)', border: '1px solid var(--border-default)' }}

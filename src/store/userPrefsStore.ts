@@ -16,6 +16,7 @@ export const DEFAULT_USER_PREFS: UserPrefs = {
   username: '',
   onboarded: false,
   defaultAppPromptDismissed: false,
+  miniPlayerEnabled: true,
 }
 
 interface UserPrefsState extends UserPrefs {
@@ -39,6 +40,7 @@ export const useUserPrefsStore = create<UserPrefsState>()(
         username: s.username,
         onboarded: s.onboarded,
         defaultAppPromptDismissed: s.defaultAppPromptDismissed,
+        miniPlayerEnabled: s.miniPlayerEnabled,
       }),
     },
   ),

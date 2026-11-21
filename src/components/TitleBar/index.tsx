@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Minus, Square, Copy, X, Keyboard } from 'lucide-react'
+import { isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useUiStore } from '@/store/uiStore'
 
 export function TitleBar() {
@@ -7,15 +9,42 @@ export function TitleBar() {
   const setHelpOpen = useUiStore((s) => s.setHelpOpen)
 
   useEffect(() => {
-    window.electronAPI?.isMaximized().then(setIsMaximized)
-    // This subscription already existed on the preload/main side but nothing
-    // in the renderer ever listened — the maximize button always showed the
-    // same icon regardless of actual window state.
-    // v3.2.1: unsubscribe on unmount (the bridge now returns a cleanup, so
-    // StrictMode remounts no longer stack duplicate listeners).
-    const listener = (v: boolean) => setIsMaximized(v)
-    return window.electronAPI?.onMaximized(listener)
+    if (isTauri()) {
+      const appWindow = getCurrentWindow()
+      let disposed = false
+      let unlisten: (() => void) | undefined
+
+      void appWindow.isMaximized().then((value) => {
+        if (!disposed) setIsMaximized(value)
+      })
+      void appWindow.onResized(() => {
+        void appWindow.isMaximized().then((value) => {
+          if (!disposed) setIsMaximized(value)
+        })
+      }).then((off) => {
+        if (disposed) off()
+        else unlisten = off
+      })
+
+      return () => {
+        disposed = true
+        unlisten?.()
+      }
+    }
   }, [])
+
+  const minimize = () => isTauri()
+    ? void getCurrentWindow().minimize()
+    : undefined
+  const maximize = () => {
+    if (isTauri()) {
+      const appWindow = getCurrentWindow()
+      void (isMaximized ? appWindow.unmaximize() : appWindow.maximize())
+    }
+  }
+  const close = () => isTauri()
+    ? void getCurrentWindow().close()
+    : undefined
 
   return (
     <div className="titlebar-drag chrome-sheen h-9 flex items-center justify-between pl-4 pr-3 shrink-0 perf-blur"
@@ -69,7 +98,7 @@ export function TitleBar() {
           <Keyboard size={13} strokeWidth={2.2} />
         </TitleBarButton>
         <TitleBarButton
-          onClick={() => window.electronAPI?.minimize()}
+          onClick={minimize}
           title="Minimize"
           color="var(--warning)"
           veil="var(--warning-veil)"
@@ -79,7 +108,7 @@ export function TitleBar() {
           <Minus size={12} strokeWidth={2.5} />
         </TitleBarButton>
         <TitleBarButton
-          onClick={() => window.electronAPI?.maximize()}
+          onClick={maximize}
           title={isMaximized ? 'Restore' : 'Maximize'}
           color="var(--success)"
           veil="var(--success-veil)"
@@ -89,7 +118,7 @@ export function TitleBar() {
           {isMaximized ? <Copy size={10} strokeWidth={2.5} /> : <Square size={10} strokeWidth={2.5} />}
         </TitleBarButton>
         <TitleBarButton
-          onClick={() => window.electronAPI?.close()}
+          onClick={close}
           title="Close"
           color="var(--danger)"
           veil="var(--danger-veil)"

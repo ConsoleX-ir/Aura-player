@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { isTauriDesktop } from '@/services/tauriLibrary'
 import {
   importFolderViaDialog, importFilesViaDialog, importDroppedPaths,
   type ImportProgress,
@@ -15,19 +16,19 @@ export function useLibraryImport() {
   const onProgress = (p: ImportProgress) => setProgress(p)
 
   const importFolder = async () => {
-    if (!window.electronAPI) return
+    if (!isTauriDesktop()) return
     setImporting(true)
     try { await importFolderViaDialog(onProgress) } finally { setImporting(false) }
   }
 
   const importFiles = async () => {
-    if (!window.electronAPI) return
+    if (!isTauriDesktop()) return
     setImporting(true)
     try { await importFilesViaDialog(onProgress) } finally { setImporting(false) }
   }
 
   const importDropped = async (paths: string[]) => {
-    if (!window.electronAPI || paths.length === 0) return
+    if (!isTauriDesktop() || paths.length === 0) return
     setImporting(true)
     try { await importDroppedPaths(paths, onProgress) } finally { setImporting(false) }
   }

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { AppView } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
+import { useUserPrefsStore } from '@/store/userPrefsStore'
+import { isTauriDesktop, tauriMiniSetVisible } from '@/services/tauriLibrary'
 
 // Ephemeral UI state that outlives any single component but doesn't belong
 // in playerStore (not playback data) and shouldn't be persisted.
@@ -64,6 +66,23 @@ export const useUiStore = create<UiState>()((set, get) => ({
 
   miniPlayer: false,
   setMiniPlayer: (v) => {
+    const miniPlayerEnabled = useUserPrefsStore.getState().miniPlayerEnabled
+    // When the Mini Player is disabled in Settings, refuse every show request
+    // (P key, pill button, command palette). Hides are never refused — the
+    // widget can always be closed, and the bridge/Rust side independently
+    // rejects any attempt to show a disabled window.
+    if (v && !miniPlayerEnabled) {
+      if (get().miniPlayer) {
+        set({ miniPlayer: false })
+        if (isTauriDesktop()) {
+          void tauriMiniSetVisible(false)
+        } else {
+          const api = typeof window !== 'undefined' ? (window as unknown as { electronAPI?: { setMiniVisible?: (v: boolean) => void } }).electronAPI : undefined
+          api?.setMiniVisible?.(false)
+        }
+      }
+      return
+    }
     // v4.0.3e — the PLAYING-ONLY rule, renderer side: the P key, the pill
     // button and the command palette ALL funnel through here, so nothing can
     // even ASK for the widget unless music is actually playing right now.
@@ -81,15 +100,23 @@ export const useUiStore = create<UiState>()((set, get) => ({
       // disagree in either direction. The hide direction is never gated.
       if (get().miniPlayer) {
         set({ miniPlayer: false })
-        try { window.electronAPI?.setMiniVisible?.(false) } catch { /* non-Electron */ }
+        if (isTauriDesktop()) {
+          void tauriMiniSetVisible(false)
+        } else {
+          const api = typeof window !== 'undefined' ? (window as unknown as { electronAPI?: { setMiniVisible?: (v: boolean) => void } }).electronAPI : undefined
+          api?.setMiniVisible?.(false)
+        }
       }
       return
     }
     set({ miniPlayer: v })
-    // Show/hide the real desktop window. Main broadcasts the authoritative
-    // visibility back on every actual change (see useMiniPlayerBridge), so a
-    // missed IPC or a double-toggle self-corrects instead of desyncing.
-    try { window.electronAPI?.setMiniVisible?.(v) } catch { /* non-Electron */ }
+    // Show/hide the real desktop window.
+    if (isTauriDesktop()) {
+      void tauriMiniSetVisible(v)
+    } else {
+      const api = typeof window !== 'undefined' ? (window as unknown as { electronAPI?: { setMiniVisible?: (v: boolean) => void } }).electronAPI : undefined
+      api?.setMiniVisible?.(v)
+    }
   },
 
   openPanel: null,

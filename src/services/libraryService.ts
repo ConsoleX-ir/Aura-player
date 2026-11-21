@@ -14,6 +14,7 @@ import { usePlayerStore } from '@/store/playerStore'
 import { hashStr } from '@/lib/utils'
 import { analyzeLibraryHealth, type LibraryHealthReport, type PathCheck } from '@/lib/libraryHealth'
 import type { Song } from '@/types'
+import { isTauriDesktop, tauriCheckPaths, tauriOpenFiles, tauriOpenFolder, tauriParseMetadataBatch, tauriResolveDroppedPaths, tauriScanFolder } from '@/services/tauriLibrary'
 
 export interface ImportProgress { done: number; total: number }
 export interface SyncResult { added: number; removed: number; updated: number }
@@ -48,7 +49,14 @@ export async function importFiles(
   files: { path: string; mtimeMs?: number }[],
   onProgress?: ProgressCb,
 ): Promise<number> {
-  if (!window.electronAPI || files.length === 0) return 0
+  const isTauri = isTauriDesktop()
+  let parseMeta: ((paths: string[]) => Promise<unknown>) | undefined
+  if (!isTauri) {
+    const api = typeof window !== 'undefined' ? (window as unknown as { electronAPI?: { parseMetadataBatch?: (paths: string[]) => Promise<unknown> } }).electronAPI : undefined
+    if (!api?.parseMetadataBatch) return 0
+    parseMeta = api.parseMetadataBatch
+  }
+  if (!isTauri || files.length === 0) return 0
 
   const existingIds = new Set(usePlayerStore.getState().library.map((s) => s.id))
   const candidates = files
@@ -65,33 +73,32 @@ export async function importFiles(
   usePlayerStore.getState().restoreImportedPaths(candidates.map((c) => c.path))
 
   onProgress?.({ done: 0, total: candidates.length })
-  const unsubscribe = window.electronAPI.onMetadataProgress((done, total) => {
-    onProgress?.({ done, total })
-  })
-
   try {
-    const metas = await window.electronAPI.parseMetadataBatch(candidates.map((c) => c.path))
+    const paths = candidates.map((c) => c.path)
+    const metas = isTauri
+      ? await tauriParseMetadataBatch(paths, (done, total) => onProgress?.({ done, total }))
+      : await parseMeta!(paths)
+    const metasTyped = metas as Omit<Song, 'id' | 'path'>[]
     const songs: Song[] = candidates.map((c, i) => ({
       id: c.id,
       path: c.path,
       mtimeMs: c.mtimeMs,
-      ...metas[i],
+      ...metasTyped[i],
     }))
     usePlayerStore.getState().addToLibrary(songs)
     return songs.length
   } finally {
-    unsubscribe()
     onProgress?.({ done: 0, total: 0 })
   }
 }
 
 /** Native folder picker → recursive scan → import → register for Folder Sync. */
 export async function importFolderViaDialog(onProgress?: ProgressCb): Promise<void> {
-  if (!window.electronAPI) return
-  const folderPath = await window.electronAPI.openFolder()
+  if (!isTauriDesktop()) return
+  const folderPath = await tauriOpenFolder()
   if (!folderPath) return
 
-  const files = await window.electronAPI.scanFolder(folderPath)
+  const files = await tauriScanFolder(folderPath)
   await importFiles(files, onProgress)
   // Tracked so Folder Sync (Settings → Library) can re-scan this folder
   // later without the user having to pick it again.
@@ -100,8 +107,8 @@ export async function importFolderViaDialog(onProgress?: ProgressCb): Promise<vo
 
 /** Native file picker → import (no folder registration — loose files only). */
 export async function importFilesViaDialog(onProgress?: ProgressCb): Promise<void> {
-  if (!window.electronAPI) return
-  const filePaths = await window.electronAPI.openFiles()
+  if (!isTauriDesktop()) return
+  const filePaths = await tauriOpenFiles()
   if (filePaths.length === 0) return
   await importFiles(filePaths.map((path) => ({ path })), onProgress)
 }
@@ -113,8 +120,8 @@ export async function importFilesViaDialog(onProgress?: ProgressCb): Promise<voi
  * picking it via "Add Folder...".
  */
 export async function importDroppedPaths(paths: string[], onProgress?: ProgressCb): Promise<void> {
-  if (!window.electronAPI || paths.length === 0) return
-  const { files, folders } = await window.electronAPI.resolveDroppedPaths(paths)
+  if (!isTauriDesktop() || paths.length === 0) return
+  const { files, folders } = await tauriResolveDroppedPaths(paths)
   await importFiles(files, onProgress)
   folders.forEach((f) => usePlayerStore.getState().addImportedFolder(f))
 }
@@ -134,13 +141,30 @@ export async function importDroppedPaths(paths: string[], onProgress?: ProgressC
  */
 export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResult> {
   const result: SyncResult = { added: 0, removed: 0, updated: 0 }
-  if (!window.electronAPI) return result
+  const isTauri = isTauriDesktop()
+  let scanFolder: ((folder: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>) | undefined
+  let parseMetaBatch: ((paths: string[]) => Promise<Omit<Song, 'id' | 'path'>[]>) | undefined
+  if (!isTauri) {
+    const api = typeof window !== 'undefined' ? (window as unknown as { electronAPI?: { scanFolder?: (folder: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>; parseMetadataBatch?: (paths: string[]) => Promise<Omit<Song, 'id' | 'path'>[]> } }).electronAPI : undefined
+    if (!api?.scanFolder) return result
+    scanFolder = api.scanFolder
+    parseMetaBatch = api.parseMetadataBatch
+  }
 
   const { importedFolders } = usePlayerStore.getState()
   if (importedFolders.length === 0) return result
 
   for (const folder of importedFolders) {
-    const scanned = await window.electronAPI.scanFolder(folder)
+    let scanned: { path: string; name: string; mtimeMs: number }[]
+    try {
+      scanned = isTauri
+        ? await tauriScanFolder(folder)
+        : await scanFolder!(folder)
+    } catch {
+      // A missing, offline, or no-longer-authorized folder is unknown, not an
+      // empty library. Skip reconciliation so we never remove its song rows.
+      continue
+    }
     const scannedByPath = new Map(scanned.map((f) => [f.path, f]))
 
     // Tombstone maintenance (Wave 0): paths under this folder the user
@@ -205,16 +229,11 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
 
     if (toParse.length > 0) {
       onProgress?.({ done: 0, total: toParse.length })
-      const unsubscribe = window.electronAPI.onMetadataProgress((done, total) => {
-        onProgress?.({ done, total })
-      })
-
       let metas: Omit<Song, 'id' | 'path'>[]
-      try {
-        metas = await window.electronAPI.parseMetadataBatch(toParse.map((c) => c.path))
-      } finally {
-        unsubscribe()
-      }
+      const paths = toParse.map((c) => c.path)
+      metas = isTauri
+        ? await tauriParseMetadataBatch(paths, (done, total) => onProgress?.({ done, total }))
+        : await parseMetaBatch!(paths)
 
       const newSongs: Song[] = []
       const changedSongs: Song[] = []
@@ -257,23 +276,32 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
  * recordings. Pure judgment lives in lib/libraryHealth (unit-tested); this
  * wrapper only gathers the filesystem facts and shapes the report.
  *
- * Without an electronAPI (plain browser / tests without a mock) the scan
+ * Without Tauri (plain browser / tests) the scan
  * degrades honestly: every entry counts as checked-and-present, duplicates
  * are still analyzed, and nothing is flagged missing.
  */
 export async function runLibraryHealthCheck(): Promise<LibraryHealthReport> {
   const songs = usePlayerStore.getState().library
 
-  if (!window.electronAPI?.checkPaths || songs.length === 0) {
+  const isTauri = isTauriDesktop()
+  let checkPaths: ((paths: string[]) => Promise<{ path: string; exists: boolean; sizeBytes: number; mtimeMs: number }[]>) | undefined
+  if (!isTauri) {
+    const api = typeof window !== 'undefined' ? (window as unknown as { electronAPI?: { checkPaths?: (paths: string[]) => Promise<{ path: string; exists: boolean; sizeBytes: number; mtimeMs: number }[]> } }).electronAPI : undefined
+    if (!api?.checkPaths) {
+      return analyzeLibraryHealth(songs, new Map())
+    }
+    checkPaths = api.checkPaths
+  }
+  if (songs.length === 0) {
     return analyzeLibraryHealth(songs, new Map())
   }
 
   let checks: PathCheck[]
   try {
-    checks = await window.electronAPI.checkPaths(songs.map((s) => s.path))
+    checks = isTauri
+      ? await tauriCheckPaths(songs.map((s) => s.path))
+      : await checkPaths!(songs.map((s) => s.path))
   } catch {
-    // IPC itself failed — report what we know (nothing about the disk)
-    // rather than fabricating a sea of "missing" flags.
     return analyzeLibraryHealth(songs, new Map())
   }
   const byPath = new Map(checks.map((c) => [c.path, c]))

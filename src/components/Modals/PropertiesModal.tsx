@@ -6,8 +6,11 @@ import {
 } from 'lucide-react'
 import type { Song, OnlineMatch, SongFileStats } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
+import { cacheArtworkForDesktop } from '@/services/tauriLibrary'
+import { findMetadataForDesktop } from '@/services/findMetadata'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
+import { isTauriDesktop, tauriShowItemInFolder, tauriGetFileStats } from '@/services/tauriLibrary'
 import { CoverImage } from '@/components/States/CoverImage'
 
 // ── Song Properties + "Find Info Online" (keyless) ──────────────────────────
@@ -70,8 +73,14 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
     if (!open) return
     let cancelled = false
     setStatsLoading(true)
-    window.electronAPI?.getFileStats(song.path)
-      .then((s) => { if (!cancelled) setStats(s) })
+    const request = isTauriDesktop()
+      ? tauriGetFileStats(song.path)
+      : null
+    if (!request) {
+      setStatsLoading(false)
+      return () => { cancelled = true }
+    }
+    request.then((s) => { if (!cancelled) setStats(s) })
       .catch(() => { /* stats stay null → the dialog shows dashes */ })
       .finally(() => { if (!cancelled) setStatsLoading(false) })
     return () => { cancelled = true }
@@ -173,7 +182,7 @@ export function PropertiesModal({ song, open, initialFind = false, onClose }: Pr
                       )}
                       <Row label="Path" value={song.path} mono />
                       <button
-                        onClick={() => window.electronAPI?.showItemInFolder(song.path)}
+                        onClick={() => { if (isTauriDesktop()) { void tauriShowItemInFolder(song.path) } }}
                         className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-glass)] border border-[var(--color-border)] text-white/60 hover:text-white/90 text-xs active:scale-95 transition-all"
                       >
                         <FolderOpen size={12} />
@@ -240,7 +249,7 @@ function FindTab({
     setPhase('loading')
     setFindError(null)
     try {
-      const result = await window.electronAPI?.findMetadata({
+      const result = await findMetadataForDesktop({
         title: queryTitle,
         artist: queryArtist,
         album: song.album ?? '',
@@ -296,7 +305,7 @@ function FindTab({
       // Artwork goes through the main process so it lands in the same disk
       // cache as embedded covers — persistent and served via aura://.
       if (selected.artwork && cand.artworkUrl) {
-        const cached = await window.electronAPI?.cacheArtwork(cand.artworkUrl)
+        const cached = await cacheArtworkForDesktop(cand.artworkUrl)
         if (cached) coverArt = cached
       }
       updateSongs([{

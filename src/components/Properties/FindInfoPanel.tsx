@@ -4,6 +4,8 @@ import {
 } from 'lucide-react'
 import type { Song, OnlineMatch } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
+import { cacheArtworkForDesktop } from '@/services/tauriLibrary'
+import { findMetadataForDesktop } from '@/services/findMetadata'
 import { formatTime, cn } from '@/lib/utils'
 import { toast } from '@/store/toastStore'
 import { CoverImage } from '@/components/States/CoverImage'
@@ -64,7 +66,7 @@ export function FindInfoPanel({ song, onApplied }: { song: Song; onApplied: () =
     setPhase('loading')
     setFindError(null)
     try {
-      const result = await window.electronAPI?.findMetadata({
+      const result = await findMetadataForDesktop({
         title: queryTitle,
         artist: queryArtist,
         album: song.album ?? '',
@@ -120,7 +122,7 @@ export function FindInfoPanel({ song, onApplied }: { song: Song; onApplied: () =
       // Artwork goes through the main process so it lands in the same disk
       // cache as embedded covers — persistent and served via aura://.
       if (selected.artwork && cand.artworkUrl) {
-        const cached = await window.electronAPI?.cacheArtwork(cand.artworkUrl)
+        const cached = await cacheArtworkForDesktop(cand.artworkUrl)
         if (cached) coverArt = cached
       }
       updateSongs([{

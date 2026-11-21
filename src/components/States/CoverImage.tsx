@@ -1,6 +1,7 @@
 import { CSSProperties, ReactNode, useEffect, useState } from 'react'
 import { ArtworkPlaceholder } from './ArtworkPlaceholder'
 import { usePlayerStore } from '@/store/playerStore'
+import { isTauriDesktop, tauriRecoverCover } from '@/services/tauriLibrary'
 
 /* ── CoverImage (v4.0.3b) — the one cover-art <img> with failure handling ───
    Song covers come from three fragile sources: cached aura:// files (the
@@ -89,22 +90,18 @@ export function CoverImage({ src, seed, alt = '', className, style, loading, pla
         // attempt per source; the healed URL differs from the dead one only
         // by the ignored cache-buster param, which is what lets the <img>
         // (and the failure state) start over.
-        if (songPath && showSrc.startsWith('aura://') && !recoveryAttempted.has(showSrc)) {
+        if (songPath && (showSrc.startsWith('aura://') || showSrc.includes('asset.localhost/')) && !recoveryAttempted.has(showSrc)) {
           recoveryAttempted.add(showSrc)
-          window.electronAPI?.recoverCover?.(songPath)
-            .then((healed) => {
+          const heal = async () => {
+            if (isTauriDesktop()) {
+              const healed = await tauriRecoverCover(songPath)
               if (typeof healed === 'string' && healed) {
                 setHealedSrc(healed)
-                // v4.0.3c — STORE-WIDE heal: write the recovered URL back
-                // into the player store so every other surface still showing
-                // the dead source (album grid, queue, sidebar, Now Playing,
-                // the mini widget's next snapshot) re-renders the real cover
-                // immediately instead of waiting for its own failed load and
-                // private recovery.
                 usePlayerStore.getState().healCoverArt(songPath, healed)
               }
-            })
-            .catch(() => { /* the designed fallback stays */ })
+            }
+          }
+          void heal()
         }
       }}
     />

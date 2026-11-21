@@ -26,6 +26,9 @@ import { applyThemeToDocument } from '@/theme/engine'
 import { resolveThemeId, themeAppearance } from '@/theme/registry'
 import { noteThemeAppearance } from '@/lib/appearance'
 import { UploadCloud, Loader2 } from 'lucide-react'
+import { isTauri, invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import { onAppShutdown, tauriShutdownComplete } from '@/services/tauriLibrary'
 
 // Home is the startup destination (Core Experience redesign) and every view
 // below is part of the SAME local bundle. They were React.lazy(() => import())
@@ -140,11 +143,29 @@ export default function App() {
   // immediately (no debounce), so it needs no participation here — and the
   // engine's beforeunload flush still runs on the real close, as before.
   useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.onShutdown || !api?.notifyShutdownComplete) return
-    return api.onShutdown(async () => {
+    if (isTauri()) {
+      let disposed = false
+      let unlisten: (() => void) | undefined
+
+      void listen('app:shutdown', async () => {
+        try { await flushAllPending() } catch { /* fail-soft; native timeout is bounded */ }
+        if (!disposed) {
+          try { await invoke('shutdown_complete') } catch { /* window may already be closing */ }
+        }
+      }).then((off) => {
+        if (disposed) off()
+        else unlisten = off
+      })
+
+      return () => {
+        disposed = true
+        unlisten?.()
+      }
+    }
+
+    return onAppShutdown(async () => {
       try { await flushAllPending() } catch { /* fail-soft — timeout path closes anyway */ }
-      api.notifyShutdownComplete()
+      await tauriShutdownComplete()
     })
   }, [])
 

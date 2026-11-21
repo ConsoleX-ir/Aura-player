@@ -3,6 +3,7 @@ import { Trash2, Music2, ListMusic, Heart, Info, SlidersHorizontal, RefreshCw, C
 import { usePlayerStore } from '@/store/playerStore'
 import { setThemeAnimated } from '@/lib/appearance'
 import { useUserPrefsStore } from '@/store/userPrefsStore'
+import { tauriMiniSetEnabled } from '@/services/tauriLibrary'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { LibraryHealthCard } from '@/components/Settings/LibraryHealthCard'
 import { formatRuntime } from '@/lib/utils'
@@ -59,6 +60,7 @@ export function Settings() {
   // Aura 3.0 — display name (§13): editable here, consumed by the greeting.
   const storedUsername = useUserPrefsStore((s) => s.username)
   const setUserPrefs = useUserPrefsStore((s) => s.setUserPrefs)
+  const miniPlayerEnabled = useUserPrefsStore((s) => s.miniPlayerEnabled)
   const [usernameDraft, setUsernameDraft] = useState(storedUsername)
   useEffect(() => { setUsernameDraft(storedUsername) }, [storedUsername])
 
@@ -305,6 +307,19 @@ export function Settings() {
             }
           >
             <Toggle checked={watchFolders} onChange={setWatchFolders} />
+          </SettingRow>
+
+          <SettingRow
+            label="Enable Mini Player"
+            description="Allow Aura Player to open and use the floating Mini Player window."
+          >
+            <Toggle
+              checked={miniPlayerEnabled}
+              onChange={(v) => {
+                setUserPrefs({ miniPlayerEnabled: v })
+                void tauriMiniSetEnabled(v).catch(() => { /* Rust-side echo — best effort */ })
+              }}
+            />
           </SettingRow>
 
           <SettingRow

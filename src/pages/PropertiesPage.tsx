@@ -8,6 +8,7 @@ import type { Song, SongListenStats, SongFileStats } from '@/types'
 import { usePlayerStore } from '@/store/playerStore'
 import { useUiStore } from '@/store/uiStore'
 import { getSongStats } from '@/lib/scrobbleStore'
+import { isTauriDesktop, tauriShowItemInFolder, tauriGetFileStats } from '@/services/tauriLibrary'
 import { formatTime, formatBytes, cn } from '@/lib/utils'
 import { FindInfoPanel } from '@/components/Properties/FindInfoPanel'
 import { ArtworkPlaceholder, UnknownValue } from '@/components/States/ArtworkPlaceholder'
@@ -182,7 +183,7 @@ function SongHero({ song }: { song: Song }) {
           </button>
 
           <button
-            onClick={() => window.electronAPI?.showItemInFolder(song.path)}
+            onClick={() => { if (isTauriDesktop()) { void tauriShowItemInFolder(song.path) } }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium active:scale-95 transition-all"
             style={{ background: 'var(--glass-2)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', transitionDuration: 'var(--dur-fast)' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--glass-3)' }}
@@ -219,8 +220,14 @@ function InfoTab({ song }: { song: Song }) {
   useEffect(() => {
     let cancelled = false
     setStatsLoading(true)
-    window.electronAPI?.getFileStats(song.path)
-      .then((s) => { if (!cancelled) setStats(s) })
+    const request = isTauriDesktop()
+      ? tauriGetFileStats(song.path)
+      : null
+    if (!request) {
+      setStatsLoading(false)
+      return () => { cancelled = true }
+    }
+    request.then((s) => { if (!cancelled) setStats(s) })
       .catch(() => { /* stats stay null → the section shows dashes */ })
       .finally(() => { if (!cancelled) setStatsLoading(false) })
     return () => { cancelled = true }

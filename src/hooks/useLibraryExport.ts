@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Song } from '@/types'
+import { isTauriDesktop, tauriExportPlaylist } from '@/services/tauriLibrary'
 
 // Sanitizes a playlist name into something safe to use as a filename across
 // platforms — strips characters Windows/macOS/Linux all disallow or treat
@@ -24,15 +25,12 @@ export function useLibraryExport() {
   const [exporting, setExporting] = useState(false)
 
   const exportPlaylist = async (playlistName: string, songs: Song[]) => {
-    if (!window.electronAPI || songs.length === 0) return
+    if (!isTauriDesktop() || songs.length === 0) return
 
     setExporting(true)
     try {
-      const filePath = await window.electronAPI.savePlaylistFile(`${sanitizeFileName(playlistName)}.m3u`)
-      if (!filePath) return // user cancelled the dialog
-
       const content = buildM3U(songs)
-      await window.electronAPI.writeTextFile(filePath, content)
+      await tauriExportPlaylist(`${sanitizeFileName(playlistName)}.m3u`, content)
     } finally {
       setExporting(false)
     }

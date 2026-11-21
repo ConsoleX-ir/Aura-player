@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePlayerStore } from '@/store/playerStore'
 import { syncAllFolders, type SyncResult, type ImportProgress } from '@/services/libraryService'
+import { isTauriDesktop } from '@/services/tauriLibrary'
 
 // Thin UI wrapper around LibraryService.syncAllFolders — all reconciliation
 // logic lives in src/services/libraryService.ts. This hook only holds view
@@ -15,7 +16,7 @@ export function useLibrarySync() {
   const folderCount = usePlayerStore((s) => s.importedFolders.length)
 
   const syncAll = async () => {
-    if (!window.electronAPI) return
+    if (!isTauriDesktop()) return
     setSyncing(true)
     try {
       const result = await syncAllFolders((p) => setProgress(p))

@@ -5,6 +5,7 @@ import {
   FX_PRESETS, NEUTRAL_FX, isFxNeutral, sanitizeFx, type AudioFxState,
 } from '@/lib/audioFx'
 import { UserPresetChip, SavePresetControl } from './UserPresetChip'
+import { tauriExportPlaylist } from '@/services/tauriLibrary'
 
 // ── Audio Studio → Effects (v3.2.0) ─────────────────────────────────────────
 // The Aura 3.0 effects card, upgraded for its new home as a Studio section:
@@ -62,9 +63,7 @@ export function AudioFxCard({ bypassed }: { bypassed: boolean }) {
       ],
     }
     try {
-      const path = await window.electronAPI?.savePlaylistFile?.('aura-fx-presets.json')
-      if (path === null || path === undefined) return // user cancelled
-      await window.electronAPI?.writeTextFile?.(path, JSON.stringify(payload, null, 2))
+      await tauriExportPlaylist('aura-fx-presets.json', JSON.stringify(payload, null, 2))
       flash('Presets exported')
     } catch {
       flash('Export failed — check the save location')

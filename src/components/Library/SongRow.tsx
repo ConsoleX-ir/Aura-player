@@ -7,6 +7,7 @@ import { useUiStore } from '@/store/uiStore'
 import { formatTime, cn } from '@/lib/utils'
 import { startSmartRadio } from '@/lib/smartRadioActions'
 import type { Song } from '@/types'
+import { isTauriDesktop, tauriShowItemInFolder } from '@/services/tauriLibrary'
 import { ConfirmModal } from '@/components/Modals/ConfirmModal'
 import { PlaylistPickerModal } from '@/components/Modals/PlaylistPickerModal'
 import { UnknownValue } from '@/components/States/ArtworkPlaceholder'
@@ -308,7 +309,7 @@ export const SongRow = memo(function SongRow({ song, index, queue, showAlbumArt 
               </DropdownMenu.Item>
 
               <DropdownMenu.Item
-                onClick={() => window.electronAPI?.showItemInFolder(song.path)}
+                onClick={() => { if (isTauriDesktop()) { void tauriShowItemInFolder(song.path) } }}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer outline-none transition-colors"
               >
                 <FolderOpen size={13} />

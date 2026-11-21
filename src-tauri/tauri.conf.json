@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Aura Player",
+  "version": "5.0.0",
+  "identifier": "com.consolex.aura",
+  "build": {
+    "beforeDevCommand": "npm run dev:vite",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Aura Player",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "center": true,
+        "decorations": false,
+        "backgroundColor": "#0A0A0F"
+      },
+      {
+        "label": "mini",
+        "title": "Aura mini-player",
+        "url": "mini.html",
+        "width": 460,
+        "height": 112,
+        "minWidth": 460,
+        "minHeight": 112,
+        "maxWidth": 460,
+        "maxHeight": 112,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "minimizable": false,
+        "maximizable": false,
+        "fullscreen": false,
+        "skipTaskbar": true,
+        "focusable": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      },
+      "capabilities": ["main", "mini"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": ["../public/icon.ico"],
+    "fileAssociations": [
+      {
+        "ext": ["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma"],
+        "description": "Audio file",
+        "mimeType": "audio/*",
+        "role": "Viewer"
+      }
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["English"]
+      }
+    }
+  }
+}
+

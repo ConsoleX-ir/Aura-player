@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isTauriDesktop, tauriProbeOnline } from '@/services/tauriLibrary'
 
 // ── useOnlineStatus (Phase 3) ────────────────────────────────────────────────
 // Honest online awareness for provider-backed surfaces. Three signals, worst
@@ -26,13 +27,13 @@ export function useOnlineStatus(): OnlineStatus {
   const inFlight = useRef<AbortController | null>(null)
 
   const probe = useCallback(() => {
-    const api = typeof window !== 'undefined' ? window.electronAPI : undefined
-    if (!api?.probeOnline) return
+    if (!isTauriDesktop()) return
     inFlight.current?.abort()
     const controller = new AbortController()
     inFlight.current = controller
     setProbing(true)
-    api.probeOnline()
+    const promise = tauriProbeOnline()
+    promise
       .then((v) => {
         // probeOnline returns a diagnostic object { ok, kind, detail?, latencyMs }
         // (network investigation fix); legacy test mocks return a bare boolean.

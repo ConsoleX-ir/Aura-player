@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Play, Pause, SkipBack, SkipForward, Maximize2, X, Music2, Volume2, VolumeX } from 'lucide-react'
 import { formatTime } from '@/lib/utils'
 import { applyThemeToDocument } from '@/theme/engine'
+import { isTauriDesktop, tauriRecoverCover, tauriMiniAction, tauriMiniSeek, tauriSetMiniVolume, tauriMiniSetVisible, onMiniState, tauriMiniIsEnabled } from '@/services/tauriLibrary'
 
 // v4.0.3 — failed-cover guard: a cover whose source is dead (lost cache file,
 // offline remote art) must fall back to the widget's own designed placeholder
@@ -25,11 +26,15 @@ function useCoverFailure(src: string | null | undefined, songPath?: string | nul
   const showSrc = healedSrc ?? src
   const onError = () => {
     setFailedFor(showSrc ?? null)
-    if (songPath && showSrc && showSrc.startsWith('aura://') && !miniRecoveryAttempted.has(showSrc)) {
+    if (songPath && showSrc && (showSrc.startsWith('aura://') || showSrc.includes('asset.localhost/')) && !miniRecoveryAttempted.has(showSrc)) {
       miniRecoveryAttempted.add(showSrc)
-      window.electronAPI?.recoverCover?.(songPath)
-        .then((healed) => { if (typeof healed === 'string' && healed) setHealedSrc(healed) })
-        .catch(() => { /* the designed fallback stays */ })
+      const heal = async () => {
+        if (isTauriDesktop()) {
+          const healed = await tauriRecoverCover(songPath)
+          if (typeof healed === 'string' && healed) setHealedSrc(healed)
+        }
+      }
+      void heal()
     }
   }
   const failed = !!showSrc && failedFor === showSrc
@@ -91,11 +96,22 @@ const CIRC = 2 * Math.PI * R
 export function MiniApp() {
   const [state, setState] = useState<MiniState>(INITIAL)
 
+  // Self-close guard: if the mini player was disabled while this window was
+  // open (or opened via a stale path), close it immediately. The Rust side
+  // also rejects all mini commands when disabled, so this is defense in depth.
   useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.onMiniState) return
-    return api.onMiniState((s: MiniState) => {
-      setState({ ...INITIAL, ...s })
+    if (!isTauriDesktop()) return
+    void tauriMiniIsEnabled().then((enabled) => {
+      if (!enabled) {
+        void tauriMiniSetVisible(false).catch(() => { /* best effort */ })
+        window.close()
+      }
+    }).catch(() => { /* if we can't query, stay open — better safe than broken */ })
+  }, [])
+
+  useEffect(() => {
+    return onMiniState((s) => {
+      setState({ ...INITIAL, ...(s as MiniState) })
     })
   }, [])
 
@@ -127,8 +143,9 @@ export function MiniApp() {
   const { showSrc: coverSrc, failed: coverFailed, onError: onCoverError } = useCoverFailure(state.coverArt, state.songPath)
   const showCover = !!coverSrc && !coverFailed
 
-  const act = (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') =>
-    window.electronAPI?.miniAction?.(action)
+  const act = (action: 'togglePlay' | 'next' | 'previous' | 'toggleMute' | 'restore' | 'close') => {
+    void tauriMiniAction(action)
+  }
 
   return (
     <div className={`mini-root ${glass ? 'mini-root--glass' : 'mini-root--matte'}`}>
@@ -295,21 +312,21 @@ function MiniSeek({ progress, durationSec, hasSong }: { progress: number; durati
 
   const shown = dragging ? dragP : progress
 
-  const onDown = (e: React.PointerEvent) => {
+    const onDown = (e: React.PointerEvent) => {
     if (!hasSong) return
     e.currentTarget.setPointerCapture(e.pointerId)
     setDragging(true)
     const f = fractionFrom(e.clientX)
     dragPRef.current = f
     setDragP(f)
-    window.electronAPI?.miniSeek?.(f)
+    void tauriMiniSeek(f)
   }
   const onMove = (e: React.PointerEvent) => {
     if (!dragging) return
     const f = fractionFrom(e.clientX)
     dragPRef.current = f
     setDragP(f)
-    window.electronAPI?.miniSeek?.(f)
+    void tauriMiniSeek(f)
   }
   const onUp = () => setDragging(false)
 
@@ -339,8 +356,8 @@ function MiniSeek({ progress, durationSec, hasSong }: { progress: number; durati
         onPointerCancel={onUp}
         onKeyDown={(e) => {
           if (!hasSong) return
-          if (e.key === 'ArrowRight') window.electronAPI?.miniSeek?.(Math.min(1, shown + 0.05))
-          if (e.key === 'ArrowLeft') window.electronAPI?.miniSeek?.(Math.max(0, shown - 0.05))
+          if (e.key === 'ArrowRight') { void tauriMiniSeek(Math.min(1, shown + 0.05)) }
+          if (e.key === 'ArrowLeft') { void tauriMiniSeek(Math.max(0, shown - 0.05)) }
         }}
         className="mini-seekbar"
       >
@@ -379,7 +396,7 @@ function MiniVolume({ volume, muted }: { volume: number; muted: boolean }) {
   return (
     <div className="mini-volume" data-mini-volume>
       <button
-        onClick={() => window.electronAPI?.miniAction?.('toggleMute')}
+        onClick={() => { void tauriMiniAction('toggleMute') }}
         title={muted ? 'Unmute' : 'Mute'}
         aria-label={muted ? 'Unmute' : 'Mute'}
         className="mini-btn"
@@ -397,7 +414,7 @@ function MiniVolume({ volume, muted }: { volume: number; muted: boolean }) {
         onChange={(e) => {
           const v = Number(e.target.value)
           setLocal(v)
-          window.electronAPI?.setMiniVolume?.(v)
+          void tauriSetMiniVolume(v)
         }}
         aria-label="Volume"
         style={{

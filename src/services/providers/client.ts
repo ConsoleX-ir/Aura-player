@@ -3,15 +3,17 @@ import {
   type ProviderErrorPayload,
 } from './types'
 import type { ProviderErrorLike } from '@/types'
+import { invoke } from '@tauri-apps/api/core'
+import { isTauriDesktop } from '@/services/tauriLibrary'
 
 // ── providerCall — the renderer's single door to online providers ───────────
-// Wraps the net:providerRequest IPC channel with:
+// Wraps the net:providerRequest IPC channel (Electron) or net_provider_request
+// Tauri command with:
 //   • a requestId that can be cancelled through net:providerCancel
-//   • a client-side watchdog timeout (the main process has its own per-fetch
-//     timeout; this one also covers a wedged IPC round-trip)
+//   • a client-side watchdog timeout
 //   • typed ProviderError rejections built from the main process's payload
 //
-// In non-Electron contexts (plain browser, tests without the mock) this
+// In non-Electron/Tauri contexts (plain browser, tests without the mock) this
 // rejects with an 'unavailable' ProviderError — callers render their
 // unavailable state instead of crashing.
 
@@ -52,8 +54,7 @@ export async function providerCall<T>(
   params: Record<string, unknown> = {},
   opts: ProviderCallOptions = {},
 ): Promise<T> {
-  const api = typeof window !== 'undefined' ? window.electronAPI : undefined
-  if (!api?.providerRequest || !api?.providerCancel) {
+  if (!isTauriDesktop()) {
     throw new ProviderError({ kind: 'unavailable', message: 'Online providers need the Aura desktop app' })
   }
 
@@ -62,7 +63,7 @@ export async function providerCall<T>(
 
   const controller = new AbortController()
   const onAbort = () => {
-    try { api.providerCancel!(requestId) } catch { /* request already settled */ }
+    try { void invoke('net_provider_cancel', { requestId }) } catch { /* request already settled */ }
   }
   if (opts.signal) {
     if (opts.signal.aborted) throw new ProviderError({ kind: 'network', message: 'cancelled' })
@@ -81,14 +82,13 @@ export async function providerCall<T>(
   pending.add(requestId)
 
   try {
-    const result = await api.providerRequest(requestId, providerId, op, params)
+    const result = await invoke<unknown>(
+      'net_provider_request', { requestId, providerId, op, params })
     if (isProviderErrorPayload(result)) {
       throw new ProviderError(normalizePayload(result as ProviderErrorPayload))
     }
     return result as T
   } catch (err) {
-    // The invoke itself can reject for IPC-level reasons (handler throw,
-    // serializer issues) — normalize anything that isn't already typed.
     if (err instanceof ProviderError) throw err
     if (controller.signal.aborted) {
       throw new ProviderError({ kind: 'timeout', message: `No response within ${timeoutMs / 1000}s` })
@@ -107,10 +107,10 @@ export async function providerCall<T>(
 
 /** Best-effort cancel of everything still in flight (e.g. going offline). */
 export function cancelAllProviderCalls(): void {
-  const api = typeof window !== 'undefined' ? window.electronAPI : undefined
-  if (!api?.providerCancel) return
   for (const id of pending) {
-    try { api.providerCancel(id) } catch { /* already settled */ }
+    try {
+      void invoke('net_provider_cancel', { requestId: id })
+    } catch { /* already settled */ }
   }
   pending.clear()
 }

@@ -47,5 +47,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Cargo's target tree contains executables that Windows refuses to watch
+    // while they are compiling. Ignore it so Tauri dev can build in parallel
+    // with the Vite server without Chokidar raising EBUSY.
+    watch: {
+      ignored: ['**/src-tauri/target/**', '**/src-tauri/dev-data/**'],
+    },
   },
 })
