@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-Under development
-=======
 ![Aura Player Logo](public/icon.svg)
 
 # Aura Player
