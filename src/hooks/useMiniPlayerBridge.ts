@@ -22,6 +22,16 @@ import { isTauriDesktop, tauriMiniPushState, onMiniVisibility, tauriMiniSetVisib
 //
 // When `miniPlayerEnabled` is false (user settings), the bridge never pushes
 // state, never shows the window, and closes it if it happens to be open.
+//
+// Performance notes (Phase 5):
+//   • The store subscription is narrowed to playback-relevant fields
+//     (currentSong, isPlaying, volume, muted, duration, theme, appearance,
+//     miniLiquidGlass, performanceMode). Progress ticks (~4–10 Hz) are NOT
+//     subscribed — they are handled by the 250 ms interval, which is already
+//     debounced by the lastPushed / forceUntil guard.
+//   • uiStore subscription only fires on miniPlayer visibility changes.
+//   • getComputedStyle is only invoked inside snapshot(), which runs only
+//     when something actually changed — not on every store mutation.
 export function useMiniPlayerBridge() {
   const miniPlayerEnabled = useUserPrefsStore((s) => s.miniPlayerEnabled)
 
@@ -88,8 +98,25 @@ export function useMiniPlayerBridge() {
       void tauriMiniPushState(snap)
     }
     pushIfChanged()
-    const offUi = useUiStore.subscribe(pushIfChanged)
-    const offPlayer = usePlayerStore.subscribe(pushIfChanged)
+    // Narrow subscription: only push on playback-relevant state changes.
+    // Progress ticks (~4–10 Hz) are handled by the 250 ms interval below,
+    // not by a per-tick store subscription.
+    const offPlayer = usePlayerStore.subscribe((state, prev) => {
+      const playbackChanged =
+        state.currentSong !== prev.currentSong ||
+        state.isPlaying !== prev.isPlaying ||
+        state.volume !== prev.volume ||
+        state.muted !== prev.muted ||
+        state.duration !== prev.duration ||
+        state.theme !== prev.theme ||
+        state.appearance !== prev.appearance ||
+        state.miniLiquidGlass !== prev.miniLiquidGlass ||
+        state.performanceMode !== prev.performanceMode
+      if (playbackChanged) pushIfChanged()
+    })
+    const offUi = useUiStore.subscribe((state, prev) => {
+      if (state.miniPlayer !== prev.miniPlayer) pushIfChanged()
+    })
 
     const interval = setInterval(pushIfChanged, 250)
 

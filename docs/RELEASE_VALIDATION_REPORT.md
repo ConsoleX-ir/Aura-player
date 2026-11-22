@@ -1,3 +1,4 @@
+> **Verification scope update — 2026-11-22:** This historical report predates the rebuilt 2026-11-22 installer artifacts and does not verify their installation or launch. A later hidden-primary-instance defect was reproduced and fixed; acceptance for the rebuilt MSI and NSIS installers remains pending an isolated Windows install test. See [the current investigation](INSTALLER_LAUNCH_INVESTIGATION.md) and [current release information](../installer/RELEASE_INFO.md).
 # Aura Player — Release Validation Report
 
 **Date:** 2026-11-21

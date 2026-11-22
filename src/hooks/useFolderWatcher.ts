@@ -10,7 +10,9 @@ export function useFolderWatcher() {
   const importedFolders = usePlayerStore((s) => s.importedFolders)
   const watchFolders = usePlayerStore((s) => s.watchFolders)
   const syncingRef = useRef(false)
-  const pendingRef = useRef(false)
+  // Tracks folders that triggered events while a sync is in flight, so the
+  // pending re-sync can target only those folders instead of re-syncing all.
+  const pendingRef = useRef<Set<string>>(new Set())
   const key = watchFolders ? importedFolders.join('\n') : ''
 
   useEffect(() => {
@@ -19,9 +21,9 @@ export function useFolderWatcher() {
     let disposed = false
     let debounceTimer: ReturnType<typeof setTimeout> | undefined
 
-    const runSync = () => {
+    const runSync = (onlyFolder?: string) => {
       syncingRef.current = true
-      syncAllFolders()
+      syncAllFolders(undefined, onlyFolder)
         .then((result) => {
           if (disposed) return
           if (result.added || result.removed || result.updated) {
@@ -32,38 +34,43 @@ export function useFolderWatcher() {
             toast({ kind: 'library-synced', title: 'Library updated', subtitle: parts.join(' · ') })
           }
         })
-        .catch(() => {})
+        .catch((error: unknown) => {
+          console.error('Folder sync failed:', error)
+        })
         .finally(() => {
-          if (pendingRef.current && !disposed) {
-            pendingRef.current = false
-            runSync()
+          if (pendingRef.current.size > 0 && !disposed) {
+            const pending = [...pendingRef.current]
+            pendingRef.current.clear()
+            // If exactly one folder is pending, sync only it; otherwise sync all.
+            runSync(pending.length === 1 ? pending[0] : undefined)
           } else {
             syncingRef.current = false
           }
         })
     }
 
-    const scheduleSync = () => {
+    const scheduleSync = (onlyFolder?: string) => {
       if (syncingRef.current) {
-        pendingRef.current = true
+        if (onlyFolder) pendingRef.current.add(onlyFolder)
         return
       }
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => {
         debounceTimer = undefined
-        if (!disposed) runSync()
+        if (!disposed) runSync(onlyFolder)
       }, 250)
     }
 
     if (isTauri) {
       void tauriWatchFolders(folders).catch(() => {})
       const unlisten = tauriOnWatchChange((change) => {
-        if (!disposed) scheduleSync()
+        if (!disposed) scheduleSync(change.folder)
         void change
       })
       return () => {
         disposed = true
         if (debounceTimer) clearTimeout(debounceTimer)
+        pendingRef.current.clear()
         unlisten()
         void tauriWatchFolders([]).catch(() => {})
       }

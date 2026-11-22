@@ -139,7 +139,7 @@ export async function importDroppedPaths(paths: string[], onProgress?: ProgressC
  * directory walk + stat per file (cheap), so re-syncing an unchanged folder
  * costs almost nothing — full tag parsing only runs for new/changed files.
  */
-export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResult> {
+export async function syncAllFolders(onProgress?: ProgressCb, onlyFolder?: string): Promise<SyncResult> {
   const result: SyncResult = { added: 0, removed: 0, updated: 0 }
   const isTauri = isTauriDesktop()
   let scanFolder: ((folder: string) => Promise<{ path: string; name: string; mtimeMs: number }[]>) | undefined
@@ -154,7 +154,9 @@ export async function syncAllFolders(onProgress?: ProgressCb): Promise<SyncResul
   const { importedFolders } = usePlayerStore.getState()
   if (importedFolders.length === 0) return result
 
-  for (const folder of importedFolders) {
+  const folders = onlyFolder ? importedFolders.filter((f) => f === onlyFolder) : importedFolders
+
+  for (const folder of folders) {
     let scanned: { path: string; name: string; mtimeMs: number }[]
     try {
       scanned = isTauri

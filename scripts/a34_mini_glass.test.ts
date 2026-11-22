@@ -44,7 +44,9 @@ test('mini glass: bridge snapshot carries liquidGlass + perf from the store', ()
   const bridge = src('src/hooks/useMiniPlayerBridge.ts')
   assert.match(bridge, /liquidGlass:\s*s\.miniLiquidGlass/, 'snapshot must mirror miniLiquidGlass')
   assert.match(bridge, /perf:\s*s\.performanceMode/, 'snapshot must mirror performanceMode')
-  assert.match(bridge, /usePlayerStore\.subscribe\(pushIfChanged\)/, 'Settings flips must push instantly')
+  assert.match(bridge, /usePlayerStore\.subscribe\(\(state, prev\)/, 'Store subscription narrows to playback-relevant fields')
+  assert.match(bridge, /state\.theme !== prev\.theme/, 'Theme changes push instantly')
+  assert.match(bridge, /state\.appearance !== prev\.appearance/, 'Appearance changes push instantly')
 })
 
 test('mini glass: widget resolves undefined (stale sender) to glass ON', () => {

@@ -149,16 +149,24 @@ fn enqueue_launch_paths<R: tauri::Runtime>(app: &AppHandle<R>, args: Vec<String>
             accepted.push(path.to_string_lossy().into_owned());
         }
     }
-    if accepted.is_empty() { return; }
+    // A prior instance can still be alive without a visible main window (for
+    // example, after the main window closes while the hidden mini window stays
+    // open). Every relaunch must restore the main window, even without audio
+    // file arguments, or the second instance exits invisibly.
+    if let Some(main) = app.get_webview_window("main") {
+        if main.is_minimized().unwrap_or(false) { let _ = main.unminimize(); }
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+    if accepted.is_empty() {
+        return;
+    }
     if let Ok(mut queue) = pending.0.lock() {
         for path in &accepted {
             if !queue.contains(path) { queue.push(path.clone()); }
         }
     }
     if let Some(main) = app.get_webview_window("main") {
-        if main.is_minimized().unwrap_or(false) { let _ = main.unminimize(); }
-        let _ = main.show();
-        let _ = main.set_focus();
         let _ = main.emit("file:opened", ());
     }
 }
@@ -166,7 +174,8 @@ fn enqueue_launch_paths<R: tauri::Runtime>(app: &AppHandle<R>, args: Vec<String>
 #[tauri::command]
 fn take_pending_audio_files(state: tauri::State<'_, PendingLaunchFiles>) -> Result<Vec<String>, String> {
     let mut pending = state.0.lock().map_err(|_| "launch queue lock poisoned".to_owned())?;
-    Ok(std::mem::take(&mut *pending))
+    let taken = std::mem::take(&mut *pending);
+    Ok(taken)
 }
 
 fn require_folder_grant(state: &AccessGrants, folder: &Path) -> Result<PathBuf, String> {
@@ -381,6 +390,11 @@ async fn parse_metadata_batch(
         let results: Vec<Mutex<Option<SongMetadata>>> =
             (0..total).map(|_| Mutex::new(None)).collect();
         let workers = total.min(4);
+        // Throttle progress IPC events: emit at most once per 100 ms, plus
+        // always on the final file. Without this, a 5 000-file import fires
+        // 5 000 round-trip IPC events, most of which the renderer coalesces
+        // anyway.
+        let last_emit = Mutex::new(std::time::Instant::now());
 
         std::thread::scope(|scope| {
             for _ in 0..workers {
@@ -389,16 +403,28 @@ async fn parse_metadata_batch(
                 let done = &done;
                 let results = &results;
                 let file_paths = &file_paths;
+                let last_emit = &last_emit;
                 scope.spawn(move || loop {
                     let index = next.fetch_add(1, Ordering::Relaxed);
                     if index >= file_paths.len() { break; }
                     let metadata = parse_metadata(&app, &file_paths[index]);
                     *results[index].lock().unwrap_or_else(|e| e.into_inner()) = Some(metadata);
                     let completed = done.fetch_add(1, Ordering::Relaxed) + 1;
-                    let _ = app.emit("library:metadata-progress", serde_json::json!({
-                        "done": completed,
-                        "total": total,
-                    }));
+                    let should_emit = completed == total || {
+                        let mut last = last_emit.lock().unwrap_or_else(|e| e.into_inner());
+                        if last.elapsed() >= Duration::from_millis(100) {
+                            *last = std::time::Instant::now();
+                            true
+                        } else {
+                            false
+                        }
+                    };
+                    if should_emit {
+                        let _ = app.emit("library:metadata-progress", serde_json::json!({
+                            "done": completed,
+                            "total": total,
+                        }));
+                    }
                 });
             }
         });
@@ -1257,14 +1283,161 @@ mod provider_tests {
         ])).unwrap();
         assert_eq!(facets["facets"], serde_json::json!([{ "value": "Germany", "label": "Germany", "count": 42 }]));
     }
+
+    #[test]
+    fn is_audio_file_recognizes_extensions() {
+        assert!(is_audio_file(Path::new("/Music/song.mp3")));
+        assert!(is_audio_file(Path::new("/Music/song.MP3")));
+        assert!(is_audio_file(Path::new("/Music/song.flac")));
+        assert!(is_audio_file(Path::new("/Music/song.WAV")));
+        assert!(is_audio_file(Path::new("/Music/song.ogg")));
+        assert!(is_audio_file(Path::new("/Music/song.m4a")));
+        assert!(is_audio_file(Path::new("/Music/song.aac")));
+        assert!(is_audio_file(Path::new("/Music/song.opus")));
+        assert!(is_audio_file(Path::new("/Music/song.wma")));
+        assert!(!is_audio_file(Path::new("/Music/song.txt")));
+        assert!(!is_audio_file(Path::new("/Music/song.jpg")));
+        assert!(!is_audio_file(Path::new("/Music/song")));
+        assert!(!is_audio_file(Path::new("/Music/")));
+    }
+
+    #[test]
+    fn scan_folder_tree_collects_audio_files_recursively() {
+        use std::fs::{create_dir_all, write, remove_dir_all};
+        let base = std::env::temp_dir().join(format!("aura_scan_test_{}", std::process::id()));
+        let _ = remove_dir_all(&base);
+        create_dir_all(&base.join("sub1")).unwrap();
+        create_dir_all(&base.join("sub1/sub2")).unwrap();
+        write(&base.join("a.mp3"), b"dummy").unwrap();
+        write(&base.join("b.FLAC"), b"dummy").unwrap();
+        write(&base.join("sub1/c.wav"), b"dummy").unwrap();
+        write(&base.join("sub1/sub2/d.ogg"), b"dummy").unwrap();
+        write(&base.join("not_audio.txt"), b"dummy").unwrap();
+        write(&base.join("sub1/not_audio.jpg"), b"dummy").unwrap();
+        let results = scan_folder_tree(base.clone());
+        assert_eq!(results.len(), 4);
+        let names: Vec<&str> = results.iter().map(|f| f.name.as_str()).collect();
+        assert!(names.iter().any(|&n| n == "a.mp3"));
+        assert!(names.iter().any(|&n| n == "b.FLAC"));
+        assert!(names.iter().any(|&n| n == "c.wav"));
+        assert!(names.iter().any(|&n| n == "d.ogg"));
+        // mtime_ms should be present (non-zero) for real files
+        assert!(results.iter().all(|f| f.mtime_ms > 0));
+        // paths should all be under base
+        let base_str = base.to_string_lossy();
+        assert!(results.iter().all(|f| f.path.starts_with(&*base_str)));
+        let _ = remove_dir_all(&base);
+    }
+
+    #[test]
+    fn scan_folder_tree_returns_empty_for_nonexistent_dir() {
+        let results = scan_folder_tree(PathBuf::from("/nonexistent/path/that/does/not/exist"));
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn scan_folder_tree_returns_empty_for_dir_with_no_audio() {
+        use std::fs::{create_dir_all, write, remove_dir_all};
+        let base = std::env::temp_dir().join(format!("aura_scan_test2_{}", std::process::id()));
+        let _ = remove_dir_all(&base);
+        create_dir_all(&base).unwrap();
+        write(&base.join("a.txt"), b"dummy").unwrap();
+        write(&base.join("b.jpg"), b"dummy").unwrap();
+        let results = scan_folder_tree(base.clone());
+        assert_eq!(results.len(), 0);
+        let _ = remove_dir_all(&base);
+    }
+
+    #[test]
+    fn canonical_or_missing_resolves_existing_file() {
+        let base = std::env::temp_dir().join(format!("aura_canonical_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let file = base.join("song.mp3");
+        fs::write(&file, b"dummy").unwrap();
+        let result = canonical_or_missing(&file);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), fs::canonicalize(&file).unwrap());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn canonical_or_missing_resolves_below_existing_ancestor() {
+        let base = std::env::temp_dir().join(format!("aura_canonical2_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("existing")).unwrap();
+        let target = base.join("existing").join("still").join("missing.txt");
+        let result = canonical_or_missing(&target);
+        assert!(result.is_some());
+        let canonical = result.unwrap();
+        let expected_root = fs::canonicalize(base.join("existing")).unwrap();
+        assert!(canonical.starts_with(&expected_root));
+        assert_eq!(canonical.file_name().unwrap().to_string_lossy(), "missing.txt");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn canonical_or_missing_normalizes_dot_and_dotdot_components() {
+        let base = std::env::temp_dir().join(format!("aura_norm_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let file = base.join("song.mp3");
+        fs::write(&file, b"dummy").unwrap();
+        let result = canonical_or_missing(&base.join("sub").join("..").join("song.mp3"));
+        assert!(result.is_some());
+        let resolved = result.unwrap();
+        assert_eq!(resolved.file_name().unwrap().to_string_lossy(), "song.mp3");
+        assert!(!resolved.to_string_lossy().contains(".."));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn path_is_allowed_directory_grant_matches_children_only() {
+        let base = std::env::temp_dir().join(format!("aura_grant_dir_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("rock")).unwrap();
+        let file = base.join("rock").join("song.mp3");
+        fs::write(&file, b"dummy").unwrap();
+        let canonical = fs::canonicalize(&base).unwrap();
+        let grants = AccessGrants::default();
+        grants.0.lock().unwrap().push(FileGrant {
+            path: canonical.clone(),
+            is_directory: true,
+        });
+        assert!(path_is_allowed(&grants, &file));
+        assert!(!path_is_allowed(&grants, Path::new("/completely/different/path/song.mp3")));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn path_is_allowed_file_grant_matches_exact_path_only() {
+        let base = std::env::temp_dir().join(format!("aura_grant_file_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let file = base.join("song.mp3");
+        fs::write(&file, b"dummy").unwrap();
+        let canonical = fs::canonicalize(&file).unwrap();
+        let grants = AccessGrants::default();
+        grants.0.lock().unwrap().push(FileGrant {
+            path: canonical.clone(),
+            is_directory: false,
+        });
+        assert!(path_is_allowed(&grants, &canonical));
+        assert!(!path_is_allowed(&grants, &base.join("other.mp3")));
+        assert!(!path_is_allowed(&grants, Path::new("/completely/different/song.mp3")));
+        let _ = fs::remove_dir_all(&base);
+    }
 }
 
 // ── Shutdown ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn shutdown_complete(window: tauri::WebviewWindow) -> Result<(), String> {
-    SHUTDOWN_STATE.store(2, Ordering::SeqCst);
-    window.close().map_err(|error| error.to_string())
+fn shutdown_complete(app: AppHandle) -> Result<(), String> {
+    // Closing only the main window leaves the hidden mini window and the
+    // single-instance mutex alive. Exit after the renderer has flushed so a
+    // later normal launch can create a fresh, visible main window.
+    app.exit(0);
+    Ok(())
 }
 
 fn is_audio_file(path: &Path) -> bool {
